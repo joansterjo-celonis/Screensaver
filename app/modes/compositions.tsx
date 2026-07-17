@@ -5,6 +5,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -29,8 +30,19 @@ import {
 } from "./composition-library";
 import {
   MOTIF_BLUEPRINTS,
-  type MotifPrimitive,
+  type DiagramElement,
+  type Point,
 } from "./composition-motifs";
+import {
+  resolveCompositionGeometry,
+  resolveCompositionMotifAttachment,
+  resolveCompositionViewportProfile,
+  type CompositionViewportProfile,
+} from "./composition-layout";
+import {
+  getCompositionPalette,
+  type PosterPalette,
+} from "./composition-palettes";
 
 function hashString(value: string) {
   let hash = 2166136261;
@@ -81,55 +93,187 @@ function rectVariables(prefix: string, rect: CompositionRect) {
   };
 }
 
-function compositionStyle(recipe: CompositionRecipe, artwork: ArtworkSeed) {
+function compositionStyle(
+  recipe: CompositionRecipe,
+  artwork: ArtworkSeed,
+  palette: PosterPalette,
+  geometry: ReturnType<typeof resolveCompositionGeometry>,
+) {
   const signature = `${recipe.id}:${artwork.qid}`;
   const seed = hashString(signature);
   return {
-    ...rectVariables("art", recipe.landscape.art),
-    ...rectVariables("heading", recipe.landscape.heading),
-    ...rectVariables("motif", recipe.landscape.motif),
-    ...rectVariables("details", recipe.landscape.details),
-    ...rectVariables("portrait-art", recipe.portrait.art),
-    ...rectVariables("portrait-heading", recipe.portrait.heading),
-    ...rectVariables("portrait-motif", recipe.portrait.motif),
-    ...rectVariables("portrait-details", recipe.portrait.details),
-    "--composition-art-accent": artwork.accent,
+    ...rectVariables("layout-art", geometry.art),
+    ...rectVariables("layout-heading", geometry.heading),
+    ...rectVariables("layout-motif", geometry.motif),
+    ...rectVariables("layout-details", geometry.details),
+    "--composition-bg": palette.paper,
+    "--composition-ink": palette.ink,
+    "--composition-accent": palette.accent,
+    "--composition-accent-readable": `color-mix(in srgb, ${palette.accent} 15%, ${palette.ink})`,
+    "--composition-field": palette.field,
+    "--composition-spot": palette.accent,
+    "--composition-art-accent": palette.accent,
+    "--composition-dim": `color-mix(in srgb, ${palette.ink} 62%, transparent)`,
+    "--composition-line": `color-mix(in srgb, ${palette.ink} 30%, transparent)`,
     "--composition-focus-x": `${recipe.focusX}%`,
     "--composition-focus-y": `${recipe.focusY}%`,
     "--composition-grain-variation": String(0.015 + (seed % 7) / 200),
     "--composition-wear-x": `${12 + (seed % 77)}%`,
     "--composition-wear-y": `${10 + ((seed >> 8) % 79)}%`,
-    "--composition-register": `${(seed % 3) + 1}px`,
   } as CSSProperties;
 }
 
-function motifPrimitiveStyle(primitive: MotifPrimitive) {
-  return {
-    "--primitive-x": `${primitive.x}%`,
-    "--primitive-y": `${primitive.y}%`,
-    "--primitive-w": `${primitive.width}%`,
-    "--primitive-h": `${primitive.height}%`,
-    "--primitive-rotation": `${primitive.rotation}deg`,
-  } as CSSProperties;
+function pathData(
+  points: readonly Point[],
+  curve: "linear" | "smooth",
+  closed: boolean,
+) {
+  if (!points.length) return "";
+  if (points.length === 1) return `M ${points[0][0]} ${points[0][1]}`;
+  if (curve === "linear") {
+    const segments = points.slice(1).map(([x, y]) => `L ${x} ${y}`).join(" ");
+    return `M ${points[0][0]} ${points[0][1]} ${segments}${closed ? " Z" : ""}`;
+  }
+
+  const segmentCount = closed ? points.length : points.length - 1;
+  let data = `M ${points[0][0]} ${points[0][1]}`;
+  for (let index = 0; index < segmentCount; index += 1) {
+    const previous = points[(index - 1 + points.length) % points.length];
+    const start = points[index % points.length];
+    const end = points[(index + 1) % points.length];
+    const next = points[(index + 2) % points.length];
+    const p0 = closed || index > 0 ? previous : start;
+    const p3 = closed || index + 2 < points.length ? next : end;
+    const controlA: Point = [
+      start[0] + (end[0] - p0[0]) / 6,
+      start[1] + (end[1] - p0[1]) / 6,
+    ];
+    const controlB: Point = [
+      end[0] - (p3[0] - start[0]) / 6,
+      end[1] - (p3[1] - start[1]) / 6,
+    ];
+    data += ` C ${controlA[0]} ${controlA[1]}, ${controlB[0]} ${controlB[1]}, ${end[0]} ${end[1]}`;
+  }
+  return `${data}${closed ? " Z" : ""}`;
 }
 
-function CompositionMark({ recipe }: { recipe: CompositionRecipe }) {
+function pointList(points: readonly Point[]) {
+  return points.map(([x, y]) => `${x},${y}`).join(" ");
+}
+
+function diagramClass(element: DiagramElement, mode: "stroke" | "fill") {
+  return `composition-diagram-element tone-${element.tone} mode-${mode}`;
+}
+
+function DiagramElementView({ element }: { element: DiagramElement }) {
+  if (element.kind === "line") {
+    return (
+      <line
+        className={diagramClass(element, "stroke")}
+        data-element={element.id}
+        x1={element.from[0]}
+        y1={element.from[1]}
+        x2={element.to[0]}
+        y2={element.to[1]}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+  if (element.kind === "rayFan") {
+    return (
+      <g
+        className={diagramClass(element, "stroke")}
+        data-element={element.id}
+        data-origin={`${element.origin[0]},${element.origin[1]}`}
+      >
+        {element.targets.map((target, index) => (
+          <line
+            key={`${element.id}-${index}`}
+            x1={element.origin[0]}
+            y1={element.origin[1]}
+            x2={target[0]}
+            y2={target[1]}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </g>
+    );
+  }
+  if (element.kind === "path") {
+    return (
+      <path
+        className={diagramClass(element, element.mode)}
+        data-element={element.id}
+        d={pathData(element.points, element.curve, element.closed)}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+  if (element.kind === "rect") {
+    return (
+      <rect
+        className={diagramClass(element, element.mode)}
+        data-element={element.id}
+        x={element.x}
+        y={element.y}
+        width={element.width}
+        height={element.height}
+        rx={element.radius}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+  if (element.kind === "polygon") {
+    return (
+      <polygon
+        className={diagramClass(element, element.mode)}
+        data-element={element.id}
+        points={pointList(element.points)}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+  return (
+    <ellipse
+      className={diagramClass(element, element.mode)}
+      data-element={element.id}
+      data-role={element.role}
+      cx={element.cx}
+      cy={element.cy}
+      rx={element.rx}
+      ry={element.ry}
+      transform={element.rotation ? `rotate(${element.rotation} ${element.cx} ${element.cy})` : undefined}
+      vectorEffect="non-scaling-stroke"
+    />
+  );
+}
+
+function CompositionBlueprint({ recipe }: { recipe: CompositionRecipe }) {
   const blueprint = MOTIF_BLUEPRINTS[recipe.motif];
+  const [, , width, height] = blueprint.viewBox;
+  const preserveAspectRatio = blueprint.align === "start"
+    ? "xMinYMid meet"
+    : blueprint.align === "end"
+      ? "xMaxYMid meet"
+      : "xMidYMid meet";
   return (
     <div
-      className="composition-mark"
+      className="composition-blueprint"
       data-align={blueprint.align}
       data-label-edge={blueprint.labelEdge}
-      style={{ "--motif-aspect": String(blueprint.aspect) } as CSSProperties}
+      data-semantic-tags={blueprint.semanticTags.join(" ")}
+      style={{ "--motif-aspect": String(width / height) } as CSSProperties}
     >
-      {blueprint.parts.map((primitive) => (
-        <i
-          key={primitive.id}
-          className={`motif-primitive motif-${primitive.kind} tone-${primitive.tone} variant-${primitive.variant}`}
-          data-part={primitive.id}
-          style={motifPrimitiveStyle(primitive)}
-        />
-      ))}
+      <svg
+        className="composition-diagram"
+        viewBox={blueprint.viewBox.join(" ")}
+        preserveAspectRatio={preserveAspectRatio}
+        role="presentation"
+      >
+        {blueprint.elements.map((element) => (
+          <DiagramElementView key={element.id} element={element} />
+        ))}
+      </svg>
       <small>{recipe.motifLabel}</small>
     </div>
   );
@@ -161,6 +305,12 @@ export function CompositionsMode({
     key: string;
     aspect: number;
   } | null>(null);
+  const [viewportMeasurement, setViewportMeasurement] = useState<{
+    profile: CompositionViewportProfile;
+    width: number;
+    height: number;
+  }>({ profile: "landscape", width: 0, height: 0 });
+  const viewportProfile = viewportMeasurement.profile;
 
   const activeIndex = deck.length ? currentIndex % deck.length : 0;
   const current = deck[activeIndex];
@@ -170,6 +320,34 @@ export function CompositionsMode({
   useEffect(() => {
     if (paused) return;
     sectionRef.current?.focus({ preventScroll: true });
+  }, [paused]);
+
+  useLayoutEffect(() => {
+    if (paused) return;
+    const element = sectionRef.current;
+    if (!element) return;
+    const measure = () => {
+      const bounds = element.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return;
+      const next = resolveCompositionViewportProfile(bounds.width, bounds.height);
+      setViewportMeasurement((previous) =>
+        previous.profile === next &&
+        Math.abs(previous.width - bounds.width) < 0.5 &&
+        Math.abs(previous.height - bounds.height) < 0.5
+          ? previous
+          : { profile: next, width: bounds.width, height: bounds.height },
+      );
+    };
+    const observer = "ResizeObserver" in window ? new ResizeObserver(measure) : null;
+    observer?.observe(element);
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    measure();
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+    };
   }, [paused]);
 
   useEffect(() => {
@@ -304,23 +482,30 @@ export function CompositionsMode({
   }
 
   const { artwork, recipe } = current;
+  const palette = getCompositionPalette(artwork.qid);
+  const resolvedGeometry = resolveCompositionGeometry(recipe, viewportProfile);
+  const motifAttachment = resolveCompositionMotifAttachment(resolvedGeometry);
   const headline = balancedLines(artwork.title);
   const sourceShape = artworkShape(artwork);
   const headlineLength = artwork.title.length;
   const headlineClass = headlineLength > 46 ? "is-long" : headlineLength > 28 ? "is-medium" : "is-short";
-  const motifBlueprint = MOTIF_BLUEPRINTS[recipe.motif];
   const articleUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(artwork.articleTitle.replace(/ /g, "_"))}`;
   const imageMissing = failedImages.has(artwork.qid);
   const measuredPortalAspect = portalMeasurement?.key === currentKey ? portalMeasurement.aspect : null;
-  const measuredCropRetention = measuredPortalAspect
+  const estimatedPortalAspect = viewportMeasurement.width > 0 && viewportMeasurement.height > 0
+    ? (viewportMeasurement.width * resolvedGeometry.art[2]) /
+      (viewportMeasurement.height * resolvedGeometry.art[3])
+    : null;
+  const effectivePortalAspect = measuredPortalAspect ?? estimatedPortalAspect;
+  const measuredCropRetention = effectivePortalAspect
     ? Math.min(
-        (artwork.width / artwork.height) / measuredPortalAspect,
-        measuredPortalAspect / (artwork.width / artwork.height),
+        (artwork.width / artwork.height) / effectivePortalAspect,
+        effectivePortalAspect / (artwork.width / artwork.height),
       )
     : 0;
-  const resolvedObjectFit = measuredPortalAspect === null
+  const resolvedObjectFit = effectivePortalAspect === null
     ? "contain"
-    : resolveCompositionObjectFit(recipe, artwork, measuredPortalAspect);
+    : resolveCompositionObjectFit(recipe, artwork, effectivePortalAspect);
   const imageSizes = imageSizesFor(current);
   const useRemoteImage = remoteReady.has(artwork.qid);
   const compositionImageUrl = useRemoteImage
@@ -358,8 +543,9 @@ export function CompositionsMode({
         data-composition={recipe.id}
         data-artwork={artwork.qid}
         data-theme={recipe.theme}
-        data-crop-retention={measuredPortalAspect ? measuredCropRetention.toFixed(3) : "measuring"}
-        style={compositionStyle(recipe, artwork)}
+        data-viewport-profile={viewportProfile}
+        data-crop-retention={effectivePortalAspect ? measuredCropRetention.toFixed(3) : "measuring"}
+        style={compositionStyle(recipe, artwork, palette, resolvedGeometry)}
       >
         <header className="composition-chrome">
           <span>SWIKIPEDIA / COMPOSITION ATLAS</span>
@@ -373,7 +559,7 @@ export function CompositionsMode({
               {resolvedObjectFit === "contain" && (
                 <img
                   className="composition-art-backdrop"
-                  src={useRemoteImage ? commonsRedirect(artwork.fallbackFile, 1600) : localArtworkUrl(artwork.qid)}
+                  src={useRemoteImage ? commonsRedirect(artwork.fallbackFile, 2400) : localArtworkUrl(artwork.qid)}
                   alt=""
                   aria-hidden="true"
                   decoding="async"
@@ -433,8 +619,13 @@ export function CompositionsMode({
           <small>{artwork.artist} · {recipe.motifLabel}</small>
         </section>
 
-        <div className="composition-motif" data-align={motifBlueprint.align} aria-hidden="true">
-          <CompositionMark recipe={recipe} />
+        <div
+          className="composition-motif"
+          data-attach-x={motifAttachment.horizontal}
+          data-attach-y={motifAttachment.vertical}
+          aria-hidden="true"
+        >
+          <CompositionBlueprint recipe={recipe} />
         </div>
 
         <aside className="composition-details" aria-label="Artwork details">

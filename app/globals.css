@@ -891,9 +891,11 @@ a:focus-visible {
   --composition-ink: #eee1cf;
   --composition-dim: rgba(238, 225, 207, 0.62);
   --composition-line: rgba(238, 225, 207, 0.26);
-  --composition-accent: #d64270;
-  --composition-spot: color-mix(in srgb, var(--composition-accent) 76%, var(--composition-art-accent, #8c6a58));
-  --composition-grain: 0.22;
+  --composition-accent: #8c6a58;
+  --composition-accent-readable: color-mix(in srgb, var(--composition-accent) 15%, var(--composition-ink));
+  --composition-field: #55463e;
+  --composition-spot: var(--composition-accent);
+  --composition-grain: 0.25;
   --composition-grain-variation: 0.025;
   --composition-shadow: rgba(5, 2, 3, 0.54);
   --art-x: 34%;
@@ -974,7 +976,6 @@ a:focus-visible {
   --composition-ink: #eee0cb;
   --composition-dim: rgba(238, 224, 203, 0.61);
   --composition-line: rgba(238, 224, 203, 0.24);
-  --composition-accent: #c84b61;
 }
 
 .composition-palette-carbon {
@@ -982,7 +983,6 @@ a:focus-visible {
   --composition-ink: #e8e1d5;
   --composition-dim: rgba(232, 225, 213, 0.6);
   --composition-line: rgba(232, 225, 213, 0.22);
-  --composition-accent: #dd3e70;
 }
 
 .composition-palette-parchment {
@@ -990,7 +990,6 @@ a:focus-visible {
   --composition-ink: #291217;
   --composition-dim: rgba(41, 18, 23, 0.64);
   --composition-line: rgba(41, 18, 23, 0.25);
-  --composition-accent: #b51f4c;
   --composition-shadow: rgba(69, 39, 28, 0.25);
 }
 
@@ -999,7 +998,6 @@ a:focus-visible {
   --composition-ink: #e5ddcf;
   --composition-dim: rgba(229, 221, 207, 0.62);
   --composition-line: rgba(229, 221, 207, 0.23);
-  --composition-accent: #e05865;
 }
 
 .composition-palette-verdigris {
@@ -1007,7 +1005,6 @@ a:focus-visible {
   --composition-ink: #eadfc9;
   --composition-dim: rgba(234, 223, 201, 0.6);
   --composition-line: rgba(234, 223, 201, 0.23);
-  --composition-accent: #d64b62;
 }
 
 .composition-surface-dry-ink {
@@ -1192,12 +1189,12 @@ a:focus-visible {
   z-index: 0;
   object-fit: cover;
   opacity: 0;
-  transform: scale(1.045);
-  filter: blur(clamp(14px, 2.4vmin, 34px)) saturate(0.7) brightness(0.56);
+  transform: scale(1.018);
+  filter: blur(clamp(3px, 0.55vmin, 9px)) saturate(0.82) contrast(1.04) brightness(0.68);
 }
 
 .composition-sheet.is-contained .composition-art-backdrop {
-  opacity: 0.42;
+  opacity: 0.82;
 }
 
 .composition-art-image {
@@ -1253,7 +1250,7 @@ a:focus-visible {
   z-index: 5;
   inset: 50% auto auto 50%;
   transform: translate(-50%, -50%);
-  color: var(--composition-accent);
+  color: var(--composition-accent-readable);
   font-size: clamp(7px, 0.9vmin, 11px);
   letter-spacing: 0.14em;
 }
@@ -1289,7 +1286,7 @@ a:focus-visible {
 .composition-chrome span:last-child {
   max-width: 48%;
   overflow: hidden;
-  color: var(--composition-accent);
+  color: var(--composition-accent-readable);
   text-overflow: ellipsis;
 }
 
@@ -1330,7 +1327,7 @@ a:focus-visible {
 
 .composition-heading p {
   margin-bottom: clamp(5px, 0.8vmin, 11px);
-  color: var(--composition-accent);
+  color: var(--composition-accent-readable);
   font-size: clamp(6px, 0.78vmin, 10px);
   letter-spacing: 0.17em;
   text-transform: uppercase;
@@ -2154,6 +2151,30 @@ a:focus-visible {
   justify-content: flex-end;
 }
 
+.composition-motif[data-attach-x="start"] {
+  justify-content: flex-start;
+}
+
+.composition-motif[data-attach-x="center"] {
+  justify-content: center;
+}
+
+.composition-motif[data-attach-x="end"] {
+  justify-content: flex-end;
+}
+
+.composition-motif[data-attach-y="start"] {
+  align-items: flex-start;
+}
+
+.composition-motif[data-attach-y="center"] {
+  align-items: center;
+}
+
+.composition-motif[data-attach-y="end"] {
+  align-items: flex-end;
+}
+
 .composition-motif .composition-mark {
   position: relative;
   inset: auto;
@@ -2353,6 +2374,99 @@ a:focus-visible {
   text-align: left;
 }
 
+/*
+ * Production Atlas diagrams use an isolated SVG vocabulary. Keeping this
+ * wrapper separate from the retired composition-mark primitives prevents old
+ * painting selectors from stretching or restyling the new authored geometry.
+ */
+.composition-blueprint {
+  --atlas-rule-width: 1.15px;
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: var(--motif-aspect, 1);
+  overflow: visible;
+  color: var(--composition-ink);
+}
+
+@supports (width: 1cqw) {
+  .composition-blueprint {
+    width: min(100cqw, calc(100cqh * var(--motif-aspect, 1)));
+  }
+}
+
+.composition-diagram {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  shape-rendering: geometricPrecision;
+}
+
+.composition-diagram-element {
+  vector-effect: non-scaling-stroke;
+}
+
+.composition-diagram-element.mode-stroke {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--atlas-rule-width);
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+
+.composition-diagram-element.mode-fill {
+  fill: currentColor;
+  stroke: none;
+}
+
+.composition-diagram-element.tone-ink {
+  color: var(--composition-ink);
+}
+
+.composition-diagram-element.tone-muted {
+  color: color-mix(in srgb, var(--composition-ink) 48%, transparent);
+}
+
+.composition-diagram-element.tone-accent {
+  color: var(--composition-accent);
+}
+
+.composition-diagram-element.tone-field {
+  color: var(--composition-field);
+}
+
+.composition-blueprint > small {
+  position: absolute;
+  right: 0;
+  bottom: -1.4em;
+  max-width: 92%;
+  color: var(--composition-dim);
+  font-size: clamp(5px, 0.68vmin, 8px);
+  line-height: 1.25;
+  letter-spacing: 0.13em;
+  text-align: right;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.composition-blueprint[data-label-edge="nw"] > small,
+.composition-blueprint[data-label-edge="ne"] > small {
+  top: -1.4em;
+  bottom: auto;
+}
+
+.composition-blueprint[data-label-edge="nw"] > small,
+.composition-blueprint[data-label-edge="sw"] > small {
+  right: auto;
+  left: 0;
+  text-align: left;
+}
+
 .composition-details {
   z-index: 7;
   left: var(--layout-details-x);
@@ -2427,7 +2541,7 @@ a:focus-visible {
 }
 
 .composition-footer a:hover {
-  color: var(--composition-accent);
+  color: var(--composition-accent-readable);
 }
 
 .composition-footer span:last-child {
@@ -2760,7 +2874,8 @@ a:focus-visible {
   }
 
   .composition-footer span:first-child,
-  .composition-mark > small {
+  .composition-mark > small,
+  .composition-blueprint > small {
     display: none;
   }
 }

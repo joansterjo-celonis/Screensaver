@@ -1,44 +1,77 @@
 import type { CompositionMotif } from "./composition-library";
 
-export type MotifPrimitiveKind =
-  | "line"
-  | "arc"
-  | "ring"
-  | "dot"
-  | "disc"
-  | "block"
-  | "petal"
-  | "triangle"
-  | "cross";
+export type DiagramTone = "ink" | "muted" | "accent" | "field";
+export type DiagramMode = "stroke" | "fill";
+export type DiagramCurve = "linear" | "smooth";
+export type Point = readonly [number, number];
 
-export type MotifPrimitiveTone = "spot" | "accent" | "ink" | "dim" | "shadow";
-export type MotifPrimitiveVariant =
-  | "solid"
-  | "outline"
-  | "dashed"
-  | "rough"
-  | "ghost"
-  | "heavy"
-  | "open"
-  | "soft";
-
-export type MotifPrimitive = Readonly<{
+type DiagramElementBase = Readonly<{
   id: string;
-  kind: MotifPrimitiveKind;
+  tone: DiagramTone;
+}>;
+
+export type DiagramLineElement = DiagramElementBase & Readonly<{
+  kind: "line";
+  from: Point;
+  to: Point;
+}>;
+
+export type DiagramPathElement = DiagramElementBase & Readonly<{
+  kind: "path";
+  points: readonly Point[];
+  mode: DiagramMode;
+  curve: DiagramCurve;
+  closed: boolean;
+}>;
+
+export type DiagramRayFanElement = DiagramElementBase & Readonly<{
+  kind: "rayFan";
+  origin: Point;
+  targets: readonly Point[];
+}>;
+
+export type DiagramRectElement = DiagramElementBase & Readonly<{
+  kind: "rect";
   x: number;
   y: number;
   width: number;
   height: number;
-  rotation: number;
-  tone: MotifPrimitiveTone;
-  variant: MotifPrimitiveVariant;
+  mode: DiagramMode;
+  radius: number;
 }>;
 
+export type DiagramPolygonElement = DiagramElementBase & Readonly<{
+  kind: "polygon";
+  points: readonly Point[];
+  mode: DiagramMode;
+}>;
+
+export type DiagramEllipseElement = DiagramElementBase & Readonly<{
+  kind: "ellipse";
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  mode: DiagramMode;
+  role: string;
+  rotation: number;
+}>;
+
+export type DiagramElement =
+  | DiagramLineElement
+  | DiagramPathElement
+  | DiagramRayFanElement
+  | DiagramRectElement
+  | DiagramPolygonElement
+  | DiagramEllipseElement;
+
 export type MotifBlueprint = Readonly<{
-  aspect: number;
+  viewBox: readonly [number, number, number, number];
   align: "start" | "center" | "end";
   labelEdge: "nw" | "ne" | "sw" | "se";
-  parts: readonly MotifPrimitive[];
+  rationale: string;
+  semanticTags: readonly string[];
+  elements: readonly DiagramElement[];
 }>;
 
 export type MotifFrame = Readonly<{ width: number; height: number }>;
@@ -62,383 +95,770 @@ export function fitMotifFrame(
   return Object.freeze({ width, height: width / aspect });
 }
 
-function part(
+const NORMALIZED_VIEWBOX = Object.freeze([0, 0, 100, 100]) as readonly [
+  number,
+  number,
+  number,
+  number,
+];
+
+function p(x: number, y: number): Point {
+  return Object.freeze([x, y]) as Point;
+}
+
+function line(
   id: string,
-  kind: MotifPrimitiveKind,
+  from: Point,
+  to: Point,
+  tone: DiagramTone = "ink",
+): DiagramLineElement {
+  return Object.freeze({ id, kind: "line", from, to, tone });
+}
+
+function path(
+  id: string,
+  points: readonly Point[],
+  tone: DiagramTone = "ink",
+  mode: DiagramMode = "stroke",
+  curve: DiagramCurve = "smooth",
+  closed = false,
+): DiagramPathElement {
+  return Object.freeze({
+    id,
+    kind: "path",
+    points: Object.freeze([...points]),
+    tone,
+    mode,
+    curve,
+    closed,
+  });
+}
+
+function rayFan(
+  id: string,
+  origin: Point,
+  targets: readonly Point[],
+  tone: DiagramTone = "muted",
+): DiagramRayFanElement {
+  return Object.freeze({
+    id,
+    kind: "rayFan",
+    origin,
+    targets: Object.freeze([...targets]),
+    tone,
+  });
+}
+
+function rect(
+  id: string,
   x: number,
   y: number,
   width: number,
   height: number,
+  tone: DiagramTone,
+  mode: DiagramMode,
+  radius = 0,
+): DiagramRectElement {
+  return Object.freeze({ id, kind: "rect", x, y, width, height, tone, mode, radius });
+}
+
+function polygon(
+  id: string,
+  points: readonly Point[],
+  tone: DiagramTone,
+  mode: DiagramMode,
+): DiagramPolygonElement {
+  return Object.freeze({
+    id,
+    kind: "polygon",
+    points: Object.freeze([...points]),
+    tone,
+    mode,
+  });
+}
+
+function ellipse(
+  id: string,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  tone: DiagramTone,
+  mode: DiagramMode,
+  role: string,
   rotation = 0,
-  tone: MotifPrimitiveTone = "spot",
-  variant: MotifPrimitiveVariant = "solid",
-): MotifPrimitive {
-  return Object.freeze({ id, kind, x, y, width, height, rotation, tone, variant });
+): DiagramEllipseElement {
+  return Object.freeze({
+    id,
+    kind: "ellipse",
+    cx,
+    cy,
+    rx,
+    ry,
+    tone,
+    mode,
+    role,
+    rotation,
+  });
+}
+
+function assertPointInViewBox(point: Point, viewBox: MotifBlueprint["viewBox"], label: string) {
+  const [x, y] = point;
+  const [minX, minY, width, height] = viewBox;
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    x < minX ||
+    x > minX + width ||
+    y < minY ||
+    y > minY + height
+  ) {
+    throw new Error(`Composition motif ${label} has an off-canvas point (${x}, ${y}).`);
+  }
+}
+
+function validateElement(
+  element: DiagramElement,
+  viewBox: MotifBlueprint["viewBox"],
+  motifId: string,
+) {
+  const label = `${motifId}/${element.id}`;
+  if (!element.id.trim()) throw new Error(`Composition motif ${motifId} has an empty element id.`);
+  if (element.kind === "line") {
+    assertPointInViewBox(element.from, viewBox, label);
+    assertPointInViewBox(element.to, viewBox, label);
+  } else if (element.kind === "path" || element.kind === "polygon") {
+    if (element.points.length < (element.kind === "polygon" ? 3 : 2)) {
+      throw new Error(`Composition motif ${label} does not contain enough points.`);
+    }
+    element.points.forEach((point) => assertPointInViewBox(point, viewBox, label));
+  } else if (element.kind === "rayFan") {
+    if (element.targets.length < 2) {
+      throw new Error(`Composition motif ${label} must contain at least two ray targets.`);
+    }
+    assertPointInViewBox(element.origin, viewBox, label);
+    element.targets.forEach((point) => assertPointInViewBox(point, viewBox, label));
+  } else if (element.kind === "rect") {
+    assertPointInViewBox(p(element.x, element.y), viewBox, label);
+    assertPointInViewBox(p(element.x + element.width, element.y + element.height), viewBox, label);
+    if (element.width <= 0 || element.height <= 0 || element.radius < 0) {
+      throw new Error(`Composition motif ${label} has invalid rectangle dimensions.`);
+    }
+  } else {
+    if (!element.role.trim()) throw new Error(`Composition motif ${label} needs a semantic role.`);
+    assertPointInViewBox(p(element.cx - element.rx, element.cy - element.ry), viewBox, label);
+    assertPointInViewBox(p(element.cx + element.rx, element.cy + element.ry), viewBox, label);
+    if (element.rx <= 0 || element.ry <= 0 || !Number.isFinite(element.rotation)) {
+      throw new Error(`Composition motif ${label} has invalid ellipse dimensions.`);
+    }
+  }
 }
 
 function blueprint(
-  aspect: number,
+  id: CompositionMotif,
   align: MotifBlueprint["align"],
   labelEdge: MotifBlueprint["labelEdge"],
-  parts: readonly MotifPrimitive[],
+  rationale: string,
+  semanticTags: readonly string[],
+  elements: readonly DiagramElement[],
 ): MotifBlueprint {
-  return Object.freeze({ aspect, align, labelEdge, parts: Object.freeze(parts) });
+  const ids = new Set<string>();
+  for (const element of elements) {
+    if (ids.has(element.id)) throw new Error(`Composition motif ${id} repeats element ${element.id}.`);
+    ids.add(element.id);
+    validateElement(element, NORMALIZED_VIEWBOX, id);
+  }
+  return Object.freeze({
+    viewBox: NORMALIZED_VIEWBOX,
+    align,
+    labelEdge,
+    rationale,
+    semanticTags: Object.freeze([...semanticTags]),
+    elements: Object.freeze([...elements]),
+  });
 }
 
 /**
- * A fixed-ratio, painting-specific drawing for every poster. Coordinates are
- * authored in each drawing's own canvas rather than inherited from a shared
- * radar/bullseye skeleton.
+ * Thirty-two painting-authored diagrams. Each blueprint is a coherent visual
+ * argument about its artwork: construction lines share explicit anchors,
+ * filled shapes are deliberate fields, and ellipses only represent objects
+ * that are actually circular or elliptical in the painting.
  */
 export const MOTIF_BLUEPRINTS: Readonly<Record<CompositionMotif, MotifBlueprint>> = Object.freeze({
-  "ermine-arc": blueprint(1.26, "start", "sw", [
-    part("head-turn", "arc", 57, 34, 46, 42, -18, "ink", "open"),
-    part("ermine-spine", "arc", 47, 62, 62, 28, 19, "spot", "open"),
-    part("wrist", "line", 38, 58, 34, 2, 18, "accent", "rough"),
-    part("gaze-a", "line", 60, 29, 36, 1, -9, "dim", "dashed"),
-    part("gaze-b", "line", 63, 31, 29, 1, 7, "dim", "dashed"),
-    part("hand", "cross", 28, 59, 8, 8, 17, "accent", "outline"),
-    part("paw", "dot", 72, 69, 5, 5, 0, "ink", "solid"),
-  ]),
-  "sea-born": blueprint(1.48, "end", "ne", [
-    part("shell-lip", "arc", 51, 71, 82, 50, 0, "spot", "open"),
-    part("shell-rib-a", "line", 25, 58, 46, 1, 55, "dim", "rough"),
-    part("shell-rib-b", "line", 38, 49, 54, 1, 68, "dim", "rough"),
-    part("shell-rib-c", "line", 54, 47, 56, 1, 82, "accent", "rough"),
-    part("shell-rib-d", "line", 70, 51, 50, 1, 101, "dim", "rough"),
-    part("wind-curl", "arc", 18, 25, 31, 29, -22, "ink", "open"),
-    part("foam-a", "dot", 77, 78, 4, 4, 0, "accent", "outline"),
-    part("foam-b", "dot", 86, 72, 2.5, 2.5, 0, "ink", "solid"),
-    part("shore", "line", 52, 86, 91, 2, -2, "shadow", "dashed"),
-  ]),
-  "triptych-spill": blueprint(1.08, "end", "se", [
-    part("eden-seam", "line", 32, 50, 86, 1, 90, "dim", "rough"),
-    part("inferno-seam", "line", 68, 50, 86, 1, 90, "accent", "rough"),
-    part("fruit", "disc", 15, 21, 11, 11, 0, "spot", "soft"),
-    part("leaf", "petal", 24, 37, 13, 7, -33, "ink", "outline"),
-    part("body-a", "ring", 44, 30, 10, 14, 0, "ink", "outline"),
-    part("body-b", "ring", 55, 47, 7, 11, 14, "spot", "outline"),
-    part("body-c", "ring", 47, 66, 13, 9, -17, "dim", "outline"),
-    part("music-blade", "triangle", 79, 31, 15, 19, 18, "shadow", "solid"),
-    part("crack-a", "line", 81, 58, 28, 2, -52, "accent", "heavy"),
-    part("crack-b", "line", 84, 70, 22, 1, 31, "ink", "dashed"),
-  ]),
-  "convex-witness": blueprint(1, "end", "sw", [
-    part("mirror", "ring", 50, 45, 57, 57, 0, "ink", "heavy"),
-    part("reflection-a", "block", 43, 47, 7, 19, -8, "spot", "outline"),
-    part("reflection-b", "block", 56, 47, 7, 19, 8, "accent", "outline"),
-    part("passion-1", "dot", 50, 14, 4, 4, 0, "dim", "outline"),
-    part("passion-2", "dot", 68, 21, 4, 4, 0, "dim", "outline"),
-    part("passion-3", "dot", 79, 38, 4, 4, 0, "dim", "outline"),
-    part("passion-4", "dot", 75, 59, 4, 4, 0, "dim", "outline"),
-    part("passion-5", "dot", 61, 73, 4, 4, 0, "dim", "outline"),
-    part("passion-6", "dot", 39, 73, 4, 4, 0, "dim", "outline"),
-    part("passion-7", "dot", 25, 59, 4, 4, 0, "dim", "outline"),
-    part("passion-8", "dot", 21, 38, 4, 4, 0, "dim", "outline"),
-    part("passion-9", "dot", 32, 21, 4, 4, 0, "dim", "outline"),
-    part("rosary", "arc", 73, 71, 25, 31, 26, "accent", "dashed"),
-  ]),
-  "pearl-orbit": blueprint(1.16, "start", "se", [
-    part("head-turn", "arc", 46, 42, 72, 70, -19, "dim", "open"),
-    part("jaw-light", "arc", 51, 53, 53, 42, 8, "spot", "open"),
-    part("ear-line", "line", 73, 45, 18, 1, 76, "accent", "rough"),
-    part("pearl", "disc", 76, 68, 17, 17, 0, "ink", "soft"),
-    part("pearl-glint", "dot", 73, 64, 4, 4, 0, "accent", "solid"),
-    part("light-swatch-a", "block", 17, 21, 21, 6, 0, "ink", "soft"),
-    part("light-swatch-b", "block", 21, 30, 29, 4, 0, "dim", "soft"),
-  ]),
-  "anatomical-index": blueprint(0.92, "end", "ne", [
-    part("tendon-a", "arc", 35, 46, 22, 70, -8, "accent", "open"),
-    part("tendon-b", "arc", 47, 46, 20, 73, 2, "spot", "open"),
-    part("tendon-c", "arc", 58, 47, 18, 68, 11, "ink", "open"),
-    part("tendon-d", "arc", 67, 49, 15, 59, 20, "dim", "open"),
-    part("wrist-fold", "line", 50, 77, 62, 2, -4, "shadow", "rough"),
-    part("folio-a", "line", 28, 17, 31, 1, 0, "dim", "dashed"),
-    part("folio-b", "line", 73, 29, 25, 1, 0, "accent", "dashed"),
-    part("index", "cross", 74, 53, 7, 7, 0, "ink", "outline"),
-  ]),
-  "vanishing-court": blueprint(1.24, "start", "nw", [
-    part("doorway", "block", 52, 27, 18, 34, 0, "ink", "outline"),
-    part("mirror", "block", 76, 24, 14, 11, 0, "accent", "outline"),
-    part("gaze-queen", "line", 17, 70, 73, 1, -34, "spot", "dashed"),
-    part("gaze-painter", "line", 27, 48, 55, 1, -18, "dim", "rough"),
-    part("gaze-infant", "line", 50, 60, 37, 1, -52, "accent", "rough"),
-    part("gaze-viewer", "line", 81, 68, 50, 1, 43, "ink", "dashed"),
-    part("figure-a", "dot", 18, 72, 7, 7, 0, "ink", "solid"),
-    part("figure-b", "dot", 42, 73, 5, 5, 0, "dim", "solid"),
-    part("figure-c", "dot", 66, 66, 4, 4, 0, "spot", "solid"),
-  ]),
-  "rising-diagonal": blueprint(1.36, "end", "sw", [
-    part("flag-blue", "line", 44, 34, 86, 6, -24, "shadow", "rough"),
-    part("flag-white", "line", 49, 43, 87, 5, -24, "ink", "rough"),
-    part("flag-red", "line", 54, 52, 88, 7, -24, "accent", "rough"),
-    part("barricade-a", "block", 21, 76, 24, 10, -10, "dim", "solid"),
-    part("barricade-b", "block", 44, 69, 22, 9, -18, "shadow", "solid"),
-    part("barricade-c", "block", 67, 61, 21, 8, -25, "spot", "solid"),
-    part("ascent", "triangle", 82, 42, 11, 18, -18, "ink", "outline"),
-  ]),
-  "signal-mast": blueprint(1.04, "end", "ne", [
-    part("raft-base", "line", 49, 78, 83, 5, -3, "shadow", "rough"),
-    part("human-pyramid-left", "line", 48, 52, 61, 2, 55, "spot", "rough"),
-    part("human-pyramid-right", "line", 52, 52, 59, 2, -55, "dim", "rough"),
-    part("mast", "line", 53, 43, 68, 2, 90, "ink", "heavy"),
-    part("signal-cloth", "triangle", 64, 20, 18, 16, -4, "accent", "solid"),
-    part("survivor-1", "line", 22, 73, 10, 1, 82, "spot", "rough"),
-    part("survivor-2", "line", 31, 70, 12, 1, 77, "spot", "rough"),
-    part("survivor-3", "line", 41, 68, 13, 1, 88, "spot", "rough"),
-    part("survivor-4", "line", 59, 67, 12, 1, 94, "spot", "rough"),
-    part("survivor-5", "line", 70, 70, 10, 1, 101, "spot", "rough"),
-  ]),
-  "final-tow": blueprint(1.57, "end", "sw", [
-    part("sea-line", "line", 51, 77, 94, 1, -3, "dim", "rough"),
-    part("temeraire-mast", "line", 69, 45, 56, 1, 88, "ink", "rough"),
-    part("tug-stack", "block", 29, 62, 8, 25, -4, "shadow", "solid"),
-    part("smoke-a", "arc", 40, 37, 35, 24, -18, "shadow", "open"),
-    part("smoke-b", "arc", 54, 27, 47, 29, -8, "dim", "open"),
-    part("wake-a", "line", 30, 79, 31, 1, -7, "spot", "dashed"),
-    part("wake-b", "line", 58, 84, 42, 1, 5, "accent", "dashed"),
-    part("edge-glow", "disc", 96, 54, 19, 19, 0, "accent", "soft"),
-  ]),
-  "fog-register": blueprint(1.12, "start", "se", [
-    part("contour-a", "arc", 55, 22, 86, 24, 2, "dim", "open"),
-    part("contour-b", "arc", 46, 38, 71, 27, -7, "spot", "open"),
-    part("contour-c", "arc", 58, 53, 83, 25, 5, "ink", "open"),
-    part("contour-d", "arc", 42, 69, 65, 24, -9, "dim", "open"),
-    part("ridge", "line", 52, 74, 91, 2, -8, "shadow", "rough"),
-    part("wanderer-void", "block", 52, 58, 8, 31, 0, "shadow", "solid"),
-    part("shoulder", "triangle", 52, 61, 24, 13, 0, "shadow", "solid"),
-  ]),
-  "orange-signal": blueprint(0.86, "end", "nw", [
-    part("sun", "disc", 48, 20, 16, 16, 0, "accent", "soft"),
-    part("reflection-1", "line", 49, 38, 14, 2, 1, "accent", "rough"),
-    part("reflection-2", "line", 47, 48, 24, 2, -2, "spot", "rough"),
-    part("reflection-3", "line", 51, 59, 34, 3, 2, "accent", "rough"),
-    part("reflection-4", "line", 48, 71, 47, 2, -1, "spot", "rough"),
-    part("reflection-5", "line", 52, 83, 57, 2, 1, "dim", "rough"),
-    part("crane-a", "line", 17, 53, 45, 1, 90, "shadow", "ghost"),
-    part("crane-b", "line", 80, 48, 39, 1, 90, "shadow", "ghost"),
-  ]),
-  "celestial-current": blueprint(1.32, "end", "sw", [
-    part("vortex-outer", "arc", 56, 44, 73, 62, -17, "spot", "open"),
-    part("vortex-inner", "arc", 61, 43, 42, 34, 21, "accent", "open"),
-    part("star-1", "disc", 19, 19, 7, 7, 0, "ink", "soft"),
-    part("star-2", "dot", 43, 15, 3, 3, 0, "spot", "solid"),
-    part("star-3", "disc", 72, 21, 5, 5, 0, "ink", "soft"),
-    part("star-4", "dot", 84, 47, 4, 4, 0, "accent", "solid"),
-    part("star-5", "dot", 62, 67, 3, 3, 0, "ink", "solid"),
-    part("star-6", "dot", 36, 58, 2.5, 2.5, 0, "dim", "solid"),
-    part("cypress", "triangle", 12, 72, 18, 52, -4, "shadow", "solid"),
-  ]),
-  "solar-fold": blueprint(1.06, "start", "ne", [
-    part("body-curl", "arc", 52, 50, 76, 69, 23, "spot", "open"),
-    part("knee", "arc", 63, 58, 34, 31, -34, "accent", "open"),
-    part("cloth-a", "line", 28, 34, 43, 1, 57, "ink", "rough"),
-    part("cloth-b", "line", 41, 26, 37, 1, 22, "dim", "rough"),
-    part("cloth-c", "line", 72, 39, 39, 1, -41, "spot", "rough"),
-    part("cloth-d", "line", 68, 72, 45, 1, 26, "dim", "rough"),
-    part("oleander", "petal", 20, 78, 15, 8, -29, "accent", "outline"),
-    part("oleander-stem", "line", 28, 70, 23, 1, -48, "shadow", "rough"),
-  ]),
-  "winter-descent": blueprint(1.44, "end", "ne", [
-    part("descent", "line", 49, 49, 95, 2, 22, "spot", "rough"),
-    part("hunter-1", "line", 21, 28, 12, 2, 70, "shadow", "rough"),
-    part("hunter-2", "line", 30, 34, 11, 2, 66, "shadow", "rough"),
-    part("dog-1", "dot", 38, 46, 4, 3, 0, "ink", "solid"),
-    part("dog-2", "dot", 47, 53, 3, 3, 0, "ink", "solid"),
-    part("dog-3", "dot", 55, 58, 3, 3, 0, "dim", "solid"),
-    part("pond-a", "arc", 76, 76, 28, 12, 0, "accent", "open"),
-    part("pond-b", "arc", 86, 62, 19, 9, -11, "dim", "open"),
-    part("bird", "triangle", 73, 21, 7, 5, 19, "shadow", "outline"),
-  ]),
-  "pressed-garden": blueprint(0.88, "end", "sw", [
-    part("wall", "block", 50, 49, 78, 75, 0, "dim", "outline"),
-    part("gate", "arc", 50, 73, 22, 31, 0, "accent", "open"),
-    part("stem-a", "line", 25, 50, 43, 1, 86, "spot", "rough"),
-    part("stem-b", "line", 70, 47, 52, 1, 94, "ink", "rough"),
-    part("leaf-a", "petal", 20, 31, 12, 7, -23, "spot", "solid"),
-    part("leaf-b", "petal", 31, 57, 10, 6, 31, "accent", "solid"),
-    part("leaf-c", "petal", 67, 28, 11, 6, -48, "ink", "outline"),
-    part("flower", "cross", 76, 61, 10, 10, 11, "accent", "outline"),
-    part("bird", "triangle", 38, 24, 9, 7, -16, "shadow", "outline"),
-  ]),
-  "anamorphic-datum": blueprint(1.64, "start", "se", [
-    part("upper-shelf", "line", 52, 24, 91, 2, 0, "ink", "rough"),
-    part("lower-shelf", "line", 50, 58, 88, 2, 0, "dim", "rough"),
-    part("skull", "ring", 57, 76, 68, 15, -9, "spot", "heavy"),
-    part("orbit", "arc", 23, 40, 26, 29, 16, "accent", "open"),
-    part("lute-string", "line", 67, 44, 34, 1, -31, "accent", "dashed"),
-    part("globe", "ring", 83, 31, 15, 15, 0, "ink", "outline"),
-    part("datum", "cross", 15, 58, 7, 7, 0, "shadow", "outline"),
-  ]),
-  "measured-motion": blueprint(1.25, "end", "ne", [
-    part("vertebrae", "arc", 51, 41, 77, 31, -7, "spot", "open"),
-    part("chest", "arc", 37, 55, 28, 39, 13, "dim", "open"),
-    part("stride", "line", 50, 75, 91, 1, -3, "ink", "dashed"),
-    part("hoof-1", "block", 16, 72, 11, 4, -8, "accent", "solid"),
-    part("hoof-2", "block", 39, 80, 9, 4, 5, "spot", "solid"),
-    part("hoof-3", "block", 66, 77, 10, 4, -4, "spot", "solid"),
-    part("hoof-4", "block", 86, 68, 12, 4, 11, "accent", "solid"),
-    part("measure-a", "line", 18, 21, 25, 1, 0, "dim", "dashed"),
-    part("measure-b", "line", 80, 28, 27, 1, 0, "dim", "dashed"),
-  ]),
-  "river-span": blueprint(1.34, "start", "sw", [
-    part("distant-ridge", "arc", 52, 21, 92, 24, 1, "dim", "open"),
-    part("bridge-span", "arc", 63, 47, 55, 29, -4, "spot", "open"),
-    part("bridge-deck", "line", 62, 39, 58, 3, -3, "ink", "rough"),
-    part("pier-a", "block", 43, 55, 8, 29, -2, "shadow", "solid"),
-    part("pier-b", "block", 78, 50, 8, 28, 2, "accent", "outline"),
-    part("river-bank-left", "line", 29, 67, 59, 3, 36, "shadow", "rough"),
-    part("river-bank-right", "line", 76, 68, 53, 3, -41, "spot", "rough"),
-    part("water-course-a", "line", 52, 71, 48, 1, 86, "accent", "dashed"),
-    part("water-course-b", "line", 53, 81, 65, 1, 88, "dim", "dashed"),
-    part("passage", "cross", 64, 48, 7, 7, 0, "ink", "outline"),
-  ]),
-  "screen-current": blueprint(1.52, "end", "se", [
-    part("fold-1", "line", 18, 50, 90, 1, 90, "dim", "rough"),
-    part("fold-2", "line", 34, 50, 90, 1, 90, "dim", "rough"),
-    part("fold-3", "line", 50, 50, 90, 1, 90, "accent", "rough"),
-    part("fold-4", "line", 66, 50, 90, 1, 90, "dim", "rough"),
-    part("fold-5", "line", 82, 50, 90, 1, 90, "dim", "rough"),
-    part("plum-branch-a", "arc", 34, 57, 58, 52, -16, "shadow", "open"),
-    part("plum-branch-b", "arc", 70, 42, 49, 43, 18, "spot", "open"),
-    part("red-blossom", "disc", 65, 24, 6, 6, 0, "accent", "soft"),
-    part("white-blossom", "dot", 78, 55, 5, 5, 0, "ink", "outline"),
-    part("stream", "line", 50, 78, 86, 2, -4, "spot", "rough"),
-  ]),
-  "three-measures": blueprint(1.08, "end", "ne", [
-    part("tulip-stem", "line", 20, 56, 56, 1, 87, "spot", "rough"),
-    part("tulip-a", "petal", 16, 25, 14, 19, -23, "accent", "solid"),
-    part("tulip-b", "petal", 24, 24, 14, 19, 23, "accent", "outline"),
-    part("hourglass-top", "triangle", 50, 36, 24, 23, 180, "ink", "outline"),
-    part("hourglass-bottom", "triangle", 50, 62, 24, 23, 0, "dim", "outline"),
-    part("sand", "line", 50, 50, 24, 2, 90, "accent", "dashed"),
-    part("skull", "ring", 79, 48, 24, 28, 0, "shadow", "heavy"),
-    part("eye-a", "dot", 74, 46, 5, 5, 0, "ink", "solid"),
-    part("eye-b", "dot", 83, 46, 5, 5, 0, "ink", "solid"),
-    part("jaw", "line", 79, 61, 16, 1, 0, "accent", "dashed"),
-  ]),
-  "mechanical-sun": blueprint(1.31, "end", "sw", [
-    part("lamp-cone", "triangle", 22, 54, 42, 69, -7, "accent", "ghost"),
-    part("orbit-outer", "arc", 62, 48, 70, 55, -12, "spot", "open"),
-    part("orbit-inner", "arc", 66, 47, 43, 33, 19, "dim", "open"),
-    part("sun", "disc", 55, 48, 12, 12, 0, "accent", "soft"),
-    part("planet-a", "disc", 82, 27, 7, 7, 0, "ink", "solid"),
-    part("planet-b", "dot", 73, 68, 4, 4, 0, "spot", "solid"),
-    part("planet-c", "ring", 42, 36, 8, 8, 0, "ink", "outline"),
-    part("hand", "line", 35, 73, 28, 2, -33, "shadow", "rough"),
-  ]),
-  "sleep-pressure": blueprint(1.22, "start", "ne", [
-    part("torso", "arc", 53, 62, 74, 34, 7, "ink", "open"),
-    part("pressure-1", "line", 24, 44, 42, 3, 90, "dim", "heavy"),
-    part("pressure-2", "line", 36, 42, 57, 3, 90, "spot", "heavy"),
-    part("pressure-3", "line", 49, 39, 70, 4, 90, "accent", "heavy"),
-    part("pressure-4", "line", 62, 43, 53, 3, 90, "spot", "heavy"),
-    part("pressure-5", "line", 74, 47, 37, 3, 90, "dim", "heavy"),
-    part("curtain", "line", 87, 51, 78, 2, 90, "shadow", "rough"),
-    part("mare", "triangle", 80, 22, 15, 19, -22, "shadow", "solid"),
-    part("incubus", "block", 52, 49, 16, 19, -3, "accent", "ghost"),
-  ]),
-  "perspective-proof": blueprint(1.19, "end", "se", [
-    part("threshold", "line", 50, 72, 94, 2, 0, "accent", "heavy"),
-    part("vanish-left", "line", 36, 50, 87, 1, 35, "dim", "rough"),
-    part("vanish-right", "line", 64, 50, 87, 1, -35, "dim", "rough"),
-    part("tile-1", "line", 50, 61, 89, 1, 0, "spot", "dashed"),
-    part("tile-2", "line", 50, 48, 65, 1, 0, "spot", "dashed"),
-    part("tile-3", "line", 50, 37, 43, 1, 0, "spot", "dashed"),
-    part("column-a", "block", 21, 36, 10, 58, 0, "ink", "outline"),
-    part("column-b", "block", 79, 36, 10, 58, 0, "shadow", "outline"),
-    part("sacred-room", "block", 50, 24, 31, 19, 0, "accent", "ghost"),
-  ]),
-  "severed-baseline": blueprint(1.37, "end", "nw", [
-    part("baseline", "line", 49, 64, 93, 2, 0, "ink", "rough"),
-    part("blade", "line", 53, 49, 108, 5, -31, "accent", "heavy"),
-    part("judith-grip", "arc", 30, 41, 25, 23, 18, "spot", "open"),
-    part("abra-grip", "arc", 71, 64, 21, 18, -27, "dim", "open"),
-    part("blood-1", "petal", 64, 45, 8, 4, -54, "accent", "solid"),
-    part("blood-2", "petal", 72, 35, 6, 3, -39, "accent", "solid"),
-    part("blood-3", "petal", 78, 26, 4, 2, -25, "accent", "solid"),
-  ]),
-  "two-armies": blueprint(1.46, "start", "se", [
-    part("alexander-front", "triangle", 36, 58, 55, 49, 90, "spot", "outline"),
-    part("darius-front", "triangle", 66, 46, 49, 45, -90, "accent", "outline"),
-    part("collision", "cross", 51, 52, 10, 10, 11, "ink", "heavy"),
-    part("cavalry-a", "dot", 19, 71, 5, 5, 0, "shadow", "solid"),
-    part("cavalry-b", "dot", 29, 77, 4, 4, 0, "spot", "solid"),
-    part("cavalry-c", "dot", 76, 30, 4, 4, 0, "accent", "solid"),
-    part("cavalry-d", "dot", 85, 37, 5, 5, 0, "shadow", "solid"),
-    part("sun", "disc", 16, 18, 10, 10, 0, "accent", "soft"),
-    part("moon", "ring", 84, 18, 9, 9, 0, "ink", "outline"),
-    part("inscription", "line", 51, 88, 88, 2, 0, "dim", "dashed"),
-  ]),
-  "petal-avalanche": blueprint(1.28, "end", "ne", [
-    part("canopy", "line", 50, 18, 92, 2, -4, "shadow", "rough"),
-    part("petal-1", "petal", 17, 25, 12, 6, 24, "accent", "solid"),
-    part("petal-2", "petal", 43, 29, 9, 5, -46, "spot", "solid"),
-    part("petal-3", "petal", 72, 24, 11, 5, 61, "accent", "outline"),
-    part("petal-4", "petal", 84, 39, 13, 7, -22, "ink", "solid"),
-    part("petal-5", "petal", 28, 46, 14, 7, 43, "spot", "solid"),
-    part("petal-6", "petal", 57, 50, 10, 5, -71, "accent", "solid"),
-    part("petal-7", "petal", 75, 59, 16, 8, 18, "spot", "solid"),
-    part("petal-8", "petal", 17, 66, 13, 7, -37, "ink", "outline"),
-    part("petal-9", "petal", 39, 72, 17, 9, 51, "accent", "solid"),
-    part("petal-10", "petal", 62, 79, 20, 10, -24, "spot", "solid"),
-    part("petal-11", "petal", 86, 82, 19, 10, 38, "shadow", "solid"),
-    part("banquet", "line", 50, 88, 86, 4, 0, "shadow", "rough"),
-  ]),
-  "acid-cabaret": blueprint(1.15, "end", "sw", [
-    part("mirror-plane", "block", 50, 51, 82, 59, -9, "accent", "ghost"),
-    part("mirror-cut", "line", 50, 52, 88, 3, -9, "ink", "rough"),
-    part("lamp-a", "disc", 23, 22, 13, 13, 0, "spot", "soft"),
-    part("lamp-b", "disc", 74, 19, 10, 10, 0, "accent", "soft"),
-    part("face-a", "ring", 34, 48, 17, 22, -12, "ink", "outline"),
-    part("face-b", "ring", 68, 63, 13, 18, 17, "shadow", "outline"),
-    part("sightline-a", "line", 23, 71, 59, 1, -27, "spot", "dashed"),
-    part("sightline-b", "line", 77, 74, 47, 1, 31, "dim", "dashed"),
-  ]),
-  "unstable-table": blueprint(1.22, "start", "se", [
-    part("table-plane-a", "line", 49, 64, 91, 3, -8, "shadow", "heavy"),
-    part("table-plane-b", "line", 52, 45, 73, 2, 5, "dim", "rough"),
-    part("cloth-edge", "line", 58, 75, 59, 2, 13, "spot", "dashed"),
-    part("apple-1", "disc", 23, 41, 15, 15, 0, "accent", "rough"),
-    part("apple-2", "disc", 39, 34, 13, 13, 0, "spot", "rough"),
-    part("apple-3", "ring", 56, 39, 17, 17, 0, "ink", "heavy"),
-    part("apple-4", "disc", 72, 48, 12, 12, 0, "accent", "soft"),
-    part("apple-5", "ring", 83, 58, 14, 14, 0, "spot", "outline"),
-    part("checker-a", "block", 24, 80, 10, 8, 0, "ink", "outline"),
-    part("checker-b", "block", 36, 82, 10, 8, 0, "accent", "solid"),
-  ]),
-  "falling-sun": blueprint(1.12, "start", "ne", [
-    part("wing", "arc", 49, 48, 76, 65, 19, "spot", "open"),
-    part("body", "line", 48, 57, 46, 3, 38, "shadow", "heavy"),
-    part("feather-1", "petal", 22, 29, 12, 4, 32, "ink", "outline"),
-    part("feather-2", "petal", 31, 43, 10, 4, 47, "spot", "solid"),
-    part("feather-3", "petal", 43, 66, 9, 3, 59, "accent", "solid"),
-    part("feather-4", "petal", 61, 73, 13, 5, -14, "dim", "outline"),
-    part("feather-5", "petal", 77, 63, 11, 4, -36, "spot", "solid"),
-    part("nymph-a", "arc", 23, 79, 17, 22, -18, "dim", "open"),
-    part("nymph-b", "arc", 76, 80, 16, 20, 21, "ink", "open"),
-    part("sunset-wash", "disc", 104, 37, 42, 42, 0, "accent", "ghost"),
-  ]),
-  "basin-rhythm": blueprint(1.1, "end", "nw", [
-    part("basin", "ring", 52, 62, 63, 31, -4, "spot", "heavy"),
-    part("mother-arm", "arc", 38, 45, 47, 46, 18, "ink", "open"),
-    part("child-arm", "arc", 61, 43, 35, 33, -24, "accent", "open"),
-    part("leg", "line", 55, 68, 41, 2, 31, "dim", "rough"),
-    part("pitcher", "block", 81, 49, 15, 26, -4, "shadow", "outline"),
-    part("floor-a", "block", 18, 82, 12, 9, 0, "ink", "outline"),
-    part("floor-b", "block", 32, 82, 12, 9, 0, "accent", "solid"),
-    part("floor-c", "block", 46, 82, 12, 9, 0, "ink", "outline"),
-  ]),
-  "name-restored": blueprint(0.94, "start", "sw", [
-    part("portrait-register", "line", 30, 50, 82, 2, 90, "accent", "heavy"),
-    part("name-line", "line", 57, 24, 56, 4, 0, "ink", "rough"),
-    part("record-line-a", "line", 57, 38, 63, 1, 0, "dim", "dashed"),
-    part("record-line-b", "line", 57, 49, 48, 1, 0, "dim", "dashed"),
-    part("record-line-c", "line", 57, 60, 67, 1, 0, "spot", "dashed"),
-    part("anonymous", "line", 57, 72, 54, 3, -7, "shadow", "rough"),
-    part("strike", "line", 57, 72, 63, 2, 9, "accent", "heavy"),
-    part("skin-swatch", "block", 22, 24, 11, 11, 0, "ink", "soft"),
-    part("dress-swatch", "block", 22, 42, 11, 18, 0, "shadow", "solid"),
-    part("gaze", "line", 62, 15, 36, 1, -4, "spot", "dashed"),
-  ]),
-});
+  "ermine-arc": blueprint(
+    "ermine-arc",
+    "start",
+    "sw",
+    "Cecilia's counter-turn links her gaze and hand to the ermine's answering spine.",
+    ["counter-turn", "gaze", "hand", "ermine"],
+    [
+      polygon("sleeve-field", [p(3, 77), p(31, 67), p(45, 100), p(3, 100)], "field", "fill"),
+      path("head-turn", [p(18, 27), p(37, 15), p(59, 24), p(73, 43)], "ink"),
+      path("ermine-spine", [p(21, 69), p(40, 58), p(60, 61), p(81, 75)], "muted"),
+      line("hand-axis", p(20, 70), p(55, 54), "accent"),
+      line("gaze-axis", p(59, 27), p(94, 20), "muted"),
+      path("gesture-link", [p(52, 45), p(59, 53), p(62, 62)], "ink"),
+    ],
+  ),
+  "sea-born": blueprint(
+    "sea-born",
+    "center",
+    "ne",
+    "Venus rises on a shell whose ribs share one hinge and settle into one horizon.",
+    ["shell", "single-origin", "horizon", "birth"],
+    [
+      polygon("sea-plane", [p(0, 82), p(100, 82), p(100, 100), p(0, 100)], "field", "fill"),
+      line("venus-axis", p(50, 17), p(50, 86), "muted"),
+      path("shell-lip", [p(13, 66), p(30, 80), p(50, 86), p(70, 80), p(87, 66)], "ink"),
+      rayFan(
+        "shell-ribs",
+        p(50, 86),
+        [p(18, 57), p(28, 49), p(39, 44), p(50, 42), p(61, 44), p(72, 49), p(82, 57)],
+        "muted",
+      ),
+      path("shore", [p(0, 82), p(49, 79), p(100, 82)], "accent"),
+    ],
+  ),
+  "triptych-spill": blueprint(
+    "triptych-spill",
+    "end",
+    "se",
+    "The three painted worlds remain legible as unequal but connected panels on one horizon.",
+    ["triptych", "eden", "earth", "inferno"],
+    [
+      rect("eden-field", 4, 79, 24, 8, "field", "fill"),
+      rect("earth-field", 28, 79, 44, 8, "accent", "fill"),
+      rect("inferno-field", 72, 79, 24, 8, "field", "fill"),
+      rect("outer-frame", 4, 7, 92, 80, "ink", "stroke"),
+      line("eden-seam", p(28, 7), p(28, 87), "muted"),
+      line("inferno-seam", p(72, 7), p(72, 87), "muted"),
+      line("shared-horizon", p(4, 35), p(96, 35), "ink"),
+    ],
+  ),
+  "convex-witness": blueprint(
+    "convex-witness",
+    "center",
+    "sw",
+    "The chandelier, convex mirror, joined hands, and dog form the room's quiet central register.",
+    ["mirror", "domestic-axis", "joined-hands", "bilateral-room"],
+    [
+      polygon("dress-field", [p(58, 55), p(81, 43), p(95, 90), p(55, 90)], "field", "fill"),
+      line("room-axis", p(50, 7), p(50, 92), "muted"),
+      ellipse("convex-mirror", 50, 39, 12, 12, "accent", "stroke", "convex room mirror"),
+      path("left-figure", [p(10, 89), p(15, 43), p(28, 27), p(44, 89)], "ink"),
+      path("right-figure", [p(56, 89), p(64, 28), p(82, 34), p(93, 89)], "ink"),
+      path("joined-hands", [p(35, 60), p(49, 58), p(63, 61)], "accent"),
+      line("floor-datum", p(8, 89), p(94, 89), "muted"),
+    ],
+  ),
+  "pearl-orbit": blueprint(
+    "pearl-orbit",
+    "start",
+    "se",
+    "A single suspended pearl resolves the sitter's head turn and outward gaze without an orbit.",
+    ["pearl", "head-turn", "gaze", "suspension"],
+    [
+      polygon("scarf-field", [p(28, 29), p(41, 8), p(82, 15), p(73, 36)], "field", "fill"),
+      path("head-contour", [p(18, 18), p(39, 8), p(66, 18), p(80, 45)], "muted"),
+      path("jaw-light", [p(34, 46), p(51, 63), p(70, 58)], "ink"),
+      line("gaze", p(36, 31), p(7, 27), "muted"),
+      line("pearl-suspension", p(71, 44), p(76, 68), "accent"),
+      ellipse("pearl", 76, 74, 6, 7, "accent", "fill", "pearl earring"),
+    ],
+  ),
+  "anatomical-index": blueprint(
+    "anatomical-index",
+    "end",
+    "ne",
+    "The cadaver is a datum beneath an arc of witnesses and a precise tendon demonstration.",
+    ["cadaver", "observation-arc", "tendon", "lesson"],
+    [
+      polygon("muscle-field", [p(56, 64), p(81, 54), p(85, 60), p(60, 71)], "accent", "fill"),
+      line("body-datum", p(7, 72), p(93, 72), "ink"),
+      path("witness-arc", [p(12, 49), p(28, 25), p(52, 21), p(79, 35), p(91, 54)], "muted"),
+      line("witness-1", p(22, 35), p(24, 41), "muted"),
+      line("witness-2", p(33, 27), p(35, 34), "muted"),
+      line("witness-3", p(45, 22), p(46, 30), "muted"),
+      line("witness-4", p(58, 23), p(57, 31), "muted"),
+      line("witness-5", p(70, 29), p(67, 36), "muted"),
+      line("witness-6", p(81, 39), p(77, 45), "muted"),
+      line("tendon-1", p(58, 65), p(76, 55), "accent"),
+      line("tendon-2", p(61, 67), p(79, 57), "ink"),
+      line("tendon-3", p(64, 69), p(82, 59), "muted"),
+    ],
+  ),
+  "vanishing-court": blueprint(
+    "vanishing-court",
+    "start",
+    "nw",
+    "Every architectural ray returns to the lit rear doorway that holds the court in perspective.",
+    ["single-vanishing-point", "doorway", "court", "witness"],
+    [
+      rect("door-light", 47, 25, 10, 17, "accent", "fill"),
+      rayFan(
+        "room-rays",
+        p(52, 42),
+        [p(5, 96), p(29, 96), p(75, 96), p(95, 96)],
+        "muted",
+      ),
+      line("horizon", p(6, 42), p(94, 42), "ink"),
+      rect("mirror", 62, 29, 14, 9, "ink", "stroke"),
+      rect("painter-canvas", 5, 17, 18, 68, "muted", "stroke"),
+      line("left-room-bay", p(29, 9), p(29, 91), "muted"),
+      line("right-room-bay", p(79, 9), p(79, 91), "muted"),
+    ],
+  ),
+  "rising-diagonal": blueprint(
+    "rising-diagonal",
+    "end",
+    "sw",
+    "Liberty and the crowd form one rising pyramid capped by the flag's flat fields.",
+    ["liberty", "crowd-pyramid", "flag", "ascent"],
+    [
+      polygon("flag-field-a", [p(70, 5), p(98, 10), p(83, 24), p(69, 18)], "field", "fill"),
+      polygon("flag-field-b", [p(69, 18), p(83, 24), p(76, 34), p(65, 27)], "accent", "fill"),
+      polygon("crowd-pyramid", [p(9, 89), p(57, 18), p(94, 89)], "ink", "stroke"),
+      line("barricade", p(3, 90), p(97, 90), "muted"),
+      line("flag-staff", p(57, 19), p(72, 4), "ink"),
+      path("crowd-rise", [p(12, 83), p(34, 69), p(56, 45), p(82, 76)], "muted"),
+    ],
+  ),
+  "signal-mast": blueprint(
+    "signal-mast",
+    "end",
+    "ne",
+    "Two opposed human pyramids resolve at the survivor's signal above the raft datum.",
+    ["raft", "double-pyramid", "survivor", "signal"],
+    [
+      polygon("signal-cloth", [p(78, 18), p(94, 25), p(78, 31)], "accent", "fill"),
+      polygon("weight-pyramid", [p(5, 88), p(49, 35), p(67, 88)], "muted", "stroke"),
+      polygon("survival-pyramid", [p(32, 88), p(78, 18), p(97, 88)], "ink", "stroke"),
+      line("raft-base", p(5, 88), p(97, 88), "ink"),
+      line("mast", p(78, 18), p(78, 82), "muted"),
+      path("opposing-wave", [p(3, 72), p(27, 62), p(51, 69), p(74, 58), p(98, 64)], "field"),
+    ],
+  ),
+  "final-tow": blueprint(
+    "final-tow",
+    "end",
+    "sw",
+    "The fading ship and compact tug remain joined across one horizon by the final tow.",
+    ["horizon", "temeraire", "tug", "sunset"],
+    [
+      rect("tug-field", 17, 58, 10, 10, "field", "fill"),
+      polygon("ship-hull", [p(51, 62), p(80, 61), p(73, 68), p(50, 68)], "muted", "fill"),
+      ellipse("setting-sun", 89, 44, 9, 9, "accent", "fill", "setting sun"),
+      line("horizon", p(3, 67), p(97, 67), "ink"),
+      line("mast-a", p(62, 25), p(62, 64), "ink"),
+      line("mast-b", p(70, 32), p(70, 64), "muted"),
+      line("tow", p(27, 64), p(61, 65), "accent"),
+      path("wake", [p(13, 72), p(37, 76), p(64, 73)], "muted"),
+    ],
+  ),
+  "fog-register": blueprint(
+    "fog-register",
+    "start",
+    "se",
+    "A single human axis stands against three receding ridge contours with no invented horizon.",
+    ["wanderer", "ridge", "fog", "altitude"],
+    [
+      polygon("wanderer-field", [p(45, 82), p(47, 49), p(43, 40), p(50, 32), p(57, 40), p(53, 49), p(57, 82)], "field", "fill"),
+      path("far-ridge", [p(3, 25), p(23, 18), p(44, 26), p(67, 17), p(97, 24)], "muted"),
+      path("middle-ridge", [p(2, 46), p(20, 37), p(42, 48), p(65, 34), p(98, 43)], "ink"),
+      path("near-ridge", [p(1, 75), p(23, 61), p(43, 72), p(69, 56), p(99, 68)], "accent"),
+      line("figure-axis", p(50, 31), p(50, 84), "muted"),
+    ],
+  ),
+  "orange-signal": blueprint(
+    "orange-signal",
+    "end",
+    "nw",
+    "One orange sun establishes a vertical reflection register in the harbor mist.",
+    ["sun", "reflection", "harbor", "signal"],
+    [
+      ellipse("sun", 34, 22, 7, 7, "accent", "fill", "rising sun"),
+      line("horizon", p(4, 39), p(96, 39), "ink"),
+      line("reflection-1", p(29, 47), p(39, 47), "accent"),
+      line("reflection-2", p(25, 56), p(43, 56), "accent"),
+      line("reflection-3", p(20, 66), p(48, 66), "accent"),
+      line("reflection-4", p(14, 78), p(54, 78), "muted"),
+      line("crane-left", p(10, 34), p(10, 74), "field"),
+      line("crane-right", p(88, 29), p(88, 70), "field"),
+    ],
+  ),
+  "celestial-current": blueprint(
+    "celestial-current",
+    "end",
+    "sw",
+    "Two continuous sky currents are counterweighted by the cypress and mapped stars.",
+    ["sky-current", "cypress", "stars", "village"],
+    [
+      polygon("cypress-field", [p(4, 95), p(8, 42), p(14, 17), p(20, 46), p(26, 95)], "field", "fill"),
+      path("outer-current", [p(22, 23), p(43, 8), p(76, 14), p(94, 36), p(75, 56), p(48, 48)], "ink"),
+      path("inner-current", [p(34, 29), p(52, 19), p(72, 26), p(76, 42), p(61, 48), p(49, 39)], "accent"),
+      polygon("star-a", [p(31, 14), p(33, 18), p(37, 20), p(33, 22), p(31, 26), p(29, 22), p(25, 20), p(29, 18)], "accent", "fill"),
+      polygon("star-b", [p(55, 8), p(57, 12), p(61, 14), p(57, 16), p(55, 20), p(53, 16), p(49, 14), p(53, 12)], "ink", "fill"),
+      polygon("star-c", [p(82, 17), p(84, 21), p(88, 23), p(84, 25), p(82, 29), p(80, 25), p(76, 23), p(80, 21)], "accent", "fill"),
+      line("village-datum", p(3, 83), p(97, 83), "muted"),
+    ],
+  ),
+  "solar-fold": blueprint(
+    "solar-fold",
+    "start",
+    "ne",
+    "The sleeping body is read as one off-center curl held inside a single field of heat.",
+    ["body-curl", "sleep", "cloth", "heat"],
+    [
+      path(
+        "cloth-field",
+        [p(18, 76), p(12, 51), p(24, 25), p(62, 12), p(88, 36), p(84, 75), p(54, 92)],
+        "field",
+        "fill",
+        "smooth",
+        true,
+      ),
+      path("body-curl", [p(22, 72), p(18, 42), p(37, 18), p(70, 19), p(86, 43), p(73, 75), p(43, 84), p(26, 69)], "ink"),
+      path("knee-tangent", [p(58, 52), p(75, 61), p(77, 77)], "accent"),
+      line("sleep-datum", p(20, 86), p(82, 86), "muted"),
+    ],
+  ),
+  "winter-descent": blueprint(
+    "winter-descent",
+    "end",
+    "ne",
+    "Hunters and dogs descend one slope toward the nested frozen ponds below.",
+    ["descent", "hunters", "dogs", "frozen-ponds"],
+    [
+      polygon("snow-bank", [p(0, 79), p(100, 63), p(100, 100), p(0, 100)], "field", "fill"),
+      line("descent", p(8, 20), p(88, 76), "accent"),
+      line("hunter-1", p(19, 25), p(15, 36), "ink"),
+      line("hunter-2", p(29, 31), p(25, 42), "ink"),
+      line("dog-1", p(40, 41), p(46, 43), "muted"),
+      line("dog-2", p(51, 49), p(57, 51), "muted"),
+      line("dog-3", p(61, 57), p(67, 59), "muted"),
+      ellipse("near-pond", 77, 78, 18, 7, "ink", "stroke", "frozen pond"),
+      ellipse("far-pond", 84, 64, 11, 4, "muted", "stroke", "distant frozen pond"),
+    ],
+  ),
+  "pressed-garden": blueprint(
+    "pressed-garden",
+    "end",
+    "sw",
+    "The garden is an enclosure first: wall, tree axis, quadrants, and one gate.",
+    ["enclosure", "garden", "tree", "gate"],
+    [
+      rect("garden-field", 13, 13, 74, 70, "field", "fill"),
+      rect("gate-field", 44, 69, 13, 14, "accent", "fill", 6),
+      rect("garden-wall", 8, 8, 84, 80, "ink", "stroke"),
+      line("tree-axis", p(51, 14), p(50, 83), "ink"),
+      line("vertical-quarter", p(50, 8), p(50, 88), "muted"),
+      line("horizontal-quarter", p(8, 50), p(92, 50), "muted"),
+      path("gate-arch", [p(43, 83), p(44, 70), p(50, 65), p(57, 70), p(58, 83)], "accent"),
+      path("root-system", [p(50, 58), p(35, 73), p(20, 78), p(50, 58), p(66, 72), p(80, 77)], "ink", "stroke", "linear"),
+    ],
+  ),
+  "anamorphic-datum": blueprint(
+    "anamorphic-datum",
+    "start",
+    "se",
+    "Two vertical ambassadors and two shelves are deliberately broken by the anamorphic skull.",
+    ["ambassadors", "shelves", "anamorphosis", "skull"],
+    [
+      rect("curtain-field", 5, 5, 90, 69, "field", "fill"),
+      line("left-ambassador", p(18, 12), p(18, 88), "ink"),
+      line("right-ambassador", p(82, 12), p(82, 88), "ink"),
+      line("upper-shelf", p(25, 37), p(75, 37), "muted"),
+      line("lower-shelf", p(25, 56), p(75, 56), "muted"),
+      ellipse("anamorphic-skull", 55, 81, 31, 6, "accent", "stroke", "anamorphic skull", -10),
+      line("floor-datum", p(7, 91), p(93, 91), "ink"),
+    ],
+  ),
+  "measured-motion": blueprint(
+    "measured-motion",
+    "end",
+    "ne",
+    "The horse's rearing S-curve is measured at withers, knees, and hooves against empty ground.",
+    ["horse", "rearing", "measurement", "groundless-field"],
+    [
+      polygon("flank-field", [p(34, 26), p(62, 20), p(78, 47), p(63, 65), p(36, 56)], "field", "fill"),
+      path("horse-contour", [p(27, 76), p(23, 48), p(36, 22), p(62, 16), p(79, 37), p(69, 62), p(82, 79)], "ink"),
+      line("ground", p(8, 88), p(92, 88), "muted"),
+      line("measure-withers", p(32, 25), p(43, 25), "accent"),
+      line("measure-knee-a", p(24, 54), p(36, 54), "accent"),
+      line("measure-knee-b", p(66, 61), p(78, 61), "accent"),
+      line("measure-hoof-a", p(19, 80), p(31, 80), "accent"),
+      line("measure-hoof-b", p(75, 81), p(87, 81), "accent"),
+    ],
+  ),
+  "river-span": blueprint(
+    "river-span",
+    "start",
+    "sw",
+    "The bridge arch frames the river's single recession point and two widening banks.",
+    ["bridge", "river", "single-vanishing-point", "passage"],
+    [
+      rect("left-pier", 45, 45, 7, 28, "field", "fill"),
+      rect("right-pier", 75, 42, 7, 27, "field", "fill"),
+      path("bridge-arch", [p(43, 51), p(62, 30), p(83, 48)], "ink"),
+      line("bridge-deck", p(40, 39), p(85, 39), "accent"),
+      rayFan("river-banks", p(63, 44), [p(17, 97), p(89, 97)], "muted"),
+      path("distant-horizon", [p(3, 25), p(29, 21), p(55, 25), p(78, 20), p(97, 24)], "muted"),
+      line("water-axis", p(63, 44), p(63, 96), "ink"),
+    ],
+  ),
+  "screen-current": blueprint(
+    "screen-current",
+    "end",
+    "se",
+    "Two opposing plum trees are joined by one broad S-current across the folding screens.",
+    ["plum-trees", "screen-folds", "stream", "opposition"],
+    [
+      path(
+        "stream-field",
+        [p(2, 69), p(20, 57), p(39, 63), p(49, 47), p(61, 31), p(80, 39), p(98, 25), p(98, 48), p(79, 58), p(61, 51), p(48, 70), p(27, 79), p(2, 89)],
+        "field",
+        "fill",
+        "smooth",
+        true,
+      ),
+      line("fold-1", p(18, 5), p(18, 95), "muted"),
+      line("fold-2", p(34, 5), p(34, 95), "muted"),
+      line("center-gutter", p(50, 5), p(50, 95), "accent"),
+      line("fold-4", p(66, 5), p(66, 95), "muted"),
+      line("fold-5", p(82, 5), p(82, 95), "muted"),
+      path("white-plum", [p(2, 15), p(24, 25), p(39, 47), p(47, 62)], "ink"),
+      path("red-plum", [p(98, 9), p(80, 19), p(67, 37), p(56, 51)], "accent"),
+      polygon("white-blossom-a", [p(24, 20), p(27, 24), p(24, 28), p(21, 24)], "ink", "fill"),
+      polygon("white-blossom-b", [p(37, 38), p(40, 42), p(37, 46), p(34, 42)], "ink", "fill"),
+      polygon("red-blossom-a", [p(78, 15), p(81, 19), p(78, 23), p(75, 19)], "accent", "fill"),
+      polygon("red-blossom-b", [p(66, 31), p(69, 35), p(66, 39), p(63, 35)], "accent", "fill"),
+    ],
+  ),
+  "three-measures": blueprint(
+    "three-measures",
+    "end",
+    "ne",
+    "Tulip, hourglass, and skull occupy equal bays on one mortality baseline.",
+    ["tulip", "hourglass", "skull", "vanitas"],
+    [
+      ellipse("skull-mass", 80, 50, 12, 17, "field", "fill", "human skull"),
+      line("baseline", p(5, 78), p(95, 78), "ink"),
+      line("bay-a", p(34, 12), p(34, 82), "muted"),
+      line("bay-b", p(66, 12), p(66, 82), "muted"),
+      line("tulip-stem", p(18, 30), p(18, 77), "ink"),
+      polygon("tulip-bloom", [p(18, 14), p(27, 25), p(18, 34), p(9, 25)], "accent", "fill"),
+      polygon("hourglass", [p(43, 25), p(57, 25), p(52, 49), p(57, 73), p(43, 73), p(48, 49)], "ink", "stroke"),
+      polygon("skull-eye-a", [p(73, 46), p(77, 43), p(79, 48), p(75, 51)], "ink", "fill"),
+      polygon("skull-eye-b", [p(82, 43), p(87, 46), p(85, 51), p(81, 48)], "ink", "fill"),
+    ],
+  ),
+  "mechanical-sun": blueprint(
+    "mechanical-sun",
+    "center",
+    "sw",
+    "The lamp is the sole origin for the orrery's spokes, orbits, and illuminated planets.",
+    ["orrery", "single-origin", "lamp", "knowledge"],
+    [
+      ellipse("outer-orbit", 55, 50, 36, 29, "muted", "stroke", "outer orbital path"),
+      ellipse("middle-orbit", 55, 50, 26, 20, "ink", "stroke", "middle orbital path"),
+      ellipse("inner-orbit", 55, 50, 15, 11, "accent", "stroke", "inner orbital path"),
+      rayFan(
+        "orrery-spokes",
+        p(55, 50),
+        [p(55, 12), p(83, 24), p(93, 50), p(79, 77), p(55, 88), p(27, 75), p(17, 50), p(30, 22)],
+        "muted",
+      ),
+      ellipse("lamp-core", 55, 50, 7, 7, "accent", "fill", "orrery lamp"),
+      ellipse("planet-a", 83, 27, 4, 4, "field", "fill", "orrery planet"),
+      ellipse("planet-b", 77, 69, 3, 3, "ink", "fill", "orrery planet"),
+      ellipse("planet-c", 34, 37, 3.5, 3.5, "field", "fill", "orrery planet"),
+    ],
+  ),
+  "sleep-pressure": blueprint(
+    "sleep-pressure",
+    "start",
+    "ne",
+    "Five equal-weight pressure lines terminate on the sleeping torso beneath the curtain.",
+    ["sleep", "pressure", "torso", "curtain"],
+    [
+      polygon("curtain-field", [p(72, 4), p(96, 4), p(96, 82), p(84, 67), p(78, 34)], "field", "fill"),
+      path("torso", [p(10, 69), p(34, 58), p(60, 61), p(87, 72)], "ink"),
+      line("pressure-1", p(20, 17), p(20, 65), "muted"),
+      line("pressure-2", p(34, 11), p(34, 59), "muted"),
+      line("pressure-3", p(48, 8), p(48, 59), "accent"),
+      line("pressure-4", p(62, 13), p(62, 62), "muted"),
+      line("pressure-5", p(76, 20), p(76, 67), "muted"),
+      line("bed-datum", p(5, 79), p(94, 79), "ink"),
+    ],
+  ),
+  "perspective-proof": blueprint(
+    "perspective-proof",
+    "end",
+    "se",
+    "The architectural grid proves one vanishing point around the recessed sacred scene.",
+    ["single-vanishing-point", "architecture", "flagellation", "foreground"],
+    [
+      rect("sacred-room", 26, 28, 16, 17, "accent", "fill"),
+      rect("foreground-a", 61, 48, 8, 39, "field", "fill"),
+      rect("foreground-b", 73, 44, 8, 43, "field", "fill"),
+      rect("foreground-c", 85, 49, 8, 38, "field", "fill"),
+      rayFan(
+        "architecture-rays",
+        p(34, 39),
+        [p(4, 4), p(4, 96), p(25, 96), p(64, 96), p(96, 96), p(96, 12)],
+        "muted",
+      ),
+      line("cross-plane-1", p(4, 51), p(96, 51), "ink"),
+      line("cross-plane-2", p(4, 64), p(96, 64), "muted"),
+      line("cross-plane-3", p(4, 78), p(96, 78), "muted"),
+      line("left-column", p(12, 7), p(12, 92), "ink"),
+      line("scene-column", p(56, 7), p(56, 92), "ink"),
+    ],
+  ),
+  "severed-baseline": blueprint(
+    "severed-baseline",
+    "end",
+    "nw",
+    "The blade and two arm vectors meet at the neck and cut across the bed's stable datum.",
+    ["blade", "arms", "neck-intersection", "violence"],
+    [
+      polygon("bed-field", [p(2, 72), p(98, 72), p(98, 98), p(2, 98)], "field", "fill"),
+      polygon("oxblood-cut", [p(54, 58), p(73, 49), p(76, 55), p(58, 63)], "accent", "fill"),
+      line("bed-baseline", p(3, 72), p(97, 72), "ink"),
+      line("blade", p(16, 84), p(83, 32), "accent"),
+      line("judith-arm", p(20, 26), p(57, 60), "ink"),
+      line("abra-arm", p(91, 82), p(57, 60), "muted"),
+      line("neck-register", p(50, 60), p(64, 60), "ink"),
+    ],
+  ),
+  "two-armies": blueprint(
+    "two-armies",
+    "start",
+    "se",
+    "Two ordered wedges collide beneath the painting's opposed sun and moon.",
+    ["army-wedges", "collision", "sun", "moon"],
+    [
+      polygon("alexander-field", [p(2, 96), p(48, 59), p(52, 67), p(42, 98)], "field", "fill"),
+      polygon("darius-field", [p(98, 96), p(55, 58), p(51, 67), p(62, 98)], "accent", "fill"),
+      polygon("alexander-front", [p(2, 96), p(48, 59), p(52, 67), p(42, 98)], "ink", "stroke"),
+      polygon("darius-front", [p(98, 96), p(55, 58), p(51, 67), p(62, 98)], "ink", "stroke"),
+      line("collision-axis", p(52, 58), p(52, 98), "ink"),
+      line("horizon", p(4, 48), p(96, 48), "muted"),
+      ellipse("celestial-sun", 84, 22, 8, 8, "accent", "fill", "celestial sun"),
+      ellipse("celestial-moon", 16, 18, 6, 6, "ink", "stroke", "celestial moon"),
+    ],
+  ),
+  "petal-avalanche": blueprint(
+    "petal-avalanche",
+    "end",
+    "ne",
+    "The roses behave as one descending weather front rather than disconnected petals.",
+    ["rose-field", "cascade", "weather", "banquet"],
+    [
+      path(
+        "rose-mass",
+        [p(3, 20), p(24, 23), p(43, 38), p(59, 45), p(79, 57), p(98, 78), p(98, 97), p(50, 94), p(17, 82), p(2, 60)],
+        "accent",
+        "fill",
+        "smooth",
+        true,
+      ),
+      path("flow-a", [p(5, 19), p(31, 28), p(56, 45), p(91, 70)], "ink"),
+      path("flow-b", [p(3, 34), p(27, 39), p(55, 55), p(96, 82)], "muted"),
+      path("flow-c", [p(2, 51), p(23, 55), p(52, 69), p(90, 91)], "ink"),
+      line("banquet-datum", p(13, 67), p(94, 67), "field"),
+    ],
+  ),
+  "acid-cabaret": blueprint(
+    "acid-cabaret",
+    "end",
+    "sw",
+    "The foreground table's oblique plane challenges the vertical mirror seams and cyan edge face.",
+    ["table-plane", "mirror", "nightlife", "edge-anchor"],
+    [
+      polygon("table-field", [p(0, 62), p(62, 45), p(79, 100), p(0, 100)], "field", "fill"),
+      rect("edge-signal", 88, 18, 9, 70, "accent", "fill"),
+      line("table-edge", p(0, 62), p(62, 45), "accent"),
+      line("mirror-seam-a", p(22, 7), p(22, 79), "muted"),
+      line("mirror-seam-b", p(49, 7), p(49, 72), "muted"),
+      line("mirror-seam-c", p(76, 7), p(76, 83), "muted"),
+      line("counter-horizon", p(5, 31), p(94, 31), "ink"),
+    ],
+  ),
+  "unstable-table": blueprint(
+    "unstable-table",
+    "start",
+    "se",
+    "Two incompatible table planes hold a basket, bottle, cloth, and mapped apples in productive imbalance.",
+    ["broken-perspective", "table", "basket", "apples"],
+    [
+      polygon("cloth-field", [p(21, 58), p(88, 51), p(94, 88), p(34, 96), p(8, 78)], "muted", "fill"),
+      line("table-plane-a", p(3, 79), p(96, 65), "ink"),
+      line("table-plane-b", p(8, 50), p(91, 57), "accent"),
+      path("basket-arc", [p(8, 48), p(22, 20), p(49, 23), p(57, 49)], "ink"),
+      line("bottle-axis", p(62, 11), p(62, 61), "field"),
+      ellipse("apple-a", 25, 39, 7, 7, "field", "fill", "apple"),
+      ellipse("apple-b", 39, 34, 6, 6, "accent", "fill", "apple"),
+      ellipse("apple-c", 51, 46, 7, 7, "field", "fill", "apple"),
+      ellipse("apple-d", 70, 66, 7, 7, "accent", "fill", "apple"),
+      ellipse("apple-e", 84, 61, 6, 6, "field", "fill", "apple"),
+    ],
+  ),
+  "falling-sun": blueprint(
+    "falling-sun",
+    "start",
+    "ne",
+    "The fallen body's diagonal is held between two wing contours and two mourning figures.",
+    ["icarus", "wings", "fall", "lament"],
+    [
+      ellipse("sun", 88, 84, 9, 9, "accent", "fill", "setting sun"),
+      line("body-descent", p(27, 31), p(68, 75), "accent"),
+      path("left-wing", [p(7, 20), p(19, 8), p(34, 24), p(43, 58), p(26, 76)], "ink"),
+      path("right-wing", [p(55, 52), p(70, 27), p(91, 24), p(88, 64), p(69, 78)], "ink"),
+      line("feather-1", p(13, 22), p(29, 43), "muted"),
+      line("feather-2", p(18, 18), p(34, 39), "muted"),
+      line("feather-3", p(63, 43), p(84, 35), "muted"),
+      line("feather-4", p(67, 51), p(89, 47), "muted"),
+      line("feather-5", p(70, 59), p(88, 60), "muted"),
+      path("nymph-left", [p(18, 88), p(21, 72), p(31, 65)], "field"),
+      path("nymph-right", [p(82, 88), p(79, 73), p(69, 66)], "field"),
+    ],
+  ),
+  "basin-rhythm": blueprint(
+    "basin-rhythm",
+    "end",
+    "nw",
+    "One wash basin anchors the mother's enclosing arm and the child's descending limb.",
+    ["basin", "embrace", "care", "floor-grid"],
+    [
+      rect("rug-tile-a", 12, 82, 14, 10, "field", "fill"),
+      rect("rug-tile-b", 28, 82, 14, 10, "accent", "fill"),
+      rect("rug-tile-c", 44, 82, 14, 10, "field", "fill"),
+      rect("rug-tile-d", 60, 82, 14, 10, "accent", "fill"),
+      ellipse("wash-basin", 51, 69, 31, 14, "accent", "stroke", "wash basin"),
+      path("mother-embrace", [p(20, 61), p(23, 27), p(50, 17), p(71, 36), p(68, 61)], "ink"),
+      line("child-limb", p(49, 35), p(61, 74), "muted"),
+      line("floor-grid-a", p(8, 80), p(88, 80), "muted"),
+      line("floor-grid-b", p(8, 94), p(88, 94), "muted"),
+      polygon("pitcher-field", [p(82, 49), p(94, 55), p(91, 81), p(79, 75)], "field", "fill"),
+    ],
+  ),
+  "name-restored": blueprint(
+    "name-restored",
+    "start",
+    "sw",
+    "Madeleine's gaze extends into the blank ground where her name and record can finally sit.",
+    ["madeleine", "gaze", "identity", "record"],
+    [
+      rect("sash-field", 8, 55, 13, 33, "field", "fill"),
+      rect("nameplate", 51, 20, 42, 9, "accent", "fill"),
+      line("portrait-register", p(42, 8), p(42, 92), "ink"),
+      line("gaze-axis", p(35, 32), p(94, 32), "accent"),
+      line("record-a", p(52, 43), p(91, 43), "muted"),
+      line("record-b", p(52, 54), p(83, 54), "muted"),
+      line("record-c", p(52, 65), p(94, 65), "muted"),
+      line("forearm-datum", p(30, 76), p(94, 76), "ink"),
+      path("headwrap", [p(13, 30), p(17, 8), p(36, 7), p(45, 25), p(40, 49)], "field"),
+    ],
+  ),
+} satisfies Record<CompositionMotif, MotifBlueprint>);
