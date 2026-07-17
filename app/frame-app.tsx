@@ -16,6 +16,7 @@ import { localArtworkUrl, publicAssetUrl } from "./data/artworks";
 import { CompositionsMode } from "./modes/compositions";
 import { GalleryMode } from "./modes/gallery";
 import { SignalField } from "./modes/signal-field";
+import { createPageLoadSeed } from "./shuffle";
 
 type ModeId = "signal" | "gallery" | "compositions";
 type ModeDefinition = {
@@ -23,7 +24,7 @@ type ModeDefinition = {
   number: string;
   name: string;
   description: string;
-  component: ComponentType<{ paused?: boolean }>;
+  component: ComponentType<{ paused?: boolean; shuffleSeed: string }>;
   preview: ComponentType;
 };
 
@@ -266,6 +267,7 @@ function ModeIndex({
 
 export default function FrameApp() {
   const [hydrated, setHydrated] = useState(false);
+  const [shuffleSeed, setShuffleSeed] = useState("");
   const [activeMode, setActiveMode] = useState<ModeId | null>(null);
   const [indexOpen, setIndexOpen] = useState(true);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -282,6 +284,7 @@ export default function FrameApp() {
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
+      setShuffleSeed(createPageLoadSeed());
       try {
         const stored = window.localStorage.getItem(STORAGE_KEY) as ModeId | null;
         if (stored && MODES.some((mode) => mode.id === stored)) {
@@ -378,7 +381,7 @@ export default function FrameApp() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [enterFullscreen, selectMode]);
 
-  if (!hydrated) {
+  if (!hydrated || !shuffleSeed) {
     return (
       <main className="frame-root frame-boot" aria-label="Starting digital frame">
         <span>FRAME / INITIALIZING</span>
@@ -399,7 +402,7 @@ export default function FrameApp() {
         {ActiveComponent ? (
           <div className="mode-stage" inert={indexOpen} aria-hidden={indexOpen}>
             <ModeBoundary key={activeMode}>
-              <ActiveComponent paused={indexOpen} />
+              <ActiveComponent paused={indexOpen} shuffleSeed={shuffleSeed} />
             </ModeBoundary>
           </div>
         ) : (

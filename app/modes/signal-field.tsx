@@ -12,7 +12,13 @@ const REDUCED_MOTION_FRAME_GAP = 1_000;
 const REDUCED_MOTION_SCENE_DURATION = 30_000;
 const MAX_CANVAS_PIXELS = 2_200_000;
 
-export function SignalField({ paused = false }: { paused?: boolean }) {
+export function SignalField({
+  paused = false,
+  shuffleSeed,
+}: {
+  paused?: boolean;
+  shuffleSeed: string;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -29,6 +35,7 @@ export function SignalField({ paused = false }: { paused?: boolean }) {
     let height = 1;
     const startedAt = performance.now();
     const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const signalShuffleSeed = `${shuffleSeed}:signal-field`;
 
     const draw = (now: number) => {
       const elapsed = Math.max(0, now - startedAt);
@@ -39,6 +46,7 @@ export function SignalField({ paused = false }: { paused?: boolean }) {
       renderSignalLibraryFrame(context, width, height, renderTime, {
         reducedMotion,
         sceneDurationMs: reducedMotion ? REDUCED_MOTION_SCENE_DURATION : undefined,
+        shuffleSeed: signalShuffleSeed,
       });
     };
 
@@ -159,7 +167,7 @@ export function SignalField({ paused = false }: { paused?: boolean }) {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       removeMotionListener();
     };
-  }, [paused]);
+  }, [paused, shuffleSeed]);
 
   return (
     <section

@@ -11,11 +11,13 @@ import {
   localArtworkUrl,
   type GalleryArtwork,
 } from "../data/artworks";
+import { shuffledCycle } from "../shuffle";
 
 const CACHE_KEY = "always-on-frame.gallery.v3";
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const CYCLE_TIME = 5 * 60 * 1000;
 const API_BATCH_SIZE = 20;
+const ARTWORK_QIDS = ARTWORK_SEEDS.map(({ qid }) => qid);
 
 type WikiPage = {
   title: string;
@@ -270,13 +272,19 @@ function formatCountdown(milliseconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function GalleryMode({ paused = false }: { paused?: boolean }) {
+export function GalleryMode({
+  paused = false,
+  shuffleSeed,
+}: {
+  paused?: boolean;
+  shuffleSeed: string;
+}) {
   const fallbackCollection = useMemo(
     () => ARTWORK_SEEDS.map(fallbackArtwork),
     [],
   );
   const [artworks, setArtworks] = useState<GalleryArtwork[]>(fallbackCollection);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [deckPosition, setDeckPosition] = useState({ cycle: 0, index: 0 });
   const [nextAt, setNextAt] = useState(() => Date.now() + CYCLE_TIME);
   const [remaining, setRemaining] = useState(CYCLE_TIME);
   const [timerReset, setTimerReset] = useState(0);
@@ -322,9 +330,36 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
     };
   }, []);
 
+  const artworkDeck = useMemo(
+    () => shuffledCycle(
+      ARTWORK_QIDS,
+      `${shuffleSeed}:gallery`,
+      deckPosition.cycle,
+      (qid) => qid,
+    ),
+    [deckPosition.cycle, shuffleSeed],
+  );
+  const orderedArtworks = useMemo(() => {
+    const artworksByQid = new Map(
+      fallbackCollection.map((artwork) => [artwork.qid, artwork]),
+    );
+    for (const artwork of artworks) {
+      if (artworksByQid.has(artwork.qid)) {
+        artworksByQid.set(artwork.qid, artwork);
+      }
+    }
+    return artworkDeck.flatMap((qid) => {
+      const artwork = artworksByQid.get(qid);
+      return artwork ? [artwork] : [];
+    });
+  }, [artworkDeck, artworks, fallbackCollection]);
+
   const advance = useCallback(() => {
-    setCurrentIndex((index) => (index + 1) % Math.max(1, artworks.length));
-  }, [artworks.length]);
+    const collectionSize = Math.max(1, orderedArtworks.length);
+    setDeckPosition((position) => position.index + 1 >= collectionSize
+      ? { cycle: position.cycle + 1, index: 0 }
+      : { ...position, index: position.index + 1 });
+  }, [orderedArtworks.length]);
 
   useEffect(() => {
     if (paused) return;
@@ -357,8 +392,10 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
     return () => window.clearTimeout(timeout);
   }, [nextAt, paused]);
 
-  const activeIndex = artworks.length ? currentIndex % artworks.length : 0;
-  const current = artworks[activeIndex] ?? fallbackCollection[0];
+  const activeIndex = orderedArtworks.length
+    ? deckPosition.index % orderedArtworks.length
+    : 0;
+  const current = orderedArtworks[activeIndex] ?? fallbackCollection[0];
   const isVerticalArtwork = current.height / current.width >= 1.3;
   const fallbackUrl = localArtworkUrl(current.qid);
   const remoteRequestKey = `${current.qid}:${current.imageUrl}`;
@@ -379,9 +416,11 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
 
   useEffect(() => {
     if (paused) return;
-    if (artworks.length < 2) return;
+    if (orderedArtworks.length < 2) return;
     for (const offset of [-1, 1]) {
-      const adjacent = artworks[(activeIndex + offset + artworks.length) % artworks.length];
+      const adjacent = orderedArtworks[
+        (activeIndex + offset + orderedArtworks.length) % orderedArtworks.length
+      ];
       if (!adjacent) continue;
       const preloader = new Image();
       preloader.decoding = "async";
@@ -392,13 +431,21 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
       };
       preloader.src = adjacent.imageUrl;
     }
-  }, [activeIndex, artworks, paused]);
+  }, [activeIndex, orderedArtworks, paused]);
 
   const navigateManually = useCallback((direction: -1 | 1) => {
-    const collectionSize = Math.max(1, artworks.length);
-    setCurrentIndex((index) => (index + direction + collectionSize) % collectionSize);
+    const collectionSize = Math.max(1, orderedArtworks.length);
+    setDeckPosition((position) => {
+      if (direction > 0 && position.index + 1 >= collectionSize) {
+        return { cycle: position.cycle + 1, index: 0 };
+      }
+      return {
+        ...position,
+        index: (position.index + direction + collectionSize) % collectionSize,
+      };
+    });
     setTimerReset((value) => value + 1);
-  }, [artworks.length]);
+  }, [orderedArtworks.length]);
 
   return (
     <section
@@ -495,7 +542,7 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
         <figcaption className="gallery-caption">
           <div className="gallery-caption-rule" aria-hidden="true" />
           <p className="gallery-eyebrow">
-            PLATE {String(activeIndex + 1).padStart(3, "0")} / {String(artworks.length).padStart(3, "0")}
+            PLATE {String(activeIndex + 1).padStart(3, "0")} / {String(orderedArtworks.length).padStart(3, "0")}
           </p>
           <h1 id="gallery-title">{current.title}</h1>
           <div className="gallery-byline">

@@ -60,6 +60,8 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(frame, /selectMode\("compositions"\)/);
   assert.match(frame, /inert=\{indexOpen\}/);
   assert.match(frame, /paused=\{indexOpen\}/);
+  assert.match(frame, /createPageLoadSeed\(\)/);
+  assert.match(frame, /shuffleSeed=\{shuffleSeed\}/);
   assert.match(frame, /PLATE 003 \/ 300/);
   assert.match(signal, /requestAnimationFrame/);
   assert.match(signal, /cancelAnimationFrame/);
@@ -492,6 +494,42 @@ test("keeps Signal Field geometry deterministic across display shapes", async ()
   }
 });
 
+test("shuffles every Signal Field scene once per cycle", async () => {
+  const [{ shuffledCycle }, signalLibrary, signalField] = await Promise.all([
+    import(new URL("../app/shuffle.ts", import.meta.url).href),
+    readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
+  ]);
+  const SIGNAL_SCENE_COUNT = 18;
+  const shuffleSeed = "signal:page-load";
+  const sceneIndices = Array.from({ length: SIGNAL_SCENE_COUNT }, (_, index) => index);
+  const cycles = Array.from({ length: 4 }, (_, cycle) =>
+    shuffledCycle(sceneIndices, shuffleSeed, cycle),
+  );
+
+  for (const [cycle, order] of cycles.entries()) {
+    assert.equal(order.length, SIGNAL_SCENE_COUNT);
+    assert.equal(new Set(order).size, SIGNAL_SCENE_COUNT, `signal cycle ${cycle} must not repeat`);
+    assert.deepEqual(
+      [...order].sort((left, right) => left - right),
+      Array.from({ length: SIGNAL_SCENE_COUNT }, (_, index) => index),
+    );
+    if (cycle > 0) {
+      assert.notDeepEqual(order, cycles[cycle - 1], "successive Signal Field cycles must reshuffle");
+      assert.notEqual(order[0], cycles[cycle - 1].at(-1), "Signal Field must not repeat at a cycle boundary");
+    }
+  }
+
+  assert.match(signalLibrary, /export function resolveSignalSceneIndex\(/);
+  assert.match(signalLibrary, /shuffledCycle\(SIGNAL_SCENE_INDICES, shuffleSeed, cycleIndex\)/);
+  assert.match(
+    signalLibrary,
+    /const logicalIndex = rawIndex \+ offset;[\s\S]*?resolveSignalSceneIndex\(logicalIndex, options\.shuffleSeed\)[\s\S]*?resolveSignalSceneIndex\(logicalIndex \+ 1, options\.shuffleSeed\)/,
+    "current and next Signal scenes must resolve independent logical deck positions",
+  );
+  assert.match(signalField, /shuffleSeed: signalShuffleSeed/);
+});
+
 test("keeps Signal Field on its discrete grid, typography and transition language", async () => {
   const [signalField, signalLibrary, frame, styles] = await Promise.all([
     readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
@@ -916,7 +954,44 @@ test("bundles an exact high-resolution local fallback for every painting", async
   }
 });
 
-test("builds the fixed curated composition deck with bounded geometry and safe crops", async () => {
+test("builds deterministic non-repeating shuffled cycles", async () => {
+  const { shuffleWithSeed, shuffledCycle } = await import(
+    new URL("../app/shuffle.ts", import.meta.url).href
+  );
+  const values = Array.from({ length: 300 }, (_, index) => `painting-${index}`);
+  const original = [...values];
+  const first = shuffleWithSeed(values, "gallery:first");
+  const repeated = shuffleWithSeed(values, "gallery:first");
+  const different = shuffleWithSeed(values, "gallery:second");
+
+  assert.deepEqual(values, original, "shuffling must not mutate the source collection");
+  assert.deepEqual(first, repeated, "the same seed must reproduce the same deck");
+  assert.notDeepEqual(first, different, "different page seeds must produce different decks");
+  assert.equal(first.length, 300);
+  assert.equal(new Set(first).size, 300);
+  assert.deepEqual([...first].sort(), [...values].sort());
+
+  const cycles = Array.from({ length: 4 }, (_, cycle) =>
+    shuffledCycle(values, "gallery:page-load", cycle),
+  );
+  for (const [cycle, deck] of cycles.entries()) {
+    assert.equal(new Set(deck).size, values.length, `cycle ${cycle} must be a full permutation`);
+    assert.deepEqual([...deck].sort(), [...values].sort());
+    if (cycle > 0) {
+      assert.notDeepEqual(deck, cycles[cycle - 1], "successive cycles must reshuffle");
+      assert.notEqual(
+        deck[0],
+        cycles[cycle - 1].at(-1),
+        "a cycle boundary must never repeat the same item immediately",
+      );
+    }
+  }
+
+  assert.deepEqual(shuffleWithSeed([], "empty"), []);
+  assert.deepEqual(shuffledCycle(["only"], "single", 9), ["only"]);
+});
+
+test("shuffles the curated composition deck without breaking authored pairings", async () => {
   const [{ buildCompositionDeck, COMPOSITION_COUNT, COMPOSITION_RECIPES, compositionArtCoverage, compositionCropRetention, resolveCompositionObjectFit }, paintings] = await Promise.all([
     import(new URL("../app/modes/composition-library.ts", import.meta.url).href),
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
@@ -938,15 +1013,22 @@ test("builds the fixed curated composition deck with bounded geometry and safe c
     licenseUrl: "https://commons.wikimedia.org/",
     descriptionUrl: "https://commons.wikimedia.org/",
   }));
-  const expectedPairings = COMPOSITION_RECIPES.map((recipe) => [recipe.id, recipe.artworkQid]);
+  const expectedPairings = COMPOSITION_RECIPES
+    .map((recipe) => [recipe.id, recipe.artworkQid])
+    .sort(([left], [right]) => left.localeCompare(right));
+  const orders = new Set();
   for (const seed of ["first-light", "midday", "after-dark", "another-year"]) {
     const deck = buildCompositionDeck(artworks, seed);
     assert.equal(deck.length, COMPOSITION_COUNT);
     assert.equal(new Set(deck.map((item) => item.artwork.qid)).size, COMPOSITION_COUNT);
+    assert.equal(new Set(deck.map((item) => item.recipe.id)).size, COMPOSITION_COUNT);
+    orders.add(deck.map((item) => item.recipe.id).join("|"));
     assert.deepEqual(
-      deck.map((item) => [item.recipe.id, item.artwork.qid]),
+      deck
+        .map((item) => [item.recipe.id, item.artwork.qid])
+        .sort(([left], [right]) => left.localeCompare(right)),
       expectedPairings,
-      "curated recipe-to-artwork pairings must not change with the daily seed",
+      "curated recipe-to-artwork pairings must survive every shuffle",
     );
     for (const item of deck) {
       assert.equal(item.artwork.qid, item.recipe.artworkQid);
@@ -968,6 +1050,22 @@ test("builds the fixed curated composition deck with bounded geometry and safe c
         }
       }
     }
+  }
+  assert.ok(orders.size > 1, "different page seeds must vary the composition order");
+  assert.deepEqual(
+    buildCompositionDeck(artworks, "repeatable", 2).map((item) => item.recipe.id),
+    buildCompositionDeck(artworks, "repeatable", 2).map((item) => item.recipe.id),
+    "a composition cycle must be deterministic for its page seed",
+  );
+  const compositionCycles = [0, 1, 2].map((cycle) =>
+    buildCompositionDeck(artworks, "composition-page", cycle),
+  );
+  for (let cycle = 1; cycle < compositionCycles.length; cycle += 1) {
+    assert.notEqual(
+      compositionCycles[cycle][0].recipe.id,
+      compositionCycles[cycle - 1].at(-1).recipe.id,
+      "composition cycle boundaries must not repeat a poster",
+    );
   }
 
   const geometryValues = (recipe) =>

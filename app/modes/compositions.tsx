@@ -135,12 +135,22 @@ function CompositionMark({ recipe }: { recipe: CompositionRecipe }) {
   );
 }
 
-export function CompositionsMode({ paused = false }: { paused?: boolean }) {
+export function CompositionsMode({
+  paused = false,
+  shuffleSeed,
+}: {
+  paused?: boolean;
+  shuffleSeed: string;
+}) {
   const sectionRef = useRef<HTMLElement>(null);
   const artRef = useRef<HTMLDivElement>(null);
+  const [cycle, setCycle] = useState(0);
+  const compositionSeed = shuffleSeed
+    ? `${ARTWORK_DATASET_VERSION}:composition-atlas:${shuffleSeed}`
+    : "";
   const deck = useMemo(
-    () => buildCompositionDeck(ARTWORK_SEEDS, ARTWORK_DATASET_VERSION),
-    [],
+    () => buildCompositionDeck(ARTWORK_SEEDS, compositionSeed, cycle),
+    [compositionSeed, cycle],
   );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timerReset, setTimerReset] = useState(0);
@@ -191,8 +201,14 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
   }, [currentKey, paused]);
 
   const advance = useCallback(() => {
-    setCurrentIndex((index) => (index + 1) % Math.max(1, deck.length));
-  }, [deck.length]);
+    if (!deck.length) return;
+    if (activeIndex === deck.length - 1) {
+      setCycle((value) => value + 1);
+      setCurrentIndex(0);
+      return;
+    }
+    setCurrentIndex((index) => index + 1);
+  }, [activeIndex, deck.length]);
 
   useEffect(() => {
     if (paused) return;
@@ -269,9 +285,19 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
   }, [current?.artwork.qid, currentKey, failedAt, paused]);
 
   const navigateManually = useCallback((direction: -1 | 1) => {
-    setCurrentIndex((index) => (index + direction + Math.max(1, deck.length)) % Math.max(1, deck.length));
+    if (!deck.length) return;
+    if (direction === 1 && activeIndex === deck.length - 1) {
+      setCycle((value) => value + 1);
+      setCurrentIndex(0);
+    } else {
+      setCurrentIndex((index) =>
+        direction === -1 && index === 0
+          ? deck.length - 1
+          : index + direction,
+      );
+    }
     setTimerReset((value) => value + 1);
-  }, [deck.length]);
+  }, [activeIndex, deck.length]);
 
   if (!current) {
     return <section className="composition-mode" aria-label="Composition Atlas is unavailable" />;

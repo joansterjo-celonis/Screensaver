@@ -1,4 +1,5 @@
 import type { ArtworkSeed } from "../data/artworks";
+import { shuffledCycle } from "../shuffle.ts";
 
 export type ArtworkShape = "T" | "P" | "S" | "L" | "W";
 
@@ -717,26 +718,29 @@ function referencePortalAspect(geometry: CompositionGeometry) {
 export function buildCompositionDeck(
   artworks: readonly ArtworkSeed[],
   seed = "",
+  cycle = 0,
 ): readonly CompositionDeckItem[] {
   if (!artworks.length) return [];
-  void seed;
 
   const artworksByQid = new Map(artworks.map((artwork) => [artwork.qid, artwork]));
-  return Object.freeze(
-    COMPOSITION_RECIPES.map((recipe) => {
-      const artwork = artworksByQid.get(recipe.artworkQid);
-      if (!artwork) {
-        throw new Error(`Composition ${recipe.id} requires curated artwork ${recipe.artworkQid}.`);
-      }
-      const portalAspect = referencePortalAspect(recipe.landscape);
-      return Object.freeze({
-        recipe,
-        artwork,
-        cropRetention: compositionCropRetention(artwork, portalAspect),
-        objectFit: resolveCompositionObjectFit(recipe, artwork, portalAspect),
-        focusX: recipe.focusX,
-        focusY: recipe.focusY,
-      });
-    }),
-  );
+  const curatedDeck = COMPOSITION_RECIPES.map((recipe) => {
+    const artwork = artworksByQid.get(recipe.artworkQid);
+    if (!artwork) {
+      throw new Error(`Composition ${recipe.id} requires curated artwork ${recipe.artworkQid}.`);
+    }
+    const portalAspect = referencePortalAspect(recipe.landscape);
+    return Object.freeze({
+      recipe,
+      artwork,
+      cropRetention: compositionCropRetention(artwork, portalAspect),
+      objectFit: resolveCompositionObjectFit(recipe, artwork, portalAspect),
+      focusX: recipe.focusX,
+      focusY: recipe.focusY,
+    });
+  });
+
+  const orderedDeck = seed
+    ? shuffledCycle(curatedDeck, seed, cycle, (item) => item.recipe.id)
+    : curatedDeck;
+  return Object.freeze(orderedDeck);
 }

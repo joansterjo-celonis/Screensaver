@@ -9,6 +9,7 @@ import {
   signalWeight,
   type SignalLayout,
 } from "./signal-grid";
+import { shuffledCycle } from "../shuffle";
 
 const TAU = Math.PI * 2;
 
@@ -37,6 +38,7 @@ export interface SignalRenderOptions {
   transitionMs?: number;
   reducedMotion?: boolean;
   sceneOffset?: number;
+  shuffleSeed?: string;
 }
 
 export interface SignalFrameInfo {
@@ -1420,6 +1422,44 @@ export const SIGNAL_SCENES: readonly SignalSceneDescriptor[] = Object.freeze(
 
 export const SIGNAL_SCENE_COUNT = SIGNAL_SCENES.length;
 
+const SIGNAL_SCENE_INDICES = Object.freeze(
+  Array.from({ length: SIGNAL_SCENE_COUNT }, (_, index) => index),
+);
+const SIGNAL_CYCLE_CACHE_LIMIT = 64;
+const signalCycleCache = new Map<string, readonly number[]>();
+
+function resolveSignalCycle(shuffleSeed: string, cycleIndex: number) {
+  const cacheKey = `${shuffleSeed}\u0000${cycleIndex}`;
+  const cached = signalCycleCache.get(cacheKey);
+  if (cached) return cached;
+
+  const cycle = Object.freeze(
+    shuffledCycle(SIGNAL_SCENE_INDICES, shuffleSeed, cycleIndex),
+  );
+  if (signalCycleCache.size >= SIGNAL_CYCLE_CACHE_LIMIT) {
+    const oldestKey = signalCycleCache.keys().next().value;
+    if (oldestKey !== undefined) signalCycleCache.delete(oldestKey);
+  }
+  signalCycleCache.set(cacheKey, cycle);
+  return cycle;
+}
+
+export function resolveSignalSceneIndex(
+  logicalIndex: number,
+  shuffleSeed?: string,
+) {
+  const safeLogicalIndex = Number.isFinite(logicalIndex)
+    ? Math.max(0, Math.floor(logicalIndex))
+    : 0;
+  if (!shuffleSeed) {
+    return positiveModulo(safeLogicalIndex, SIGNAL_SCENE_COUNT);
+  }
+
+  const cycleIndex = Math.floor(safeLogicalIndex / SIGNAL_SCENE_COUNT);
+  const cyclePosition = positiveModulo(safeLogicalIndex, SIGNAL_SCENE_COUNT);
+  return resolveSignalCycle(shuffleSeed, cycleIndex)[cyclePosition] ?? 0;
+}
+
 interface TransitionBuffer {
   canvas: HTMLCanvasElement;
   flipPlan: ReturnType<typeof buildCellFlipPlan>;
@@ -1530,8 +1570,9 @@ export function getSignalFrameInfo(
   const offset = positiveModulo(Math.floor(options.sceneOffset ?? 0), SIGNAL_SCENE_COUNT);
   const safeTime = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : 0;
   const rawIndex = Math.floor(safeTime / duration);
-  const sceneIndex = positiveModulo(rawIndex + offset, SIGNAL_SCENE_COUNT);
-  const nextSceneIndex = (sceneIndex + 1) % SIGNAL_SCENE_COUNT;
+  const logicalIndex = rawIndex + offset;
+  const sceneIndex = resolveSignalSceneIndex(logicalIndex, options.shuffleSeed);
+  const nextSceneIndex = resolveSignalSceneIndex(logicalIndex + 1, options.shuffleSeed);
   const localTime = positiveModulo(safeTime, duration);
   const transitionStart = duration - transition;
   const transitionProgress = options.reducedMotion || transition === 0
