@@ -740,6 +740,21 @@ a:focus-visible {
   animation: pulse 2.4s ease-in-out infinite;
 }
 
+.gallery-header-status[data-copy-source="local"] .gallery-pulse {
+  background: rgba(240, 231, 217, 0.72);
+  animation: none;
+}
+
+.gallery-header-status[data-copy-source="loading"] .gallery-pulse {
+  background: transparent;
+  border: 1px solid rgba(240, 231, 217, 0.46);
+}
+
+.gallery-header-status[data-copy-source="unavailable"] .gallery-pulse {
+  background: #d06b62;
+  animation: none;
+}
+
 .gallery-caption {
   position: relative;
   min-height: 0;

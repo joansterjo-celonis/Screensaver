@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { access, readFile, readdir } from "node:fs/promises";
 import test from "node:test";
+import { createContext, runInContext } from "node:vm";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -173,11 +175,7 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.equal(frame.match(/localArtworkUrl\("Q474338"\)/g)?.length, 2);
   assert.match(frame, /serviceWorker[\s\S]*?register\(publicAssetUrl\("sw\.js"\), \{ scope: import\.meta\.env\.BASE_URL \}\)/);
   assert.match(gallery, /const sourceFiles = resolvedPages\.map\(\(\{ seed \}\) => seed\.fallbackFile\)/);
-  assert.match(gallery, /cached\.artworks\.map\(\(artwork\) => \(\{[\s\S]*?imageUrl: localArtworkUrl\(artwork\.qid\)/);
   assert.match(gallery, /const fallbackUrl = localArtworkUrl\(current\.qid\)/);
-  assert.match(gallery, /HYBRID ARCHIVE/);
-  assert.match(serviceWorker, /always-on-frame-artworks-wikimedia-2026-07-17-4k1/);
-  assert.match(serviceWorker, /const MAX_ARTWORKS = 48/);
   assert.match(serviceWorker, /isLocalArtwork \? ARTWORK_CACHE : IMAGE_CACHE/);
   assert.match(gallery, /gallery-artwork-matte/);
   assert.match(gallery, /figcaption className="gallery-caption"/);
@@ -266,10 +264,244 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   }
 });
 
+test("warms the complete local archive and labels the copy that actually rendered", async () => {
+  const [frame, gallery, serviceWorker, manifestSource, artworkSourceModule] = await Promise.all([
+    readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/gallery.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/artworks/manifest.json", import.meta.url), "utf8"),
+    import(new URL("../app/data/artwork-copy-source.ts", import.meta.url).href),
+  ]);
+  const manifest = JSON.parse(manifestSource);
+  const versionMatch = serviceWorker.match(
+    /const ARTWORK_ARCHIVE_VERSION = "([^"]+)";/,
+  );
+  const countMatch = serviceWorker.match(/const ARTWORK_ARCHIVE_COUNT = (\d+);/);
+  const batchSizeMatch = serviceWorker.match(/const ARTWORK_BATCH_SIZE = (\d+);/);
+
+  assert.ok(versionMatch, "service worker must pin an artwork archive version");
+  assert.ok(countMatch, "service worker must pin the complete artwork count");
+  assert.ok(batchSizeMatch, "service worker must use an explicit bounded batch size");
+  assert.equal(versionMatch[1], manifest.archiveVersion);
+  assert.equal(Number(countMatch[1]), 300);
+  assert.equal(Number(countMatch[1]), manifest.count);
+  assert.equal(manifest.files.length, 300);
+  assert.ok(
+    Number(batchSizeMatch[1]) >= 1 && Number(batchSizeMatch[1]) <= 8,
+    `archive warm batch must stay bounded, received ${batchSizeMatch[1]}`,
+  );
+
+  assert.match(serviceWorker, /const MAX_IMAGES = 24;/);
+  assert.match(serviceWorker, /manifest\.archiveVersion !== ARTWORK_ARCHIVE_VERSION/);
+  assert.match(serviceWorker, /manifest\.count !== ARTWORK_ARCHIVE_COUNT/);
+  assert.match(serviceWorker, /manifest\.files\.length !== ARTWORK_ARCHIVE_COUNT/);
+  assert.ok(
+    serviceWorker.includes('!/^Q\\d+\\.webp$/.test(file)'),
+    "service worker must reject malformed artwork filenames",
+  );
+  assert.match(serviceWorker, /new Set\(files\)\.size !== ARTWORK_ARCHIVE_COUNT/);
+  assert.match(serviceWorker, /files\.slice\(index, index \+ ARTWORK_BATCH_SIZE\)/);
+  assert.match(serviceWorker, /index \+= ARTWORK_BATCH_SIZE/);
+  assert.match(
+    serviceWorker,
+    /new URL\(`artworks\/\$\{file\}`, self\.registration\.scope\)/,
+  );
+  assert.match(
+    serviceWorker,
+    /artworkUrl\.searchParams\.set\("v", ARTWORK_ARCHIVE_VERSION\)/,
+  );
+  assert.match(
+    serviceWorker,
+    /self\.addEventListener\("message", \(event\) => \{[\s\S]*?event\.data\?\.type !== FULL_ARCHIVE_CACHE_MESSAGE[\s\S]*?event\.waitUntil\(requestFullArtworkArchiveWarm\(\)\)/,
+  );
+  assert.match(serviceWorker, /if \(!isLocalArtwork\) await trimCache\(cache, MAX_IMAGES\);/);
+  assert.doesNotMatch(serviceWorker, /MAX_ARTWORKS/);
+  assert.doesNotMatch(
+    serviceWorker,
+    /trimCache\(cache,\s*(?:ARTWORK_ARCHIVE_COUNT|isLocalArtwork)/,
+  );
+
+  assert.match(
+    frame,
+    /navigator\.serviceWorker\.ready[\s\S]*?registration\.active\?\.postMessage\(\{ type: FULL_ARCHIVE_CACHE_MESSAGE \}\)/,
+  );
+  assert.match(frame, /typeof navigator\.storage\?\.persist === "function"/);
+  assert.match(frame, /navigator\.storage\.persist\(\)/);
+  assert.match(
+    frame,
+    /navigator\.serviceWorker\.addEventListener\("controllerchange", handleControllerChange\)/,
+  );
+  assert.match(
+    frame,
+    /navigator\.serviceWorker\.removeEventListener\("controllerchange", handleControllerChange\)/,
+  );
+
+  assert.match(gallery, /if \(cached\) \{[\s\S]*?setArtworks\(cached\.artworks\)/);
+  assert.doesNotMatch(gallery, /cached\.artworks\.map/);
+  assert.match(gallery, /visibleCopy\.key === visibleCopyKey/);
+  assert.match(
+    gallery,
+    /key=\{visibleCopyKey\}[\s\S]*?onLoad=\{\(event\) => \{[\s\S]*?event\.currentTarget\.currentSrc[\s\S]*?setVisibleCopy\(\{\s*key: visibleCopyKey/,
+  );
+  const copyLabels = (gallery.match(/"[^"\n]*COPY[^"\n]*"/g) ?? [])
+    .map((label) => JSON.parse(label))
+    .sort();
+  assert.deepEqual(copyLabels, [
+    "COMMONS COPY",
+    "COPY LOADING",
+    "COPY UNAVAILABLE",
+    "LOCAL COPY",
+  ]);
+  assert.doesNotMatch(gallery, /COMMONS LIVE|LOCAL ARCHIVE|HYBRID ARCHIVE/);
+
+  const { classifyArtworkCopySource } = artworkSourceModule;
+  const pageUrl = "https://joansterjo-celonis.github.io/Screensaver/";
+  assert.equal(
+    classifyArtworkCopySource(
+      `artworks/Q12418.webp?v=${manifest.archiveVersion}`,
+      pageUrl,
+    ),
+    "local",
+  );
+  assert.equal(
+    classifyArtworkCopySource(
+      `/Screensaver/artworks/Q12418.webp?v=${manifest.archiveVersion}`,
+      pageUrl,
+    ),
+    "local",
+  );
+  assert.equal(
+    classifyArtworkCopySource(
+      `https://joansterjo-celonis.github.io/Screensaver/artworks/Q12418.webp?v=${manifest.archiveVersion}`,
+      pageUrl,
+    ),
+    "local",
+  );
+  assert.equal(
+    classifyArtworkCopySource(
+      "https://commons.wikimedia.org/wiki/Special:Redirect/file/Mona_Lisa.jpg?width=2800",
+      pageUrl,
+    ),
+    "commons",
+  );
+  assert.equal(
+    classifyArtworkCopySource(
+      "https://upload.wikimedia.org/wikipedia/commons/6/6a/Mona_Lisa.jpg",
+      pageUrl,
+    ),
+    "commons",
+  );
+  assert.equal(
+    classifyArtworkCopySource("https://example.com/Mona_Lisa.webp", pageUrl),
+    null,
+  );
+});
+
+test("resumes the full service-worker archive after a transient artwork failure", async () => {
+  const [serviceWorker, manifestSource] = await Promise.all([
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/artworks/manifest.json", import.meta.url), "utf8"),
+  ]);
+  const manifest = JSON.parse(manifestSource);
+  const cacheStores = new Map();
+  const networkRequests = [];
+  const failingFile = manifest.files[Math.floor(manifest.files.length / 2)].file;
+  let failOnce = true;
+
+  const requestUrl = (request) =>
+    typeof request === "string" ? request : request.url;
+  const caches = {
+    async open(name) {
+      if (!cacheStores.has(name)) {
+        const entries = new Map();
+        cacheStores.set(name, {
+          entries,
+          async match(request) {
+            return entries.get(requestUrl(request))?.clone();
+          },
+          async put(request, response) {
+            entries.set(requestUrl(request), response.clone());
+          },
+          async keys() {
+            return [...entries.keys()].map((url) => new Request(url));
+          },
+          async delete(request) {
+            return entries.delete(requestUrl(request));
+          },
+        });
+      }
+      return cacheStores.get(name);
+    },
+    async keys() {
+      return [...cacheStores.keys()];
+    },
+    async delete(name) {
+      return cacheStores.delete(name);
+    },
+  };
+  const listeners = new Map();
+  const scope = "https://example.test/Screensaver/";
+  const context = createContext({
+    caches,
+    fetch: async (request) => {
+      const url = requestUrl(request);
+      networkRequests.push(url);
+      if (url.endsWith("/artworks/manifest.json")) {
+        return new Response(manifestSource, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (failOnce && url.includes(`/${failingFile}?`)) {
+        return new Response("temporary failure", { status: 503 });
+      }
+      return new Response("verified artwork bytes", { status: 200 });
+    },
+    Request,
+    Response,
+    URL,
+    self: {
+      registration: { scope },
+      location: { origin: new URL(scope).origin },
+      clients: { claim: async () => undefined },
+      skipWaiting() {},
+      addEventListener(type, listener) {
+        listeners.set(type, listener);
+      },
+    },
+  });
+
+  runInContext(serviceWorker, context);
+  await runInContext("requestFullArtworkArchiveWarm()", context);
+
+  const artworkCacheName = `always-on-frame-artworks-${manifest.archiveVersion}`;
+  const artworkCache = cacheStores.get(artworkCacheName);
+  assert.ok(artworkCache, "the dedicated local artwork cache must be created");
+  assert.equal(artworkCache.entries.size, 299, "one failed artwork must not discard 299 successes");
+
+  failOnce = false;
+  networkRequests.length = 0;
+  await runInContext("requestFullArtworkArchiveWarm()", context);
+
+  assert.equal(artworkCache.entries.size, 300, "a later warm must fill the single remaining gap");
+  assert.deepEqual(
+    networkRequests.filter((url) => /\/artworks\/Q\d+\.webp\?/.test(url)),
+    [`${scope}artworks/${failingFile}?v=${manifest.archiveVersion}`],
+    "a resumed warm must download only the missing artwork",
+  );
+  for (const entry of manifest.files) {
+    assert.ok(
+      artworkCache.entries.has(`${scope}artworks/${entry.file}?v=${manifest.archiveVersion}`),
+      `${entry.qid} must be present under the exact app request URL`,
+    );
+  }
+});
+
 test("bundles an exact high-resolution local fallback for every painting", async () => {
-  const [paintings, manifestSource, publicEntries, builtEntries] = await Promise.all([
+  const [paintings, manifestSource, builtManifestSource, publicEntries, builtEntries] = await Promise.all([
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
     readFile(new URL("../public/artworks/manifest.json", import.meta.url), "utf8"),
+    readFile(new URL("../dist/client/artworks/manifest.json", import.meta.url), "utf8"),
     readdir(new URL("../public/artworks/", import.meta.url)),
     readdir(new URL("../dist/client/artworks/", import.meta.url)),
   ]);
@@ -277,6 +509,7 @@ test("bundles an exact high-resolution local fallback for every painting", async
     JSON.parse(line.trim().replace(/,$/, "")),
   );
   const manifest = JSON.parse(manifestSource);
+  const builtManifest = JSON.parse(builtManifestSource);
   const expectedFiles = rows.map((row) => `${row[0]}.webp`).sort();
   const publicFiles = publicEntries.filter((name) => /^Q\d+\.webp$/.test(name)).sort();
   const builtFiles = builtEntries.filter((name) => /^Q\d+\.webp$/.test(name)).sort();
@@ -286,6 +519,7 @@ test("bundles an exact high-resolution local fallback for every painting", async
   assert.equal(manifest.resolution.shortEdgeTarget, 2160);
   assert.equal(manifest.resolution.standardLongEdgeCap, 4096);
   assert.equal(manifest.resolution.panoramicLongEdgeCap, 8192);
+  assert.deepEqual(builtManifest, manifest, "built artwork manifest must match its verified source");
   assert.deepEqual(publicFiles, expectedFiles);
   assert.deepEqual(builtFiles, expectedFiles);
   assert.equal(manifest.files.length, 300);
@@ -297,8 +531,26 @@ test("bundles an exact high-resolution local fallback for every painting", async
   );
   for (const entry of manifest.files) {
     assert.ok(entry.width > 0 && entry.height > 0, `${entry.qid} must have valid dimensions`);
+    assert.ok(
+      entry.width * entry.height >= 1_000_000,
+      `${entry.qid} must retain at least one megapixel locally`,
+    );
     assert.ok(entry.bytes > 0, `${entry.qid} must not be empty`);
     assert.match(entry.sha256, /^[a-f0-9]{64}$/);
+
+    const builtBytes = await readFile(
+      new URL(`../dist/client/artworks/${entry.file}`, import.meta.url),
+    );
+    assert.equal(
+      builtBytes.byteLength,
+      entry.bytes,
+      `${entry.qid} built byte count must match the verified manifest`,
+    );
+    assert.equal(
+      createHash("sha256").update(builtBytes).digest("hex"),
+      entry.sha256,
+      `${entry.qid} built bytes must match the verified local master`,
+    );
   }
 });
 

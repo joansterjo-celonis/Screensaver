@@ -38,6 +38,7 @@ type WakeLockNavigator = Navigator & {
 };
 
 const STORAGE_KEY = "always-on-frame.mode.v1";
+const FULL_ARCHIVE_CACHE_MESSAGE = "CACHE_FULL_ARTWORK_ARCHIVE";
 
 const MODES: ModeDefinition[] = [
   {
@@ -302,9 +303,31 @@ export default function FrameApp() {
     ) {
       return;
     }
+
+    let disposed = false;
+    const requestFullArchiveWarm = () => {
+      void navigator.serviceWorker.ready
+        .then((registration) => {
+          if (disposed) return;
+          registration.active?.postMessage({ type: FULL_ARCHIVE_CACHE_MESSAGE });
+        })
+        .catch(() => undefined);
+    };
+    const handleControllerChange = () => requestFullArchiveWarm();
+
+    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+    if (typeof navigator.storage?.persist === "function") {
+      void navigator.storage.persist().catch(() => undefined);
+    }
     void navigator.serviceWorker
       .register(publicAssetUrl("sw.js"), { scope: import.meta.env.BASE_URL })
+      .then(requestFullArchiveWarm)
       .catch(() => undefined);
+
+    return () => {
+      disposed = true;
+      navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+    };
   }, []);
 
   const revealControls = useCallback(() => {

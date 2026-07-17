@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- Wikimedia Commons images are dynamic cross-origin assets. */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { classifyArtworkCopySource } from "../data/artwork-copy-source";
 import {
   ARTWORK_DATASET_VERSION,
   ARTWORK_SEEDS,
@@ -53,6 +54,13 @@ type CachedGallery = {
   datasetVersion: string;
   savedAt: number;
   artworks: GalleryArtwork[];
+};
+
+type VisibleCopySource = "loading" | "commons" | "local" | "unavailable";
+
+type VisibleCopyState = {
+  key: string;
+  source: VisibleCopySource;
 };
 
 function inBatches<T>(items: T[], size = API_BATCH_SIZE) {
@@ -272,12 +280,13 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
   const [nextAt, setNextAt] = useState(() => Date.now() + CYCLE_TIME);
   const [remaining, setRemaining] = useState(CYCLE_TIME);
   const [timerReset, setTimerReset] = useState(0);
-  const [sourceState, setSourceState] = useState<"seed" | "cache" | "hybrid" | "live">("seed");
-  const [imageRecovery, setImageRecovery] = useState<{
-    articleTitle: string;
-    primaryUrl: string;
-    fallbackUrl: string;
-  } | null>(null);
+  const [failedRemoteRequests, setFailedRemoteRequests] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [visibleCopy, setVisibleCopy] = useState<VisibleCopyState>({
+    key: "",
+    source: "loading",
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -286,13 +295,7 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
     if (cached) {
       cacheHydration = window.setTimeout(() => {
         if (controller.signal.aborted) return;
-        setArtworks(
-          cached.artworks.map((artwork) => ({
-            ...artwork,
-            imageUrl: localArtworkUrl(artwork.qid),
-          })),
-        );
-        setSourceState("cache");
+        setArtworks(cached.artworks);
       }, 0);
     }
     const cacheFresh = cached && Date.now() - cached.savedAt < CACHE_TTL;
@@ -306,17 +309,7 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
     fetchGallery(controller.signal)
       .then((collection) => {
         if (!collection.length) return;
-        const remoteCount = collection.filter((artwork) =>
-          artwork.imageUrl.startsWith("https://"),
-        ).length;
         setArtworks(collection);
-        setSourceState(
-          remoteCount === collection.length
-            ? "live"
-            : remoteCount > 0
-              ? "hybrid"
-              : "seed",
-        );
         writeCache(collection);
       })
       .catch(() => {
@@ -368,11 +361,21 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
   const current = artworks[activeIndex] ?? fallbackCollection[0];
   const isVerticalArtwork = current.height / current.width >= 1.3;
   const fallbackUrl = localArtworkUrl(current.qid);
-  const imageSource =
-    imageRecovery?.articleTitle === current.articleTitle &&
-    imageRecovery.primaryUrl === current.imageUrl
-      ? imageRecovery.fallbackUrl
-      : current.imageUrl;
+  const remoteRequestKey = `${current.qid}:${current.imageUrl}`;
+  const imageSource = failedRemoteRequests.has(remoteRequestKey)
+    ? fallbackUrl
+    : current.imageUrl;
+  const visibleCopyKey = `${current.qid}:${imageSource}`;
+  const visibleCopySource = visibleCopy.key === visibleCopyKey
+    ? visibleCopy.source
+    : "loading";
+  const visibleCopyLabel = visibleCopySource === "commons"
+    ? "COMMONS COPY"
+    : visibleCopySource === "local"
+      ? "LOCAL COPY"
+      : visibleCopySource === "unavailable"
+        ? "COPY UNAVAILABLE"
+        : "COPY LOADING";
 
   useEffect(() => {
     if (paused) return;
@@ -429,14 +432,13 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
           <span className="gallery-header-index">/ 02</span>
         </div>
         <div className="gallery-header-actions">
-          <div className="gallery-header-status">
-            <span>
-              {sourceState === "live"
-                ? "COMMONS LIVE"
-                : sourceState === "hybrid"
-                  ? "HYBRID ARCHIVE"
-                  : "LOCAL ARCHIVE"}
-            </span>
+          <div
+            className="gallery-header-status"
+            aria-live="polite"
+            aria-atomic="true"
+            data-copy-source={visibleCopySource}
+          >
+            <span>{visibleCopyLabel}</span>
             <span className="gallery-pulse" aria-hidden="true" />
           </div>
         </div>
@@ -454,19 +456,37 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
           <div className="gallery-shade" aria-hidden="true" />
           <div className="gallery-artwork-matte">
             <img
-              key={`${current.articleTitle}-${imageSource}`}
+              key={visibleCopyKey}
               className="gallery-artwork"
               src={imageSource}
               alt={`${current.title} by ${current.artist}, ${current.year}`}
               decoding="async"
               fetchPriority="high"
-              onError={() => {
-                if (imageSource === fallbackUrl) return;
-                setImageRecovery({
-                  articleTitle: current.articleTitle,
-                  primaryUrl: current.imageUrl,
-                  fallbackUrl,
+              onLoad={(event) => {
+                const renderedSource = classifyArtworkCopySource(
+                  event.currentTarget.currentSrc,
+                  window.location.href,
+                );
+                setVisibleCopy({
+                  key: visibleCopyKey,
+                  source: renderedSource ?? "unavailable",
                 });
+              }}
+              onError={(event) => {
+                const failedSource = classifyArtworkCopySource(
+                  event.currentTarget.currentSrc || imageSource,
+                  window.location.href,
+                );
+                if (failedSource !== "local") {
+                  setFailedRemoteRequests((failed) => {
+                    if (failed.has(remoteRequestKey)) return failed;
+                    const next = new Set(failed);
+                    next.add(remoteRequestKey);
+                    return next;
+                  });
+                  return;
+                }
+                setVisibleCopy({ key: visibleCopyKey, source: "unavailable" });
               }}
             />
           </div>
