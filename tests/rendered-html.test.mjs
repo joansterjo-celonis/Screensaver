@@ -38,26 +38,23 @@ test("server-renders the always-on frame shell", async () => {
 });
 
 test("keeps the product modes explicit and the starter removed", async () => {
-  const [page, layout, frame, signal, gallery, compositions, compositionLibrary, packageJson] = await Promise.all([
+  const [page, layout, frame, signal, gallery, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/gallery.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/modes/compositions.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/modes/composition-library.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /<FrameApp \/>/);
   assert.match(layout, /title: "Always-On Frame"/);
   assert.match(layout, /300 verified public-domain paintings/);
-  assert.match(layout, /32 smart editorial compositions/);
   assert.match(frame, /Signal Field/);
   assert.match(frame, /Swikipedia/);
-  assert.match(frame, /Composition Atlas/);
-  assert.match(frame, /1–3 SELECT/);
-  assert.match(frame, /selectMode\("compositions"\)/);
+  assert.match(frame, /1–2 SELECT/);
+  assert.doesNotMatch(layout, /editorial compositions|Composition Atlas/i);
+  assert.doesNotMatch(frame, /Composition Atlas|selectMode\("compositions"\)/);
   assert.match(frame, /inert=\{indexOpen\}/);
   assert.match(frame, /paused=\{indexOpen\}/);
   assert.match(frame, /createPageLoadSeed\(\)/);
@@ -71,48 +68,23 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.equal(JSON.parse(packageJson).dependencies.geist, "^1.7.2");
   assert.match(gallery, /5 \* 60 \* 1000/);
   assert.match(gallery, /clearTimeout/);
-  assert.match(compositions, /buildCompositionDeck/);
-  assert.match(compositions, /navigateManually/);
-  assert.match(compositions, /event\.clientX/);
-  assert.match(compositions, /ArrowLeft/);
-  assert.match(compositions, /ArrowRight/);
-  assert.match(compositions, /clearTimeout/);
-  assert.match(compositions, /new Image\(\)/);
-  assert.match(compositions, /ResizeObserver/);
-  assert.match(compositions, /useLayoutEffect/);
-  assert.match(
-    compositions,
-    /useLayoutEffect\(\(\) => \{[\s\S]*?const observer = [\s\S]*?measure\(\);[\s\S]*?observer\?\.disconnect\(\);/,
-    "the active display profile must be measured synchronously before first paint",
-  );
-  assert.match(compositions, /getBoundingClientRect/);
-  assert.match(compositions, /measuredPortalAspect/);
-  assert.match(compositions, /estimatedPortalAspect/);
-  assert.match(compositions, /remoteReady/);
-  assert.match(compositions, /30_000/);
-  assert.match(compositions, /composition-art-backdrop/);
-  assert.match(compositionLibrary, /COMPOSITION_CYCLE_TIME = 90_000/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton|drizzle/);
 
   await assert.rejects(
     access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)),
   );
+  await assert.rejects(
+    access(new URL("../app/modes/compositions.tsx", import.meta.url)),
+  );
 });
 
-test("ships the expanded artwork, signal and composition libraries", async () => {
-  const [paintings, artworks, frame, signal, gallery, compositions, compositionLibrary, compositionModule, motifLibrary, motifModule, paletteModule, compositionLayoutModule, styles, serviceWorker] = await Promise.all([
+test("ships the expanded artwork and signal libraries", async () => {
+  const [paintings, artworks, frame, signal, gallery, styles, serviceWorker] = await Promise.all([
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/data/artworks.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/gallery.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/modes/compositions.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/modes/composition-library.ts", import.meta.url), "utf8"),
-    import(new URL("../app/modes/composition-library.ts", import.meta.url).href),
-    readFile(new URL("../app/modes/composition-motifs.ts", import.meta.url), "utf8"),
-    import(new URL("../app/modes/composition-motifs.ts", import.meta.url).href),
-    import(new URL("../app/modes/composition-palettes.ts", import.meta.url).href),
-    import(new URL("../app/modes/composition-layout.ts", import.meta.url).href),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
   ]);
@@ -122,17 +94,6 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
     JSON.parse(line.trim().replace(/,$/, "")),
   );
   const signalRows = signal.match(/^\s*\{ id: "[^"]+".+draw: [a-zA-Z]+ \},?$/gm) ?? [];
-  const { COMPOSITION_RECIPES } = compositionModule;
-  const { MOTIF_BLUEPRINTS, fitMotifFrame } = motifModule;
-  const { COMPOSITION_PALETTES, getCompositionPalette } = paletteModule;
-  const {
-    compositionRectCoverage,
-    compositionRectDistance,
-    resolveCompositionAtlasBoard,
-    resolveCompositionGeometry,
-    resolveCompositionMotifAttachment,
-    resolveCompositionViewportProfile,
-  } = compositionLayoutModule;
 
   assert.equal(paintingRows.length, 300, `expected exactly 300 paintings, found ${paintingRows.length}`);
   assert.equal(new Set(paintingRows.map((row) => row[0])).size, 300, "painting QIDs must be unique");
@@ -143,283 +104,17 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
     assert.ok(Math.min(row[6], row[7]) >= 750, `${row[0]} must have a 750px short edge`);
   }
   assert.ok(signalRows.length >= 18, `expected at least 18 signal scenes, found ${signalRows.length}`);
-  assert.equal(COMPOSITION_RECIPES.length, 32, `expected exactly 32 composition recipes, found ${COMPOSITION_RECIPES.length}`);
-  for (const [property, label] of [
-    ["id", "IDs"],
-    ["name", "names"],
-    ["artworkQid", "artwork QIDs"],
-    ["motif", "semantic motifs"],
-  ]) {
-    assert.equal(
-      new Set(COMPOSITION_RECIPES.map((recipe) => recipe[property])).size,
-      32,
-      `composition ${label} must be unique`,
-    );
-  }
-  const paintingQids = new Set(paintingRows.map((row) => row[0]));
-  for (const recipe of COMPOSITION_RECIPES) {
-    assert.ok(paintingQids.has(recipe.artworkQid), `${recipe.id} must reference a bundled artwork`);
-  }
-  assert.equal(new Set(COMPOSITION_RECIPES.map((recipe) => recipe.surface)).size, 6, "compositions must use all six print surfaces");
-  assert.equal(new Set(COMPOSITION_RECIPES.map((recipe) => recipe.titleMode)).size, 6, "compositions must use all six title treatments");
-  assert.equal(new Set(COMPOSITION_RECIPES.map((recipe) => recipe.artTreatment)).size, 6, "compositions must use all six artwork treatments");
-  const motifKeys = Object.keys(MOTIF_BLUEPRINTS);
-  assert.equal(motifKeys.length, 32, "every poster must have one authored motif blueprint");
-  assert.equal(new Set(motifKeys).size, 32, "composition motif keys must be unique");
-  assert.deepEqual(
-    new Set(motifKeys),
-    new Set(COMPOSITION_RECIPES.map((recipe) => recipe.motif)),
-    "motif blueprints must exactly match the curated poster set",
-  );
-
-  const allowedElementKinds = new Set(["line", "path", "rayFan", "rect", "polygon", "ellipse"]);
-  const allowedElementTones = new Set(["ink", "muted", "accent", "field"]);
-  const blueprintRationales = new Set();
-  const assertPointInViewBox = (point, viewBox, label) => {
-    assert.ok(Array.isArray(point) && point.length === 2, `${label} must be an x/y point`);
-    assert.ok(point.every(Number.isFinite), `${label} coordinates must be finite`);
-    const [x, y] = point;
-    const [minX, minY, boxWidth, boxHeight] = viewBox;
-    assert.ok(x >= minX && x <= minX + boxWidth, `${label} x coordinate must stay on the viewBox`);
-    assert.ok(y >= minY && y <= minY + boxHeight, `${label} y coordinate must stay on the viewBox`);
-  };
-
-  for (const recipe of COMPOSITION_RECIPES) {
-    const blueprint = MOTIF_BLUEPRINTS[recipe.motif];
-    assert.ok(blueprint, `${recipe.id} must resolve its semantic motif`);
-    assert.ok(Array.isArray(blueprint.viewBox) && blueprint.viewBox.length === 4, `${recipe.id} needs a four-value viewBox`);
-    assert.ok(blueprint.viewBox.every(Number.isFinite), `${recipe.id} viewBox values must be finite`);
-    assert.ok(blueprint.viewBox[2] > 0 && blueprint.viewBox[3] > 0, `${recipe.id} viewBox dimensions must be positive`);
-    assert.ok(blueprint.rationale.trim().length >= 24, `${recipe.id} needs a meaningful visual rationale`);
-    assert.ok(!blueprintRationales.has(blueprint.rationale), `${recipe.id} must not reuse another poster's rationale`);
-    blueprintRationales.add(blueprint.rationale);
-    assert.ok(Array.isArray(blueprint.semanticTags) && blueprint.semanticTags.length > 0, `${recipe.id} needs semantic tags`);
-    assert.ok(blueprint.semanticTags.every((tag) => typeof tag === "string" && tag.trim()), `${recipe.id} semantic tags must be nonempty`);
-    assert.ok(Array.isArray(blueprint.elements) && blueprint.elements.length > 0, `${recipe.id} needs authored SVG geometry`);
-
-    const elementIds = new Set();
-    for (const element of blueprint.elements) {
-      assert.equal(typeof element.id, "string", `${recipe.id} element ids must be strings`);
-      assert.ok(element.id.trim(), `${recipe.id} element ids must be nonempty`);
-      assert.ok(!elementIds.has(element.id), `${recipe.id} repeats element id ${element.id}`);
-      elementIds.add(element.id);
-      assert.ok(allowedElementKinds.has(element.kind), `${recipe.id}/${element.id} uses unsupported ${element.kind} geometry`);
-      assert.ok(allowedElementTones.has(element.tone), `${recipe.id}/${element.id} uses unsupported ${element.tone} tone`);
-      assert.equal(
-        Object.keys(element).some((key) => /stroke.?width|width.?stroke/i.test(key)),
-        false,
-        `${recipe.id}/${element.id} must use the shared Atlas rule width`,
-      );
-
-      if (element.kind === "line") {
-        assertPointInViewBox(element.from, blueprint.viewBox, `${recipe.id}/${element.id} start`);
-        assertPointInViewBox(element.to, blueprint.viewBox, `${recipe.id}/${element.id} end`);
-      } else if (element.kind === "path" || element.kind === "polygon") {
-        assert.ok(element.points.length >= (element.kind === "polygon" ? 3 : 2), `${recipe.id}/${element.id} needs enough points`);
-        element.points.forEach((point, index) =>
-          assertPointInViewBox(point, blueprint.viewBox, `${recipe.id}/${element.id} point ${index}`),
-        );
-        assert.ok(element.mode === "stroke" || element.mode === "fill", `${recipe.id}/${element.id} needs a valid mode`);
-      } else if (element.kind === "rayFan") {
-        assertPointInViewBox(element.origin, blueprint.viewBox, `${recipe.id}/${element.id} origin`);
-        assert.ok(element.targets.length >= 2, `${recipe.id}/${element.id} needs multiple ray targets`);
-        assert.deepEqual(
-          Object.keys(element).filter((key) => key.toLowerCase().includes("origin")),
-          ["origin"],
-          `${recipe.id}/${element.id} must expose one explicit shared origin`,
-        );
-        element.targets.forEach((target, index) => {
-          assertPointInViewBox(target, blueprint.viewBox, `${recipe.id}/${element.id} target ${index}`);
-          assert.notDeepEqual(target, element.origin, `${recipe.id}/${element.id} rays must leave their origin`);
-        });
-      } else if (element.kind === "rect") {
-        assert.ok([element.x, element.y, element.width, element.height, element.radius].every(Number.isFinite), `${recipe.id}/${element.id} rectangle values must be finite`);
-        assert.ok(element.width > 0 && element.height > 0 && element.radius >= 0, `${recipe.id}/${element.id} rectangle dimensions must be valid`);
-        assertPointInViewBox([element.x, element.y], blueprint.viewBox, `${recipe.id}/${element.id} top-left`);
-        assertPointInViewBox([element.x + element.width, element.y + element.height], blueprint.viewBox, `${recipe.id}/${element.id} bottom-right`);
-        assert.ok(element.mode === "stroke" || element.mode === "fill", `${recipe.id}/${element.id} needs a valid mode`);
-      } else if (element.kind === "ellipse") {
-        assert.ok([element.cx, element.cy, element.rx, element.ry, element.rotation].every(Number.isFinite), `${recipe.id}/${element.id} ellipse values must be finite`);
-        assert.ok(element.rx > 0 && element.ry > 0, `${recipe.id}/${element.id} ellipse radii must be positive`);
-        assert.ok(typeof element.role === "string" && element.role.trim(), `${recipe.id}/${element.id} ellipse needs a semantic role`);
-        assertPointInViewBox([element.cx - element.rx, element.cy - element.ry], blueprint.viewBox, `${recipe.id}/${element.id} minimum extent`);
-        assertPointInViewBox([element.cx + element.rx, element.cy + element.ry], blueprint.viewBox, `${recipe.id}/${element.id} maximum extent`);
-        assert.ok(element.mode === "stroke" || element.mode === "fill", `${recipe.id}/${element.id} needs a valid mode`);
-      }
-    }
-  }
-  assert.equal(blueprintRationales.size, 32, "all 32 motif rationales must be distinct");
-  assert.doesNotMatch(motifLibrary, /"(?:rough|heavy|soft|ghost)"/i, "semantic motifs must not restore brush or variable-weight variants");
-
-  const paletteKeys = Object.keys(COMPOSITION_PALETTES);
-  assert.equal(paletteKeys.length, 32, "every composition must have one curated painting palette");
-  assert.deepEqual(
-    new Set(paletteKeys),
-    new Set(COMPOSITION_RECIPES.map((recipe) => recipe.artworkQid)),
-    "curated palette keys must exactly match the 32 composition artworks",
-  );
-  const paletteSignatures = new Set();
-  const hexColor = /^#[0-9a-f]{6}$/i;
-  for (const qid of paletteKeys) {
-    const palette = COMPOSITION_PALETTES[qid];
-    assert.equal(palette.artworkQid, qid, `${qid} palette key and artwork must agree`);
-    assert.equal(palette.sourceSwatches.length, 4, `${qid} must expose its exact four source colors`);
-    assert.ok(palette.sourceSwatches.every((color) => hexColor.test(color)), `${qid} source swatches must be valid hex colors`);
-    for (const role of ["paper", "ink", "accent", "field"]) {
-      assert.match(palette[role], hexColor, `${qid} ${role} must be a valid hex color`);
-      assert.ok(palette.sourceSwatches.includes(palette[role]), `${qid} ${role} must come from its painting swatches`);
-    }
-    const signature = [palette.paper, palette.ink, palette.accent, palette.field].join(":");
-    assert.ok(!paletteSignatures.has(signature), `${qid} must have a distinct curated palette`);
-    paletteSignatures.add(signature);
-    assert.equal(getCompositionPalette(qid), palette, `${qid} must resolve without a fallback palette`);
-  }
-  assert.throws(
-    () => getCompositionPalette("Q-missing-composition"),
-    /No curated composition palette/i,
-    "missing composition palettes must fail instead of falling back to a hash",
-  );
-
-  const viewportProfiles = [
-    { width: 3840, height: 1080, profile: "panorama" },
-    { width: 3440, height: 1440, profile: "ultrawide" },
-    { width: 1920, height: 1080, profile: "landscape" },
-    { width: 1080, height: 1920, profile: "portrait" },
-    { width: 1280, height: 480, profile: "short" },
-  ];
-  const boardCounts = new Map();
-  for (const recipe of COMPOSITION_RECIPES) {
-    const board = resolveCompositionAtlasBoard(recipe.motif);
-    boardCounts.set(board, (boardCounts.get(board) ?? 0) + 1);
-  }
-  assert.deepEqual(
-    Object.fromEntries([...boardCounts].sort()),
-    {
-      foundations: 8,
-      "light-landscape": 8,
-      "measure-perspective": 8,
-      "tension-identity": 8,
-    },
-    "the 32 posters must resolve into four eight-study blueprint boards",
-  );
-  const assertCanvasRect = (rect, label) => {
-    assert.ok(Array.isArray(rect) && rect.length === 4, `${label} must be a four-value rectangle`);
-    assert.ok(rect.every(Number.isFinite), `${label} values must be finite`);
-    const [x, y, width, height] = rect;
-    assert.ok(x >= 0 && y >= 0 && width > 0 && height > 0, `${label} must have positive on-canvas bounds`);
-    assert.ok(x + width <= 100.001 && y + height <= 100.001, `${label} must stay on the composition canvas`);
-  };
-
-  for (const viewport of viewportProfiles) {
-    assert.equal(
-      resolveCompositionViewportProfile(viewport.width, viewport.height),
-      viewport.profile,
-      `${viewport.width}×${viewport.height} must resolve the ${viewport.profile} profile`,
-    );
-    for (const recipe of COMPOSITION_RECIPES) {
-      const geometry = resolveCompositionGeometry(recipe, viewport.profile);
-      for (const region of ["art", "heading", "motif", "details"]) {
-        assertCanvasRect(geometry[region], `${recipe.id} ${viewport.profile} ${region}`);
-      }
-      assert.ok(
-        compositionRectCoverage(geometry.art) + 0.000_001 >= 0.288,
-        `${recipe.id} ${viewport.profile} artwork must remain a substantial evidence plate`,
-      );
-      assert.ok(
-        compositionRectCoverage(geometry.art) <= 0.362,
-        `${recipe.id} ${viewport.profile} artwork must leave room for the authored board`,
-      );
-      assert.ok(
-        compositionRectCoverage(geometry.motif) + 0.000_001 >= 0.22,
-        `${recipe.id} ${viewport.profile} motif must read as a primary field`,
-      );
-      assert.ok(
-        compositionRectCoverage(geometry.motif) <= 0.31,
-        `${recipe.id} ${viewport.profile} motif must retain measured breathing room`,
-      );
-      assert.ok(
-        compositionRectDistance(geometry.motif, geometry.art) <= 23.001,
-        `${recipe.id} ${viewport.profile} motif must stay optically paired with the painting`,
-      );
-
-      const blueprint = MOTIF_BLUEPRINTS[recipe.motif];
-      const motifAspect = blueprint.viewBox[2] / blueprint.viewBox[3];
-      const slotWidth = viewport.width * geometry.motif[2] / 100;
-      const slotHeight = viewport.height * geometry.motif[3] / 100;
-      const frameSize = fitMotifFrame(slotWidth, slotHeight, motifAspect);
-      assert.ok(frameSize.width > 0 && frameSize.width <= slotWidth + 0.001, `${recipe.id} motif width must fit ${viewport.width}×${viewport.height}`);
-      assert.ok(frameSize.height > 0 && frameSize.height <= slotHeight + 0.001, `${recipe.id} motif height must fit ${viewport.width}×${viewport.height}`);
-      assert.ok(Math.abs(frameSize.width / frameSize.height - motifAspect) < 0.0001, `${recipe.id} motif ratio must survive ${viewport.width}×${viewport.height}`);
-
-      const attachment = resolveCompositionMotifAttachment(geometry);
-      const horizontalOffset = attachment.horizontal === "start"
-        ? 0
-        : attachment.horizontal === "end"
-          ? slotWidth - frameSize.width
-          : (slotWidth - frameSize.width) / 2;
-      const verticalOffset = attachment.vertical === "start"
-        ? 0
-        : attachment.vertical === "end"
-          ? slotHeight - frameSize.height
-          : (slotHeight - frameSize.height) / 2;
-      const visibleFrame = [
-        geometry.motif[0] + horizontalOffset / viewport.width * 100,
-        geometry.motif[1] + verticalOffset / viewport.height * 100,
-        frameSize.width / viewport.width * 100,
-        frameSize.height / viewport.height * 100,
-      ];
-      assertCanvasRect(visibleFrame, `${recipe.id} ${viewport.profile} visible motif frame`);
-      assert.ok(
-        compositionRectDistance(visibleFrame, geometry.art) <= 23.001,
-        `${recipe.id} ${viewport.profile} visible motif drawing must remain in the paired board field`,
-      );
-    }
-  }
-  assert.match(compositionLibrary, /artworkQid/);
-  assert.match(compositionLibrary, /CompositionGeometry/);
-  assert.match(compositionLibrary, /compositionArtCoverage/);
-  assert.match(compositionLibrary, /minimumCropRetention/);
-  assert.match(compositionLibrary, /resolveCompositionObjectFit/);
-  assert.match(compositions, /ARTWORK_DATASET_VERSION/);
-  assert.match(compositions, /const compositionImageUrl = useRemoteImage/);
-  assert.match(compositions, /srcSet=/);
-  assert.match(
-    compositions,
-    /const localPreloader = new Image\(\);[\s\S]*?localPreloader\.src = localArtworkUrl\(adjacent\.artwork\.qid\);[\s\S]*?const remotePreloader = new Image\(\);/,
-  );
-  assert.match(compositions, /commonsRedirect\(adjacent\.artwork\.fallbackFile, 4096\)/);
-  assert.match(compositions, /commonsRedirect\(artwork\.fallbackFile, 4096\)/);
-  assert.match(compositions, /remotePreloader\.onload/);
-  assert.match(compositions, /function CompositionBlueprint/);
-  assert.match(compositions, /MOTIF_BLUEPRINTS\[recipe\.motif\]/);
-  assert.match(compositions, /<svg\b/);
-  assert.match(compositions, /preserveAspectRatio=\{preserveAspectRatio\}/);
-  assert.match(compositions, /"xMidYMid meet"/);
-  assert.match(compositions, /vectorEffect="non-scaling-stroke"/);
-  assert.match(compositions, /getCompositionPalette/);
-  assert.match(compositions, /resolveCompositionGeometry/);
-  assert.match(compositions, /resolveCompositionAtlasBoard/);
-  assert.match(compositions, /resolveCompositionMotifAttachment/);
-  assert.match(compositions, /resolveCompositionViewportProfile/);
-  assert.match(compositions, /data-viewport-profile=/);
-  assert.match(compositions, /data-attach-x=/);
-  assert.match(compositions, /data-attach-y=/);
-  assert.doesNotMatch(compositions, /motifPrimitiveStyle/);
-  assert.doesNotMatch(compositions, /variant-/);
-  assert.doesNotMatch(compositions, /mark-axis-a|mark-axis-b|Array\.from\(\{ length: 14 \}/);
-  assert.match(compositions, /data-theme=\{recipe\.theme\}/);
-  assert.match(compositions, /recipe\.motifLabel/);
-  assert.match(compositions, /composition-navigation-help/);
   assert.match(paintings, /Copyrighted=False \/ Public domain/);
   assert.match(artworks, /ARTWORK_DATASET_VERSION/);
   assert.match(artworks, /LOCAL_ARTWORK_ARCHIVE_VERSION = "wikimedia-2026-07-17-4k1"/);
   assert.match(artworks, /imageUrl: localArtworkUrl\(seed\.qid\)/);
   assert.match(artworks, /import\.meta\.env\.BASE_URL/);
-  assert.equal(frame.match(/localArtworkUrl\("Q474338"\)/g)?.length, 2);
+  assert.match(frame, /localArtworkUrl\("Q474338"\)/);
   assert.match(frame, /serviceWorker[\s\S]*?register\(publicAssetUrl\("sw\.js"\), \{ scope: import\.meta\.env\.BASE_URL \}\)/);
   assert.match(gallery, /const sourceFiles = resolvedPages\.map\(\(\{ seed \}\) => seed\.fallbackFile\)/);
   assert.match(gallery, /const fallbackUrl = localArtworkUrl\(current\.qid\)/);
   assert.match(serviceWorker, /isLocalArtwork \? ARTWORK_CACHE : IMAGE_CACHE/);
+  assert.doesNotMatch(serviceWorker, /composition-atlas|composition-overlays/i);
   assert.match(gallery, /gallery-artwork-matte/);
   assert.match(gallery, /figcaption className="gallery-caption"/);
   assert.match(
@@ -473,48 +168,9 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.match(styles, /\.gallery-mode\.is-vertical-art \.gallery-artwork/);
   assert.match(styles, /object-fit: cover/);
   assert.doesNotMatch(styles, /\.gallery-next/);
-  assert.match(styles, /grid-template-rows: repeat\(3, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /\.composition-mode/);
-  assert.match(styles, /\.composition-art-backdrop/);
-  assert.match(
-    styles,
-    /\.composition-art-backdrop\s*\{[\s\S]*?object-fit: cover;[\s\S]*?blur\(clamp\(3px, 0\.55vmin, 9px\)\)/,
-    "contained paintings must extend into their portal with a restrained artwork-derived crop",
-  );
-  assert.match(
-    styles,
-    /\.composition-sheet\.is-contained \.composition-art-backdrop\s*\{\s*opacity: 0\.46;/,
-    "the painting extension must remain restrained behind the sharp evidence plate",
-  );
-  assert.doesNotMatch(styles, /\.composition-panel\b/);
-  assert.doesNotMatch(compositions, /composition-panel\b/);
-  assert.match(styles, /\.composition-sheet::before/);
-  assert.match(styles, /\.composition-sheet::after/);
-  assert.match(styles, /repeating-radial-gradient/);
-  assert.match(styles, /repeating-linear-gradient/);
-  assert.match(styles, /mix-blend-mode: soft-light/);
-  assert.match(styles, /--composition-grain/);
-  assert.match(styles, /--composition-grain-variation/);
-  assert.match(styles, /opacity: calc\(var\(--composition-grain\) \+ var\(--composition-grain-variation\)\)/);
-  assert.match(styles, /\.composition-art::after/);
-  assert.match(styles, /\.composition-blueprint\b/);
-  assert.match(styles, /\.composition-blueprint-caption\b/);
-  assert.match(styles, /\.composition-registration\b/);
-  assert.match(styles, /\.composition-swatches\b/);
-  assert.match(compositions, /data-atlas-board=/);
-  assert.match(compositions, /blueprint\.rationale/);
-  assert.match(styles, /\.composition-diagram\b/);
-  assert.equal(
-    styles.match(/--atlas-rule-width\s*:/g)?.length,
-    1,
-    "Composition Atlas must declare one shared SVG rule width",
-  );
-  assert.match(styles, /stroke-width:\s*var\(--atlas-rule-width\)/);
-  assert.match(compositionLibrary, /artworkQid: "Q24283"/);
-  assert.doesNotMatch(compositionLibrary, /artworkQid: "Q706846"/);
-  for (const surface of new Set(COMPOSITION_RECIPES.map((recipe) => recipe.surface))) {
-    assert.match(styles, new RegExp(`\\.composition-surface-${surface}\\b`));
-  }
+  assert.doesNotMatch(styles, /\.composition-/);
+  assert.match(styles, /\.mode-list\s*\{[\s\S]*?grid-template-rows: repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(styles, /@media \(min-aspect-ratio: 4 \/ 3\)[\s\S]*?\.mode-list\s*\{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
 });
 
 test("anchors every Swikipedia caption and vertically centers full-width artwork", async () => {
@@ -1339,131 +995,4 @@ test("builds deterministic non-repeating shuffled cycles", async () => {
 
   assert.deepEqual(shuffleWithSeed([], "empty"), []);
   assert.deepEqual(shuffledCycle(["only"], "single", 9), ["only"]);
-});
-
-test("shuffles the curated composition deck without breaking authored pairings", async () => {
-  const [{ buildCompositionDeck, COMPOSITION_COUNT, COMPOSITION_RECIPES, compositionArtCoverage, compositionCropRetention, resolveCompositionObjectFit }, paintings] = await Promise.all([
-    import(new URL("../app/modes/composition-library.ts", import.meta.url).href),
-    readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
-  ]);
-  const paintingRows = (paintings.match(/^\s*\["Q\d+".+\],?$/gm) ?? []).map((line) =>
-    JSON.parse(line.trim().replace(/,$/, "")),
-  );
-  const artworks = paintingRows.map((row) => ({
-    qid: row[0],
-    articleTitle: row[1],
-    title: row[2],
-    artist: row[3],
-    year: row[4],
-    fallbackFile: row[5],
-    width: row[6],
-    height: row[7],
-    accent: "#6c6550",
-    license: "Public domain",
-    licenseUrl: "https://commons.wikimedia.org/",
-    descriptionUrl: "https://commons.wikimedia.org/",
-  }));
-  const expectedPairings = COMPOSITION_RECIPES
-    .map((recipe) => [recipe.id, recipe.artworkQid])
-    .sort(([left], [right]) => left.localeCompare(right));
-  const orders = new Set();
-  for (const seed of ["first-light", "midday", "after-dark", "another-year"]) {
-    const deck = buildCompositionDeck(artworks, seed);
-    assert.equal(deck.length, COMPOSITION_COUNT);
-    assert.equal(new Set(deck.map((item) => item.artwork.qid)).size, COMPOSITION_COUNT);
-    assert.equal(new Set(deck.map((item) => item.recipe.id)).size, COMPOSITION_COUNT);
-    orders.add(deck.map((item) => item.recipe.id).join("|"));
-    assert.deepEqual(
-      deck
-        .map((item) => [item.recipe.id, item.artwork.qid])
-        .sort(([left], [right]) => left.localeCompare(right)),
-      expectedPairings,
-      "curated recipe-to-artwork pairings must survive every shuffle",
-    );
-    for (const item of deck) {
-      assert.equal(item.artwork.qid, item.recipe.artworkQid);
-      assert.equal(item.focusX, item.recipe.focusX);
-      assert.equal(item.focusY, item.recipe.focusY);
-      assert.ok(
-        item.objectFit === "contain" || item.cropRetention >= item.recipe.minimumCropRetention,
-        `${item.recipe.id} must not use an unsafe cover crop`,
-      );
-      for (const portalAspect of [0.35, 0.5, 0.75, 1, 1.25, 16 / 9, 2.5, 4, 8]) {
-        const fit = resolveCompositionObjectFit(item.recipe, item.artwork, portalAspect);
-        assert.ok(
-          fit === "contain" ||
-            compositionCropRetention(item.artwork, portalAspect) >= item.recipe.minimumCropRetention,
-          `${item.recipe.id} must adapt its fit to the measured portal`,
-        );
-        if (item.recipe.artTreatment === "folio" || item.recipe.artTreatment === "scroll") {
-          assert.equal(fit, "contain", `${item.recipe.id} must preserve the full composition`);
-        }
-      }
-    }
-  }
-  assert.ok(orders.size > 1, "different page seeds must vary the composition order");
-  assert.deepEqual(
-    buildCompositionDeck(artworks, "repeatable", 2).map((item) => item.recipe.id),
-    buildCompositionDeck(artworks, "repeatable", 2).map((item) => item.recipe.id),
-    "a composition cycle must be deterministic for its page seed",
-  );
-  const compositionCycles = [0, 1, 2].map((cycle) =>
-    buildCompositionDeck(artworks, "composition-page", cycle),
-  );
-  for (let cycle = 1; cycle < compositionCycles.length; cycle += 1) {
-    assert.notEqual(
-      compositionCycles[cycle][0].recipe.id,
-      compositionCycles[cycle - 1].at(-1).recipe.id,
-      "composition cycle boundaries must not repeat a poster",
-    );
-  }
-
-  const geometryValues = (recipe) =>
-    ["landscape", "portrait"].flatMap((orientation) =>
-      ["art", "heading", "motif", "details"].flatMap((region) => recipe[orientation][region]),
-    );
-  const geometrySignatures = new Set(
-    COMPOSITION_RECIPES.map((recipe) => geometryValues(recipe).join(",")),
-  );
-  assert.equal(geometrySignatures.size, 32, "every composition must have a unique authored geometry signature");
-  assert.ok(
-    new Set(COMPOSITION_RECIPES.map((recipe) => recipe.landscape.art.join(","))).size >= 20,
-    "landscape artwork placement must materially vary",
-  );
-  assert.ok(
-    new Set(COMPOSITION_RECIPES.map((recipe) => recipe.portrait.art.join(","))).size >= 16,
-    "portrait artwork placement must materially vary",
-  );
-  let nearestGeometryDistance = Number.POSITIVE_INFINITY;
-  for (let leftIndex = 0; leftIndex < COMPOSITION_RECIPES.length; leftIndex += 1) {
-    const left = geometryValues(COMPOSITION_RECIPES[leftIndex]);
-    for (let rightIndex = leftIndex + 1; rightIndex < COMPOSITION_RECIPES.length; rightIndex += 1) {
-      const right = geometryValues(COMPOSITION_RECIPES[rightIndex]);
-      const distance = left.reduce((total, value, index) => total + Math.abs(value - right[index]), 0);
-      nearestGeometryDistance = Math.min(nearestGeometryDistance, distance);
-    }
-  }
-  assert.ok(nearestGeometryDistance >= 16, `geometry signatures are too similar (${nearestGeometryDistance})`);
-
-  for (const recipe of COMPOSITION_RECIPES) {
-    assert.ok(recipe.focusX >= 0 && recipe.focusX <= 100, `${recipe.id} must have a valid horizontal focus`);
-    assert.ok(recipe.focusY >= 0 && recipe.focusY <= 100, `${recipe.id} must have a valid vertical focus`);
-    assert.ok(
-      recipe.minimumCropRetention >= 0.5 && recipe.minimumCropRetention <= 1,
-      `${recipe.id} must have a valid crop-retention floor`,
-    );
-    for (const [orientation, minimumCoverage] of [["landscape", 0.6], ["portrait", 0.64]]) {
-      const geometry = recipe[orientation];
-      assert.ok(
-        compositionArtCoverage(geometry) >= minimumCoverage,
-        `${recipe.id} must keep the artwork dominant in ${orientation}`,
-      );
-      for (const region of ["art", "heading", "motif", "details"]) {
-        const [x, y, width, height] = geometry[region];
-        assert.ok([x, y, width, height].every(Number.isFinite), `${recipe.id} ${orientation} ${region} must be finite`);
-        assert.ok(x >= 0 && y >= 0 && width > 0 && height > 0, `${recipe.id} ${orientation} ${region} must have positive bounds`);
-        assert.ok(x + width <= 100 && y + height <= 100, `${recipe.id} ${orientation} ${region} must stay on canvas`);
-      }
-    }
-  }
 });

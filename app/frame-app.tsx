@@ -13,12 +13,11 @@ import {
   type ReactNode,
 } from "react";
 import { localArtworkUrl, publicAssetUrl } from "./data/artworks";
-import { CompositionsMode } from "./modes/compositions";
 import { GalleryMode } from "./modes/gallery";
 import { SignalField } from "./modes/signal-field";
 import { createPageLoadSeed } from "./shuffle";
 
-type ModeId = "signal" | "gallery" | "compositions";
+type ModeId = "signal" | "gallery";
 type ModeDefinition = {
   id: ModeId;
   number: string;
@@ -57,14 +56,6 @@ const MODES: ModeDefinition[] = [
     description: "A slow public-domain gallery spanning six centuries.",
     component: GalleryMode,
     preview: GalleryPreview,
-  },
-  {
-    id: "compositions",
-    number: "03",
-    name: "Composition Atlas",
-    description: "32 painting-specific blueprint posters in four museum-board families.",
-    component: CompositionsMode,
-    preview: CompositionPreview,
   },
 ];
 
@@ -177,28 +168,6 @@ function GalleryPreview() {
   );
 }
 
-function CompositionPreview() {
-  return (
-    <div className="composition-preview" aria-hidden="true">
-      <img
-        src={localArtworkUrl("Q474338")}
-        alt=""
-      />
-      <div className="composition-preview-grid" />
-      <div className="composition-preview-constellation">
-        {Array.from({ length: 7 }, (_, index) => <i key={index} />)}
-      </div>
-      <strong>MECHANICAL<br />SUN</strong>
-      <div className="composition-preview-matrix">
-        {Array.from({ length: 40 }, (_, index) => (
-          <i key={index} className={(index * 5 + 3) % 11 < 5 ? "is-on" : ""} />
-        ))}
-      </div>
-      <span>ATLAS / 32</span>
-    </div>
-  );
-}
-
 function ModeIndex({
   activeMode,
   onSelect,
@@ -256,7 +225,7 @@ function ModeIndex({
 
       <footer className="index-footer">
         <button type="button" onClick={onFullscreen}>ENTER FULLSCREEN</button>
-        <span>1–3 SELECT / F FULLSCREEN / I INDEX</span>
+        <span>1–2 SELECT / F FULLSCREEN / I INDEX</span>
         {activeMode && (
           <button type="button" onClick={onClose}>RETURN TO FRAME</button>
         )}
@@ -373,7 +342,6 @@ export default function FrameApp() {
       const key = event.key.toLocaleLowerCase();
       if (key === "1") selectMode("signal");
       if (key === "2") selectMode("gallery");
-      if (key === "3") selectMode("compositions");
       if (key === "i" || key === "escape") setIndexOpen((open) => !open);
       if (key === "f") enterFullscreen();
     };
