@@ -66,19 +66,19 @@ const ATLAS_BOARD_LAYOUTS: Readonly<
   Record<CompositionAtlasBoard, Readonly<Record<AtlasLayoutProfile, CompositionGeometry>>>
 > = Object.freeze({
   foundations: Object.freeze({
-    wide: Object.freeze({
+    wide: freezeGeometry({
       art: [62, 7, 35, 86],
       heading: [3, 8, 17, 26],
       motif: [23, 7, 36, 86],
       details: [3, 38, 17, 45],
     }),
-    landscape: Object.freeze({
+    landscape: freezeGeometry({
       art: [58, 7, 39, 86],
       heading: [3, 8, 51, 20],
       motif: [3, 30, 51, 54],
       details: [3, 85, 51, 8],
     }),
-    portrait: Object.freeze({
+    portrait: freezeGeometry({
       art: [5, 21, 90, 32],
       heading: [5, 6, 90, 13],
       motif: [5, 56, 90, 34],
@@ -86,19 +86,19 @@ const ATLAS_BOARD_LAYOUTS: Readonly<
     }),
   }),
   "light-landscape": Object.freeze({
-    wide: Object.freeze({
+    wide: freezeGeometry({
       art: [3, 7, 35, 86],
       heading: [41, 8, 17, 26],
       motif: [61, 7, 36, 86],
       details: [41, 38, 17, 45],
     }),
-    landscape: Object.freeze({
+    landscape: freezeGeometry({
       art: [3, 7, 39, 86],
       heading: [46, 8, 51, 20],
       motif: [46, 30, 51, 54],
       details: [46, 85, 51, 8],
     }),
-    portrait: Object.freeze({
+    portrait: freezeGeometry({
       art: [5, 58, 90, 32],
       heading: [5, 6, 90, 13],
       motif: [5, 21, 90, 34],
@@ -106,19 +106,19 @@ const ATLAS_BOARD_LAYOUTS: Readonly<
     }),
   }),
   "measure-perspective": Object.freeze({
-    wide: Object.freeze({
+    wide: freezeGeometry({
       art: [61, 7, 36, 86],
       heading: [3, 8, 18, 27],
       motif: [24, 7, 34, 86],
       details: [3, 40, 18, 43],
     }),
-    landscape: Object.freeze({
+    landscape: freezeGeometry({
       art: [3, 57, 94, 36],
       heading: [3, 8, 41, 20],
       motif: [48, 8, 49, 45],
       details: [3, 31, 41, 22],
     }),
-    portrait: Object.freeze({
+    portrait: freezeGeometry({
       art: [5, 58, 90, 32],
       heading: [5, 6, 90, 13],
       motif: [5, 21, 90, 34],
@@ -126,19 +126,19 @@ const ATLAS_BOARD_LAYOUTS: Readonly<
     }),
   }),
   "tension-identity": Object.freeze({
-    wide: Object.freeze({
+    wide: freezeGeometry({
       art: [3, 7, 35, 86],
       heading: [80, 8, 17, 26],
       motif: [41, 7, 36, 86],
       details: [80, 38, 17, 45],
     }),
-    landscape: Object.freeze({
+    landscape: freezeGeometry({
       art: [3, 7, 42, 86],
       heading: [49, 8, 48, 20],
       motif: [49, 30, 48, 54],
       details: [49, 85, 48, 8],
     }),
-    portrait: Object.freeze({
+    portrait: freezeGeometry({
       art: [5, 21, 90, 32],
       heading: [5, 6, 90, 13],
       motif: [5, 56, 90, 34],

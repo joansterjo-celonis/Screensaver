@@ -1862,9 +1862,26 @@ function deepScan(frame: SceneFrame) {
     Math.min(cell * (stackedInfo ? 4.4 : 6.2), infoHeight * 0.3),
   );
   const voidBaseline = infoY + voidTypeSize;
-  type(context, "VOID", infoX, voidBaseline, voidTypeSize, OXBLOOD, "left", 700);
-  const confidenceLabelY = voidBaseline + cell * 2;
-  type(context, "CONFIDENCE / FIELD LOCK", infoX, confidenceLabelY, tiny, DIM_DARK, "left", 600);
+  const infoWidth = stackedInfo
+    ? content.width
+    : Math.max(cell * 6, field.x - infoX - cell * 2);
+  type(context, "VOID", infoX, voidBaseline, voidTypeSize, OXBLOOD, "left", 700, {
+    family: "sans",
+    maxWidth: infoWidth,
+    motion: 0.58,
+    strength: confidence,
+  });
+  const voidMetrics = context.measureText("VOID");
+  context.font = `${signalWeight(confidence, "secondary")} ${tiny}px ${signalFontFamilies.mono}`;
+  const confidenceMetrics = context.measureText("CONFIDENCE / FIELD LOCK");
+  const confidenceLabelY = voidBaseline +
+    Math.max(0, voidMetrics.actualBoundingBoxDescent || voidTypeSize * 0.08) +
+    Math.max(tiny, confidenceMetrics.actualBoundingBoxAscent || tiny * 0.75) +
+    cell * 0.65;
+  type(context, "CONFIDENCE / FIELD LOCK", infoX, confidenceLabelY, tiny, DIM_DARK, "left", 600, {
+    family: "mono",
+    maxWidth: infoWidth,
+  });
   const confidenceValue = `${(confidence * 99.8).toFixed(1).padStart(4, "0")}%`;
   const previousConfidence = `${Math.min(99.8, confidence * 99.8 + 0.8).toFixed(1).padStart(4, "0")}%`;
   const confidenceY = confidenceLabelY + cell;
