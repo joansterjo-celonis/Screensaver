@@ -53,7 +53,7 @@ export type CompositionMotif =
   | "pressed-garden"
   | "anamorphic-datum"
   | "measured-motion"
-  | "unrolled-river"
+  | "river-span"
   | "screen-current"
   | "three-measures"
   | "mechanical-sun"
@@ -413,21 +413,21 @@ const COMPOSITION_ROWS = [
     portrait: { art: [0, 0, 88, 100], heading: [40, 59, 57, 31], motif: [69, 4, 27, 41], details: [4, 92, 92, 6] },
   },
   {
-    id: "unrolled-river",
-    name: "Unrolled River",
-    artworkQid: "Q706846",
-    theme: "Landscape as Duration",
-    motif: "unrolled-river",
-    motifLabel: "MOUNTAIN / INK / TIME",
+    id: "river-span",
+    name: "River Span",
+    artworkQid: "Q24283",
+    theme: "Passage Through Landscape",
+    motif: "river-span",
+    motifLabel: "ARCH / CURRENT / DISTANCE",
     palette: "parchment",
     surface: "fiber",
     titleMode: "banner",
-    artTreatment: "scroll",
-    focusX: 50,
-    focusY: 50,
-    minimumCropRetention: 0.96,
-    landscape: { art: [0, 16, 100, 68], heading: [2, 2, 58, 22], motif: [62, 3, 35, 20], details: [2, 87, 96, 9] },
-    portrait: { art: [0, 8, 100, 64], heading: [4, 73, 91, 17], motif: [4, 2, 91, 12], details: [4, 92, 91, 6] },
+    artTreatment: "cinema",
+    focusX: 64,
+    focusY: 55,
+    minimumCropRetention: 0.58,
+    landscape: { art: [0, 0, 84, 100], heading: [3, 3, 58, 25], motif: [61, 3, 36, 24], details: [84, 70, 14, 24] },
+    portrait: { art: [0, 0, 100, 64], heading: [4, 61, 92, 28], motif: [64, 4, 32, 22], details: [4, 91, 92, 6] },
   },
   {
     id: "screen-current",

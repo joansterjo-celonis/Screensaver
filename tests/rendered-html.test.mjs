@@ -90,7 +90,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
 });
 
 test("ships the expanded artwork, signal and composition libraries", async () => {
-  const [paintings, artworks, frame, signal, gallery, compositions, compositionLibrary, compositionModule, styles, serviceWorker] = await Promise.all([
+  const [paintings, artworks, frame, signal, gallery, compositions, compositionLibrary, compositionModule, motifLibrary, motifModule, styles, serviceWorker] = await Promise.all([
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/data/artworks.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
@@ -99,6 +99,8 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
     readFile(new URL("../app/modes/compositions.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/composition-library.ts", import.meta.url), "utf8"),
     import(new URL("../app/modes/composition-library.ts", import.meta.url).href),
+    readFile(new URL("../app/modes/composition-motifs.ts", import.meta.url), "utf8"),
+    import(new URL("../app/modes/composition-motifs.ts", import.meta.url).href),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
   ]);
@@ -110,6 +112,7 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   const signalRows = signal.match(/^\s*\{ id: "[^"]+".+draw: [a-zA-Z]+ \},?$/gm) ?? [];
   const responsiveSignalUnits = signal.match(/layoutUnit\(width, height\)/g) ?? [];
   const { COMPOSITION_RECIPES } = compositionModule;
+  const { MOTIF_BLUEPRINTS, fitMotifFrame } = motifModule;
 
   assert.equal(paintingRows.length, 300, `expected exactly 300 paintings, found ${paintingRows.length}`);
   assert.equal(new Set(paintingRows.map((row) => row[0])).size, 300, "painting QIDs must be unique");
@@ -147,6 +150,39 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.equal(new Set(COMPOSITION_RECIPES.map((recipe) => recipe.surface)).size, 6, "compositions must use all six print surfaces");
   assert.equal(new Set(COMPOSITION_RECIPES.map((recipe) => recipe.titleMode)).size, 6, "compositions must use all six title treatments");
   assert.equal(new Set(COMPOSITION_RECIPES.map((recipe) => recipe.artTreatment)).size, 6, "compositions must use all six artwork treatments");
+  assert.equal(Object.keys(MOTIF_BLUEPRINTS).length, 32, "every poster must have one authored motif blueprint");
+  assert.deepEqual(
+    new Set(Object.keys(MOTIF_BLUEPRINTS)),
+    new Set(COMPOSITION_RECIPES.map((recipe) => recipe.motif)),
+    "motif blueprints must exactly match the curated poster set",
+  );
+  const blueprintSignatures = new Set();
+  const primitiveCounts = new Set();
+  for (const recipe of COMPOSITION_RECIPES) {
+    const blueprint = MOTIF_BLUEPRINTS[recipe.motif];
+    assert.ok(blueprint.aspect >= 0.8 && blueprint.aspect <= 1.7, `${recipe.id} must have a practical invariant motif ratio`);
+    assert.ok(blueprint.parts.length >= 7, `${recipe.id} must be a meaningfully authored drawing`);
+    assert.equal(new Set(blueprint.parts.map((primitive) => primitive.id)).size, blueprint.parts.length, `${recipe.id} primitive names must be unique`);
+    primitiveCounts.add(blueprint.parts.length);
+    const signature = blueprint.parts
+      .map((primitive) => [primitive.id, primitive.kind, primitive.x, primitive.y, primitive.width, primitive.height, primitive.rotation].join(":"))
+      .join("|");
+    assert.ok(!blueprintSignatures.has(signature), `${recipe.id} must not reuse another poster's drawing`);
+    blueprintSignatures.add(signature);
+  }
+  assert.ok(primitiveCounts.size >= 5, "the 32 drawings must not share one repeated primitive count");
+  for (const [width, height] of [[3840, 1080], [3440, 1440], [1920, 1080], [1440, 1080], [1080, 1920], [1280, 480]]) {
+    for (const recipe of COMPOSITION_RECIPES) {
+      const geometry = width / height <= 5 / 4 ? recipe.portrait : recipe.landscape;
+      const slotWidth = width * geometry.motif[2] / 100;
+      const slotHeight = height * geometry.motif[3] / 100;
+      const blueprint = MOTIF_BLUEPRINTS[recipe.motif];
+      const frameSize = fitMotifFrame(slotWidth, slotHeight, blueprint.aspect);
+      assert.ok(frameSize.width > 0 && frameSize.width <= slotWidth + 0.001, `${recipe.id} motif width must fit ${width}×${height}`);
+      assert.ok(frameSize.height > 0 && frameSize.height <= slotHeight + 0.001, `${recipe.id} motif height must fit ${width}×${height}`);
+      assert.ok(Math.abs(frameSize.width / frameSize.height - blueprint.aspect) < 0.0001, `${recipe.id} motif ratio must survive ${width}×${height}`);
+    }
+  }
   assert.match(compositionLibrary, /artworkQid/);
   assert.match(compositionLibrary, /CompositionGeometry/);
   assert.match(compositionLibrary, /compositionArtCoverage/);
@@ -163,6 +199,9 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.match(compositions, /commonsRedirect\(artwork\.fallbackFile, 4096\)/);
   assert.match(compositions, /remotePreloader\.onload/);
   assert.match(compositions, /function CompositionMark/);
+  assert.match(compositions, /MOTIF_BLUEPRINTS\[recipe\.motif\]/);
+  assert.match(compositions, /motifPrimitiveStyle/);
+  assert.doesNotMatch(compositions, /mark-axis-a|mark-axis-b|Array\.from\(\{ length: 14 \}/);
   assert.match(compositions, /composition-motif-\$\{recipe\.motif\}/);
   assert.match(compositions, /data-theme=\{recipe\.theme\}/);
   assert.match(compositions, /recipe\.motifLabel/);
@@ -234,17 +273,17 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.match(styles, /repeating-linear-gradient/);
   assert.match(styles, /mix-blend-mode: soft-light/);
   assert.match(styles, /--composition-grain/);
+  assert.match(styles, /--composition-grain-variation/);
+  assert.match(styles, /opacity: calc\(var\(--composition-grain\) \+ var\(--composition-grain-variation\)\)/);
+  assert.match(styles, /\.composition-art::after/);
+  assert.match(styles, /container-type: size/);
+  assert.match(styles, /width: min\(100cqw, calc\(100cqh \* var\(--motif-aspect, 1\)\)\)/);
+  assert.match(styles, /\.motif-primitive/);
+  assert.match(motifLibrary, /painting-specific drawing for every poster/i);
+  assert.match(compositionLibrary, /artworkQid: "Q24283"/);
+  assert.doesNotMatch(compositionLibrary, /artworkQid: "Q706846"/);
   for (const surface of new Set(COMPOSITION_RECIPES.map((recipe) => recipe.surface))) {
     assert.match(styles, new RegExp(`\\.composition-surface-${surface}\\b`));
-  }
-  for (const motif of COMPOSITION_RECIPES.map((recipe) => recipe.motif)) {
-    const contextualSelectors = styles.match(
-      new RegExp(`\\.composition-motif-${motif}\\b`, "g"),
-    ) ?? [];
-    assert.ok(
-      contextualSelectors.length >= 3,
-      `${motif} must have multiple contextual mark treatments`,
-    );
   }
   const portraitMediaStart = styles.indexOf("@media (max-aspect-ratio: 5 / 4)");
   assert.notEqual(portraitMediaStart, -1, "compositions must switch to authored portrait geometry at 5:4");

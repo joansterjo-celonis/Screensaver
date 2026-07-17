@@ -884,7 +884,8 @@ a:focus-visible {
   --composition-line: rgba(238, 225, 207, 0.26);
   --composition-accent: #d64270;
   --composition-spot: color-mix(in srgb, var(--composition-accent) 76%, var(--composition-art-accent, #8c6a58));
-  --composition-grain: 0.17;
+  --composition-grain: 0.22;
+  --composition-grain-variation: 0.025;
   --composition-shadow: rgba(5, 2, 3, 0.54);
   --art-x: 34%;
   --art-y: 0%;
@@ -940,19 +941,19 @@ a:focus-visible {
 }
 
 .composition-sheet::before {
-  opacity: var(--composition-grain);
+  opacity: calc(var(--composition-grain) + var(--composition-grain-variation));
   mix-blend-mode: soft-light;
   background-image:
     repeating-radial-gradient(circle at 13% 19%, transparent 0 1px, rgba(255, 255, 255, 0.16) 1.35px 1.8px, transparent 2.15px 4px),
-    repeating-radial-gradient(circle at 71% 63%, transparent 0 1.2px, rgba(0, 0, 0, 0.28) 1.45px 1.9px, transparent 2.2px 5px),
+    repeating-radial-gradient(circle at 71% 63%, transparent 0 1.2px, rgba(0, 0, 0, 0.34) 1.45px 1.9px, transparent 2.2px 5px),
     repeating-linear-gradient(97deg, transparent 0 29px, rgba(255, 255, 255, 0.032) 30px 31px, transparent 32px 67px);
-  background-size: 5px 7px, 9px 13px, 100% 100%;
+  background-size: 7px 11px, 13px 17px, 100% 100%;
   background-position: 1px 2px, 4px 1px, 0 0;
 }
 
 .composition-sheet::after {
   z-index: 19;
-  opacity: 0.46;
+  opacity: 0.52;
   background:
     radial-gradient(ellipse at var(--composition-wear-x, 50%) var(--composition-wear-y, 44%), transparent 34%, rgba(0, 0, 0, 0.12) 72%, rgba(0, 0, 0, 0.34) 122%),
     linear-gradient(101deg, transparent 0 48%, rgba(255, 255, 255, 0.018) 49%, transparent 51%);
@@ -1001,7 +1002,7 @@ a:focus-visible {
 }
 
 .composition-surface-dry-ink {
-  --composition-grain: 0.25;
+  --composition-grain: 0.29;
 }
 
 .composition-surface-dry-ink::after {
@@ -1012,7 +1013,7 @@ a:focus-visible {
 }
 
 .composition-surface-fiber {
-  --composition-grain: 0.2;
+  --composition-grain: 0.24;
 }
 
 .composition-surface-fiber::before {
@@ -1024,7 +1025,7 @@ a:focus-visible {
 }
 
 .composition-surface-dust {
-  --composition-grain: 0.22;
+  --composition-grain: 0.27;
 }
 
 .composition-surface-dust::before {
@@ -1035,11 +1036,11 @@ a:focus-visible {
 }
 
 .composition-surface-halftone {
-  --composition-grain: 0.14;
+  --composition-grain: 0.17;
 }
 
 .composition-surface-halftone::before {
-  opacity: 0.2;
+  opacity: calc(var(--composition-grain) + var(--composition-grain-variation));
   mix-blend-mode: multiply;
   background-image:
     radial-gradient(circle, currentColor 0 0.55px, transparent 0.8px),
@@ -1048,7 +1049,7 @@ a:focus-visible {
 }
 
 .composition-surface-etched {
-  --composition-grain: 0.18;
+  --composition-grain: 0.22;
 }
 
 .composition-surface-etched::before {
@@ -1059,7 +1060,7 @@ a:focus-visible {
 }
 
 .composition-surface-washed {
-  --composition-grain: 0.13;
+  --composition-grain: 0.18;
 }
 
 .composition-surface-washed::after {
@@ -1129,6 +1130,21 @@ a:focus-visible {
   overflow: hidden;
   background: color-mix(in srgb, var(--composition-bg) 72%, var(--composition-art-accent, #6f594e));
   box-shadow: 0 24px 70px var(--composition-shadow);
+}
+
+.composition-art::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+  opacity: calc(0.09 + var(--composition-grain-variation));
+  mix-blend-mode: overlay;
+  background-image:
+    repeating-radial-gradient(circle at 31% 27%, transparent 0 1px, rgba(255, 255, 255, 0.22) 1.2px 1.55px, transparent 1.8px 4px),
+    repeating-radial-gradient(circle at 73% 69%, transparent 0 1.4px, rgba(0, 0, 0, 0.34) 1.6px 2px, transparent 2.2px 6px);
+  background-size: 7px 11px, 13px 17px;
+  background-position: 2px 3px, 5px 1px;
 }
 
 .composition-art.is-missing {
@@ -2107,6 +2123,226 @@ a:focus-visible {
 }
 .composition-motif-name-restored .composition-mark i:nth-of-type(4n) { width: 68%; background: var(--composition-accent); }
 .composition-motif-name-restored .composition-mark > b { top: 12%; left: 27%; width: 7px; height: 7px; }
+
+/*
+ * Painting-authored motif canvases. The earlier selectors remain as a legacy
+ * fallback, while this layer resets their shared radar geometry and fits every
+ * new blueprint into an invariant-ratio canvas.
+ */
+.composition-motif {
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.composition-motif[data-align="start"] {
+  justify-content: flex-start;
+}
+
+.composition-motif[data-align="end"] {
+  justify-content: flex-end;
+}
+
+.composition-motif .composition-mark {
+  position: relative;
+  inset: auto;
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: var(--motif-aspect, 1);
+  overflow: visible;
+  transform: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@supports (width: 1cqw) {
+  .composition-motif .composition-mark {
+    width: min(100cqw, calc(100cqh * var(--motif-aspect, 1)));
+    height: auto;
+  }
+}
+
+.composition-motif .composition-mark::before,
+.composition-motif .composition-mark::after {
+  display: none;
+  content: none;
+}
+
+.composition-motif .composition-mark i.motif-primitive {
+  position: absolute;
+  top: var(--primitive-y);
+  right: auto;
+  bottom: auto;
+  left: var(--primitive-x);
+  display: block;
+  width: var(--primitive-w);
+  height: var(--primitive-h);
+  margin: 0;
+  opacity: 0.86;
+  transform: translate(-50%, -50%) rotate(var(--primitive-rotation));
+  transform-origin: 50% 50%;
+  color: var(--composition-spot);
+  background: currentColor;
+  border: 0;
+  border-radius: 0;
+  box-shadow: var(--composition-register, 1px) 1px color-mix(in srgb, var(--composition-accent) 26%, transparent);
+  clip-path: none;
+  filter: none;
+}
+
+.composition-motif .composition-mark i.tone-accent { color: var(--composition-accent); }
+.composition-motif .composition-mark i.tone-ink { color: var(--composition-ink); }
+.composition-motif .composition-mark i.tone-dim { color: var(--composition-dim); }
+.composition-motif .composition-mark i.tone-shadow {
+  color: color-mix(in srgb, var(--composition-bg) 72%, #000);
+}
+
+.composition-motif .composition-mark i.motif-line {
+  min-height: 1px;
+  background: currentColor;
+}
+
+.composition-motif .composition-mark i.motif-arc {
+  background: transparent;
+  border: clamp(1px, 0.42cqmin, 3px) solid currentColor;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+.composition-motif .composition-mark i.motif-ring {
+  background: transparent;
+  border: clamp(1px, 0.42cqmin, 3px) solid currentColor;
+  border-radius: 50%;
+  box-shadow: inset var(--composition-register, 1px) 0 color-mix(in srgb, var(--composition-accent) 22%, transparent);
+}
+
+.composition-motif .composition-mark i.motif-dot,
+.composition-motif .composition-mark i.motif-disc {
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+.composition-motif .composition-mark i.motif-dot {
+  background: currentColor;
+}
+
+.composition-motif .composition-mark i.motif-disc {
+  background: radial-gradient(circle at 34% 29%, color-mix(in srgb, currentColor 45%, #fff), currentColor 58%, color-mix(in srgb, currentColor 72%, #000));
+}
+
+.composition-motif .composition-mark i.motif-block {
+  background: currentColor;
+}
+
+.composition-motif .composition-mark i.motif-petal {
+  background: currentColor;
+  border-radius: 100% 0 100% 0;
+}
+
+.composition-motif .composition-mark i.motif-triangle {
+  background: currentColor;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.composition-motif .composition-mark i.motif-cross {
+  background: transparent;
+  box-shadow: none;
+}
+
+.composition-motif .composition-mark i.motif-cross::before,
+.composition-motif .composition-mark i.motif-cross::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: clamp(1px, 12%, 3px);
+  transform: translate(-50%, -50%);
+  background: currentColor;
+}
+
+.composition-motif .composition-mark i.motif-cross::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.composition-motif .composition-mark i.variant-outline {
+  background: transparent;
+  border: clamp(1px, 0.34cqmin, 3px) solid currentColor;
+  box-shadow: none;
+}
+
+.composition-motif .composition-mark i.motif-line.variant-dashed {
+  background: repeating-linear-gradient(90deg, currentColor 0 11%, transparent 11% 18%);
+  box-shadow: none;
+}
+
+.composition-motif .composition-mark i.motif-arc.variant-dashed,
+.composition-motif .composition-mark i.motif-ring.variant-dashed {
+  border-style: dashed;
+}
+
+.composition-motif .composition-mark i.variant-rough {
+  clip-path: polygon(0 13%, 12% 4%, 27% 11%, 42% 0, 59% 12%, 76% 3%, 100% 15%, 98% 82%, 83% 96%, 66% 87%, 48% 100%, 31% 88%, 14% 97%, 1% 84%);
+}
+
+.composition-motif .composition-mark i.variant-ghost {
+  opacity: 0.25;
+  mix-blend-mode: multiply;
+}
+
+.composition-motif .composition-mark i.variant-heavy {
+  opacity: 0.96;
+  filter: drop-shadow(var(--composition-register, 1px) 1px color-mix(in srgb, var(--composition-accent) 42%, transparent));
+}
+
+.composition-motif .composition-mark i.motif-arc.variant-open {
+  border-left-color: transparent;
+}
+
+.composition-motif .composition-mark i.variant-soft {
+  opacity: 0.74;
+  filter: blur(0.2px);
+  box-shadow: 0 0 clamp(5px, 1.5cqmin, 18px) color-mix(in srgb, currentColor 36%, transparent);
+}
+
+.composition-motif .composition-mark > small {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  max-width: 92%;
+  color: var(--composition-dim);
+  font-size: clamp(5px, 0.68vmin, 8px);
+  line-height: 1.25;
+  letter-spacing: 0.13em;
+  text-align: right;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.composition-motif .composition-mark[data-label-edge="nw"] > small,
+.composition-motif .composition-mark[data-label-edge="ne"] > small {
+  top: 0;
+  bottom: auto;
+}
+
+.composition-motif .composition-mark[data-label-edge="nw"] > small,
+.composition-motif .composition-mark[data-label-edge="sw"] > small {
+  right: auto;
+  left: 0;
+  text-align: left;
+}
 
 .composition-details {
   z-index: 7;

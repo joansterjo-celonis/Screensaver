@@ -27,6 +27,10 @@ import {
   type CompositionRecipe,
   type CompositionRect,
 } from "./composition-library";
+import {
+  MOTIF_BLUEPRINTS,
+  type MotifPrimitive,
+} from "./composition-motifs";
 
 function hashString(value: string) {
   let hash = 2166136261;
@@ -92,38 +96,40 @@ function compositionStyle(recipe: CompositionRecipe, artwork: ArtworkSeed) {
     "--composition-art-accent": artwork.accent,
     "--composition-focus-x": `${recipe.focusX}%`,
     "--composition-focus-y": `${recipe.focusY}%`,
-    "--composition-grain": String(0.14 + (seed % 8) / 100),
+    "--composition-grain-variation": String(0.015 + (seed % 7) / 200),
     "--composition-wear-x": `${12 + (seed % 77)}%`,
     "--composition-wear-y": `${10 + ((seed >> 8) % 79)}%`,
     "--composition-register": `${(seed % 3) + 1}px`,
   } as CSSProperties;
 }
 
-function CompositionMark({ recipe, signature }: { recipe: CompositionRecipe; signature: string }) {
-  const seed = hashString(signature);
+function motifPrimitiveStyle(primitive: MotifPrimitive) {
+  return {
+    "--primitive-x": `${primitive.x}%`,
+    "--primitive-y": `${primitive.y}%`,
+    "--primitive-w": `${primitive.width}%`,
+    "--primitive-h": `${primitive.height}%`,
+    "--primitive-rotation": `${primitive.rotation}deg`,
+  } as CSSProperties;
+}
+
+function CompositionMark({ recipe }: { recipe: CompositionRecipe }) {
+  const blueprint = MOTIF_BLUEPRINTS[recipe.motif];
   return (
-    <div className="composition-mark">
-      <span className="mark-axis-a" />
-      <span className="mark-axis-b" />
-      {Array.from({ length: 14 }, (_, index) => {
-        const value = hashString(`${seed}:${recipe.motif}:${index}`);
-        return (
-          <i
-            key={index}
-            style={
-              {
-                "--mark-index": index,
-                "--mark-value": value % 100,
-                "--mark-angle": `${(value + index * 29) % 360}deg`,
-                "--mark-x": `${7 + (value % 86)}%`,
-                "--mark-y": `${8 + ((value >> 7) % 84)}%`,
-                "--mark-size": `${2 + ((value >> 13) % 7)}px`,
-              } as CSSProperties
-            }
-          />
-        );
-      })}
-      <b />
+    <div
+      className="composition-mark"
+      data-align={blueprint.align}
+      data-label-edge={blueprint.labelEdge}
+      style={{ "--motif-aspect": String(blueprint.aspect) } as CSSProperties}
+    >
+      {blueprint.parts.map((primitive) => (
+        <i
+          key={primitive.id}
+          className={`motif-primitive motif-${primitive.kind} tone-${primitive.tone} variant-${primitive.variant}`}
+          data-part={primitive.id}
+          style={motifPrimitiveStyle(primitive)}
+        />
+      ))}
       <small>{recipe.motifLabel}</small>
     </div>
   );
@@ -276,7 +282,7 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
   const sourceShape = artworkShape(artwork);
   const headlineLength = artwork.title.length;
   const headlineClass = headlineLength > 46 ? "is-long" : headlineLength > 28 ? "is-medium" : "is-short";
-  const signature = `${recipe.id}:${artwork.qid}:${artwork.year}:${artwork.width}x${artwork.height}`;
+  const motifBlueprint = MOTIF_BLUEPRINTS[recipe.motif];
   const articleUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(artwork.articleTitle.replace(/ /g, "_"))}`;
   const imageMissing = failedImages.has(artwork.qid);
   const measuredPortalAspect = portalMeasurement?.key === currentKey ? portalMeasurement.aspect : null;
@@ -401,8 +407,8 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
           <small>{artwork.artist} · {recipe.motifLabel}</small>
         </section>
 
-        <div className="composition-motif" aria-hidden="true">
-          <CompositionMark recipe={recipe} signature={signature} />
+        <div className="composition-motif" data-align={motifBlueprint.align} aria-hidden="true">
+          <CompositionMark recipe={recipe} />
         </div>
 
         <aside className="composition-details" aria-label="Artwork details">
