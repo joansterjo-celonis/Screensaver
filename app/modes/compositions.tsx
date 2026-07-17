@@ -14,6 +14,7 @@ import {
   ARTWORK_DATASET_VERSION,
   ARTWORK_SEEDS,
   commonsRedirect,
+  localArtworkUrl,
   type ArtworkSeed,
 } from "../data/artworks";
 import {
@@ -245,6 +246,7 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
   const [timerReset, setTimerReset] = useState(0);
   const [remaining, setRemaining] = useState(COMPOSITION_CYCLE_TIME);
   const [failedImages, setFailedImages] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const [remoteReady, setRemoteReady] = useState<ReadonlySet<string>>(() => new Set());
   const [portalMeasurement, setPortalMeasurement] = useState<{
     key: string;
     aspect: number;
@@ -316,15 +318,46 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
   useEffect(() => {
     if (paused) return;
     if (deck.length < 2) return;
-    for (const offset of [-1, 1]) {
+    let disposed = false;
+    const preloaders: HTMLImageElement[] = [];
+    const queued = new Set<string>();
+    for (const offset of [0, -1, 1]) {
       const adjacent = deck[(activeIndex + offset + deck.length) % deck.length];
-      if (!adjacent || failedImages.has(adjacent.artwork.qid)) continue;
-      const preloader = new Image();
-      preloader.decoding = "async";
-      preloader.sizes = imageSizesFor(adjacent);
-      preloader.srcset = `${commonsRedirect(adjacent.artwork.fallbackFile, 1200)} 1200w, ${commonsRedirect(adjacent.artwork.fallbackFile, 2000)} 2000w, ${commonsRedirect(adjacent.artwork.fallbackFile, 2800)} 2800w`;
-      preloader.src = commonsRedirect(adjacent.artwork.fallbackFile, 2400);
+      if (
+        !adjacent ||
+        queued.has(adjacent.artwork.qid) ||
+        failedImages.has(adjacent.artwork.qid)
+      ) continue;
+      queued.add(adjacent.artwork.qid);
+
+      const localPreloader = new Image();
+      localPreloader.decoding = "async";
+      localPreloader.src = localArtworkUrl(adjacent.artwork.qid);
+      preloaders.push(localPreloader);
+
+      const remotePreloader = new Image();
+      remotePreloader.decoding = "async";
+      remotePreloader.sizes = imageSizesFor(adjacent);
+      remotePreloader.onload = () => {
+        if (disposed) return;
+        setRemoteReady((ready) => {
+          if (ready.has(adjacent.artwork.qid)) return ready;
+          const next = new Set(ready);
+          next.add(adjacent.artwork.qid);
+          return next;
+        });
+      };
+      remotePreloader.srcset = `${commonsRedirect(adjacent.artwork.fallbackFile, 1200)} 1200w, ${commonsRedirect(adjacent.artwork.fallbackFile, 2000)} 2000w, ${commonsRedirect(adjacent.artwork.fallbackFile, 2800)} 2800w`;
+      remotePreloader.src = commonsRedirect(adjacent.artwork.fallbackFile, 2400);
+      preloaders.push(remotePreloader);
     }
+    return () => {
+      disposed = true;
+      for (const preloader of preloaders) {
+        preloader.onload = null;
+        preloader.onerror = null;
+      }
+    };
   }, [activeIndex, deck, failedImages, paused]);
 
   useEffect(() => {
@@ -371,6 +404,10 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
       ? "contain"
       : resolveCompositionObjectFit(recipe, artwork, measuredPortalAspect);
   const imageSizes = imageSizesFor(current);
+  const useRemoteImage = remoteReady.has(artwork.qid);
+  const compositionImageUrl = useRemoteImage
+    ? commonsRedirect(artwork.fallbackFile, 2400)
+    : localArtworkUrl(artwork.qid);
   const style = {
     "--composition-art-accent": artwork.accent,
     "--composition-focus-x": `${current.focusX}%`,
@@ -420,20 +457,26 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
               {resolvedObjectFit === "contain" && (
                 <img
                   className="composition-art-backdrop"
-                  src={commonsRedirect(artwork.fallbackFile, 1200)}
+                  src={useRemoteImage ? commonsRedirect(artwork.fallbackFile, 1200) : localArtworkUrl(artwork.qid)}
                   alt=""
                   aria-hidden="true"
                   decoding="async"
                   style={{ objectPosition: `${current.focusX}% ${current.focusY}%` }}
                   onError={(event) => {
-                    event.currentTarget.style.display = "none";
+                    const image = event.currentTarget;
+                    if (image.dataset.recovery === "local") {
+                      image.style.display = "none";
+                      return;
+                    }
+                    image.dataset.recovery = "local";
+                    image.src = localArtworkUrl(artwork.qid);
                   }}
                 />
               )}
               <img
                 className="composition-art-image"
-                src={commonsRedirect(artwork.fallbackFile, 2400)}
-                srcSet={`${commonsRedirect(artwork.fallbackFile, 1200)} 1200w, ${commonsRedirect(artwork.fallbackFile, 2000)} 2000w, ${commonsRedirect(artwork.fallbackFile, 2800)} 2800w`}
+                src={compositionImageUrl}
+                srcSet={useRemoteImage ? `${commonsRedirect(artwork.fallbackFile, 1200)} 1200w, ${commonsRedirect(artwork.fallbackFile, 2000)} 2000w, ${commonsRedirect(artwork.fallbackFile, 2800)} 2800w` : undefined}
                 sizes={imageSizes}
                 alt={`${artwork.title} by ${artwork.artist}, ${artwork.year}`}
                 decoding="async"
@@ -442,12 +485,13 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
                   objectFit: resolvedObjectFit,
                   objectPosition: `${current.focusX}% ${current.focusY}%`,
                 }}
-                onError={(event) => {
-                  const image = event.currentTarget;
-                  if (image.dataset.recovery !== "small") {
-                    image.dataset.recovery = "small";
-                    image.srcset = "";
-                    image.src = commonsRedirect(artwork.fallbackFile, 1200);
+                onError={() => {
+                  if (useRemoteImage) {
+                    setRemoteReady((ready) => {
+                      const next = new Set(ready);
+                      next.delete(artwork.qid);
+                      return next;
+                    });
                     return;
                   }
                   setFailedImages((failed) => {

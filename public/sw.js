@@ -1,6 +1,8 @@
 const SHELL_CACHE = "always-on-frame-shell-v1";
 const IMAGE_CACHE = "always-on-frame-images-v1";
+const ARTWORK_CACHE = "always-on-frame-artworks-wikimedia-2026-07-17-4k1";
 const MAX_IMAGES = 24;
+const MAX_ARTWORKS = 48;
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -17,7 +19,8 @@ self.addEventListener("activate", (event) => {
               (key) =>
                 key.startsWith("always-on-frame-") &&
                 key !== SHELL_CACHE &&
-                key !== IMAGE_CACHE,
+                key !== IMAGE_CACHE &&
+                key !== ARTWORK_CACHE,
             )
             .map((key) => caches.delete(key)),
         ),
@@ -26,10 +29,10 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-async function trimImages(cache) {
+async function trimCache(cache, maximum) {
   const keys = await cache.keys();
-  if (keys.length <= MAX_IMAGES) return;
-  await Promise.all(keys.slice(0, keys.length - MAX_IMAGES).map((key) => cache.delete(key)));
+  if (keys.length <= maximum) return;
+  await Promise.all(keys.slice(0, keys.length - maximum).map((key) => cache.delete(key)));
 }
 
 self.addEventListener("fetch", (event) => {
@@ -59,15 +62,19 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.destination === "image") {
+    const url = new URL(request.url);
+    const isLocalArtwork =
+      url.origin === self.location.origin &&
+      /\/artworks\/Q\d+\.webp$/.test(url.pathname);
     event.respondWith(
-      caches.open(IMAGE_CACHE).then(async (cache) => {
+      caches.open(isLocalArtwork ? ARTWORK_CACHE : IMAGE_CACHE).then(async (cache) => {
         const cached = await cache.match(request);
         if (cached) return cached;
         const response = await fetch(request);
         if (response.ok || response.type === "opaque") {
           try {
             await cache.put(request, response.clone());
-            await trimImages(cache);
+            await trimCache(cache, isLocalArtwork ? MAX_ARTWORKS : MAX_IMAGES);
           } catch {
             // Treat image storage as an optimization on quota-limited tablets.
           }

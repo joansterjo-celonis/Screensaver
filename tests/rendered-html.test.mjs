@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -76,7 +76,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(compositions, /ResizeObserver/);
   assert.match(compositions, /getBoundingClientRect/);
   assert.match(compositions, /measuredPortalAspect/);
-  assert.match(compositions, /image\.dataset\.recovery/);
+  assert.match(compositions, /remoteReady/);
   assert.match(compositions, /30_000/);
   assert.match(compositions, /composition-art-backdrop/);
   assert.match(compositionLibrary, /COMPOSITION_CYCLE_TIME = 90_000/);
@@ -88,14 +88,16 @@ test("keeps the product modes explicit and the starter removed", async () => {
 });
 
 test("ships the expanded artwork, signal and composition libraries", async () => {
-  const [paintings, artworks, signal, gallery, compositions, compositionLibrary, styles] = await Promise.all([
+  const [paintings, artworks, frame, signal, gallery, compositions, compositionLibrary, styles, serviceWorker] = await Promise.all([
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/data/artworks.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/gallery.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/compositions.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/composition-library.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
   ]);
 
   const paintingRowLines = paintings.match(/^\s*\["Q\d+".+\],?$/gm) ?? [];
@@ -147,11 +149,25 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.match(compositionLibrary, /resolutionTarget/);
   assert.match(compositionLibrary, /resolveCompositionObjectFit/);
   assert.match(compositions, /ARTWORK_DATASET_VERSION/);
-  assert.match(compositions, /commonsRedirect\(artwork\.fallbackFile, 2400\)/);
+  assert.match(compositions, /const compositionImageUrl = useRemoteImage/);
   assert.match(compositions, /srcSet=/);
+  assert.match(compositions, /localPreloader\.src = localArtworkUrl\(adjacent\.artwork\.qid\)/);
+  assert.match(compositions, /remotePreloader\.onload/);
   assert.match(compositions, /composition-navigation-help/);
   assert.match(paintings, /Copyrighted=False \/ Public domain/);
   assert.match(artworks, /ARTWORK_DATASET_VERSION/);
+  assert.match(artworks, /LOCAL_ARTWORK_ARCHIVE_VERSION = "wikimedia-2026-07-17-4k1"/);
+  assert.match(artworks, /imageUrl: localArtworkUrl\(seed\.qid\)/);
+  assert.match(artworks, /import\.meta\.env\.BASE_URL/);
+  assert.equal(frame.match(/localArtworkUrl\("Q474338"\)/g)?.length, 2);
+  assert.match(frame, /serviceWorker[\s\S]*?register\(publicAssetUrl\("sw\.js"\), \{ scope: import\.meta\.env\.BASE_URL \}\)/);
+  assert.match(gallery, /const sourceFiles = resolvedPages\.map\(\(\{ seed \}\) => seed\.fallbackFile\)/);
+  assert.match(gallery, /cached\.artworks\.map\(\(artwork\) => \(\{[\s\S]*?imageUrl: localArtworkUrl\(artwork\.qid\)/);
+  assert.match(gallery, /const fallbackUrl = localArtworkUrl\(current\.qid\)/);
+  assert.match(gallery, /HYBRID ARCHIVE/);
+  assert.match(serviceWorker, /always-on-frame-artworks-wikimedia-2026-07-17-4k1/);
+  assert.match(serviceWorker, /const MAX_ARTWORKS = 48/);
+  assert.match(serviceWorker, /isLocalArtwork \? ARTWORK_CACHE : IMAGE_CACHE/);
   assert.match(gallery, /gallery-artwork-matte/);
   assert.match(gallery, /figcaption className="gallery-caption"/);
   assert.match(gallery, /current\.height \/ current\.width >= 1\.3/);
@@ -210,6 +226,42 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.match(styles, /\.composition-bars\.is-ledger/);
   assert.match(styles, /\.composition-family-horizon > \.composition-art/);
   assert.match(styles, /\.composition-family-cabinet > \.composition-art/);
+});
+
+test("bundles an exact high-resolution local fallback for every painting", async () => {
+  const [paintings, manifestSource, publicEntries, builtEntries] = await Promise.all([
+    readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
+    readFile(new URL("../public/artworks/manifest.json", import.meta.url), "utf8"),
+    readdir(new URL("../public/artworks/", import.meta.url)),
+    readdir(new URL("../dist/client/artworks/", import.meta.url)),
+  ]);
+  const rows = (paintings.match(/^\s*\["Q\d+".+\],?$/gm) ?? []).map((line) =>
+    JSON.parse(line.trim().replace(/,$/, "")),
+  );
+  const manifest = JSON.parse(manifestSource);
+  const expectedFiles = rows.map((row) => `${row[0]}.webp`).sort();
+  const publicFiles = publicEntries.filter((name) => /^Q\d+\.webp$/.test(name)).sort();
+  const builtFiles = builtEntries.filter((name) => /^Q\d+\.webp$/.test(name)).sort();
+
+  assert.equal(manifest.version, "wikimedia-2026-07-17-4k1");
+  assert.equal(manifest.count, 300);
+  assert.equal(manifest.resolution.shortEdgeTarget, 2160);
+  assert.equal(manifest.resolution.standardLongEdgeCap, 4096);
+  assert.equal(manifest.resolution.panoramicLongEdgeCap, 8192);
+  assert.deepEqual(publicFiles, expectedFiles);
+  assert.deepEqual(builtFiles, expectedFiles);
+  assert.equal(manifest.files.length, 300);
+  assert.deepEqual(manifest.files.map((entry) => entry.file).sort(), expectedFiles);
+  assert.equal(new Set(manifest.files.map((entry) => entry.sha256)).size, 300);
+  assert.ok(
+    manifest.files.reduce((total, entry) => total + entry.bytes, 0) < 600 * 1024 * 1024,
+    "the local archive must stay below its 600 MiB deployment budget",
+  );
+  for (const entry of manifest.files) {
+    assert.ok(entry.width > 0 && entry.height > 0, `${entry.qid} must have valid dimensions`);
+    assert.ok(entry.bytes > 0, `${entry.qid} must not be empty`);
+    assert.match(entry.sha256, /^[a-f0-9]{64}$/);
+  }
 });
 
 test("builds diverse composition decks without unsafe crops or repeats", async () => {

@@ -25,8 +25,17 @@ Create a production build with:
 npm run build
 ```
 
+The committed high-resolution artwork archive can be regenerated and integrity-checked with:
+
+```bash
+npm run artworks:sync
+npm run artworks:verify
+```
+
 ## GitHub Pages
 
 The Pages workflow builds a static export with the `/Screensaver` base path and publishes `dist/client`. Normal local builds keep the Vinext/Sites output intact.
 
-The gallery is intentionally network-resilient: it ships with a curated public-domain manifest, keeps stale-good metadata when refreshes fail, and only refreshes its API cache once per day.
+The gallery is intentionally network-resilient: all 300 public-domain paintings ship as optimized local WebP files, while Wikipedia and Wikimedia Commons provide richer metadata and higher-resolution images when available. It keeps stale-good metadata when refreshes fail and only refreshes its API cache once per day.
+
+The bundled archive remains complete whenever the static site host is reachable. For a total network outage, the service worker keeps the 48 most recently viewed local paintings rather than preloading the full archive into device storage.

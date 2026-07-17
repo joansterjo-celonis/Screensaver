@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ARTWORK_DATASET_VERSION,
   ARTWORK_SEEDS,
-  commonsRedirect,
   fallbackArtwork,
+  localArtworkUrl,
   type GalleryArtwork,
 } from "../data/artworks";
 
@@ -171,9 +171,7 @@ async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
     )
   ).flat();
 
-  const pageImages = resolvedPages.flatMap(({ page }) =>
-    page?.pageimage ? [page.pageimage] : [],
-  );
+  const sourceFiles = resolvedPages.map(({ seed }) => seed.fallbackFile);
   if (!resolvedPages.some(({ page }) => page)) {
     throw new Error("Wikipedia metadata was unavailable");
   }
@@ -182,9 +180,9 @@ async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
     { imageUrl?: string; license?: string; licenseUrl?: string; copyrighted?: string }
   >();
 
-  if (pageImages.length) {
+  if (sourceFiles.length) {
     const metadataBatches = await Promise.all(
-      inBatches(pageImages).map(async (files) => {
+      inBatches(sourceFiles).map(async (files) => {
         const commons = new URL("https://commons.wikimedia.org/w/api.php");
         commons.search = new URLSearchParams({
           action: "query",
@@ -193,7 +191,7 @@ async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
           origin: "*",
           prop: "imageinfo",
           iiprop: "url|dimensions|mime|extmetadata",
-          iiurlwidth: "1800",
+          iiurlwidth: "2800",
           iiextmetadatalanguage: "en",
           iiextmetadatafilter:
             "LicenseShortName|LicenseUrl|UsageTerms|AttributionRequired|Copyrighted",
@@ -232,9 +230,7 @@ async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
   return resolvedPages.flatMap(({ seed, page }) => {
     const fallback = fallbackArtwork(seed);
     if (!page) return [fallback];
-    const license = page.pageimage
-      ? licenseByFile.get(normalizeTitle(page.pageimage))
-      : undefined;
+    const license = licenseByFile.get(normalizeTitle(seed.fallbackFile));
     const licenseName = license?.license ?? "";
     const verifiedPublicDomain =
       Boolean(license?.imageUrl) &&
@@ -276,7 +272,7 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
   const [nextAt, setNextAt] = useState(() => Date.now() + CYCLE_TIME);
   const [remaining, setRemaining] = useState(CYCLE_TIME);
   const [timerReset, setTimerReset] = useState(0);
-  const [sourceState, setSourceState] = useState<"seed" | "cache" | "live">("seed");
+  const [sourceState, setSourceState] = useState<"seed" | "cache" | "hybrid" | "live">("seed");
   const [imageRecovery, setImageRecovery] = useState<{
     articleTitle: string;
     primaryUrl: string;
@@ -290,7 +286,12 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
     if (cached) {
       cacheHydration = window.setTimeout(() => {
         if (controller.signal.aborted) return;
-        setArtworks(cached.artworks);
+        setArtworks(
+          cached.artworks.map((artwork) => ({
+            ...artwork,
+            imageUrl: localArtworkUrl(artwork.qid),
+          })),
+        );
         setSourceState("cache");
       }, 0);
     }
@@ -305,8 +306,17 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
     fetchGallery(controller.signal)
       .then((collection) => {
         if (!collection.length) return;
+        const remoteCount = collection.filter((artwork) =>
+          artwork.imageUrl.startsWith("https://"),
+        ).length;
         setArtworks(collection);
-        setSourceState("live");
+        setSourceState(
+          remoteCount === collection.length
+            ? "live"
+            : remoteCount > 0
+              ? "hybrid"
+              : "seed",
+        );
         writeCache(collection);
       })
       .catch(() => {
@@ -357,7 +367,7 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
   const activeIndex = artworks.length ? currentIndex % artworks.length : 0;
   const current = artworks[activeIndex] ?? fallbackCollection[0];
   const isVerticalArtwork = current.height / current.width >= 1.3;
-  const fallbackUrl = commonsRedirect(current.fallbackFile);
+  const fallbackUrl = localArtworkUrl(current.qid);
   const imageSource =
     imageRecovery?.articleTitle === current.articleTitle &&
     imageRecovery.primaryUrl === current.imageUrl
@@ -372,6 +382,11 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
       if (!adjacent) continue;
       const preloader = new Image();
       preloader.decoding = "async";
+      preloader.onerror = () => {
+        if (preloader.dataset.recovery === "local") return;
+        preloader.dataset.recovery = "local";
+        preloader.src = localArtworkUrl(adjacent.qid);
+      };
       preloader.src = adjacent.imageUrl;
     }
   }, [activeIndex, artworks, paused]);
@@ -415,7 +430,13 @@ export function GalleryMode({ paused = false }: { paused?: boolean }) {
         </div>
         <div className="gallery-header-actions">
           <div className="gallery-header-status">
-            <span>{sourceState === "live" ? "COMMONS LIVE" : sourceState === "cache" ? "LOCAL ARCHIVE" : "CURATED SET"}</span>
+            <span>
+              {sourceState === "live"
+                ? "COMMONS LIVE"
+                : sourceState === "hybrid"
+                  ? "HYBRID ARCHIVE"
+                  : "LOCAL ARCHIVE"}
+            </span>
             <span className="gallery-pulse" aria-hidden="true" />
           </div>
         </div>

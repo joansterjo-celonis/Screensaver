@@ -45,7 +45,8 @@ function accentFor(value: string) {
   return MATTE_ACCENTS[(hash >>> 0) % MATTE_ACCENTS.length];
 }
 
-export const ARTWORK_DATASET_VERSION = `wikimedia-2026-07-17-${PAINTINGS.length}`;
+export const LOCAL_ARTWORK_ARCHIVE_VERSION = "wikimedia-2026-07-17-4k1";
+export const ARTWORK_DATASET_VERSION = `${LOCAL_ARTWORK_ARCHIVE_VERSION}-${PAINTINGS.length}`;
 
 export const ARTWORK_SEEDS: ArtworkSeed[] = PAINTINGS.map((painting) => ({
   ...painting,
@@ -56,10 +57,18 @@ export function commonsRedirect(fileName: string, width = 1600) {
   return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(fileName)}?width=${width}`;
 }
 
+export function publicAssetUrl(relativePath: string) {
+  return `${import.meta.env.BASE_URL}${relativePath.replace(/^\/+/, "")}`;
+}
+
+export function localArtworkUrl(qid: string) {
+  return `${publicAssetUrl(`artworks/${encodeURIComponent(qid)}.webp`)}?v=${LOCAL_ARTWORK_ARCHIVE_VERSION}`;
+}
+
 export function fallbackArtwork(seed: ArtworkSeed): GalleryArtwork {
   return {
     ...seed,
-    imageUrl: commonsRedirect(seed.fallbackFile),
+    imageUrl: localArtworkUrl(seed.qid),
     articleUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(seed.articleTitle.replace(/ /g, "_"))}`,
     description: `${seed.title} is a work by ${seed.artist}, presented from a verified public-domain collection sourced through Wikidata and Wikimedia Commons.`,
   };

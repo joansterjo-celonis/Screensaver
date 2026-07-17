@@ -12,7 +12,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
-import { commonsRedirect } from "./data/artworks";
+import { localArtworkUrl, publicAssetUrl } from "./data/artworks";
 import { CompositionsMode } from "./modes/compositions";
 import { GalleryMode } from "./modes/gallery";
 import { SignalField } from "./modes/signal-field";
@@ -162,9 +162,7 @@ function GalleryPreview() {
   return (
     <div className="gallery-preview" aria-hidden="true">
       <img
-        src={commonsRedirect(
-          "Leonardo da Vinci - Lady with an Ermine.jpg",
-        )}
+        src={localArtworkUrl("Q474338")}
         alt=""
       />
       <div className="gallery-preview-wash" />
@@ -181,7 +179,7 @@ function CompositionPreview() {
   return (
     <div className="composition-preview" aria-hidden="true">
       <img
-        src={commonsRedirect("Lady with an Ermine - Leonardo da Vinci - Google Art Project.jpg", 560)}
+        src={localArtworkUrl("Q474338")}
         alt=""
       />
       <div className="composition-preview-grid" />
@@ -304,10 +302,9 @@ export default function FrameApp() {
     ) {
       return;
     }
-    const base = window.location.pathname.endsWith("/")
-      ? window.location.pathname
-      : `${window.location.pathname}/`;
-    void navigator.serviceWorker.register(`${base}sw.js`).catch(() => undefined);
+    void navigator.serviceWorker
+      .register(publicAssetUrl("sw.js"), { scope: import.meta.env.BASE_URL })
+      .catch(() => undefined);
   }, []);
 
   const revealControls = useCallback(() => {
