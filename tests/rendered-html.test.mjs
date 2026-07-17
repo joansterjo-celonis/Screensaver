@@ -47,8 +47,10 @@ test("keeps the product modes explicit and the starter removed", async () => {
 
   assert.match(page, /<FrameApp \/>/);
   assert.match(layout, /title: "Always-On Frame"/);
+  assert.match(layout, /300 verified public-domain paintings/);
   assert.match(frame, /Signal Field/);
   assert.match(frame, /Swikipedia/);
+  assert.match(frame, /PLATE 003 \/ 300/);
   assert.match(signal, /requestAnimationFrame/);
   assert.match(signal, /cancelAnimationFrame/);
   assert.match(signal, /getBoundingClientRect/);
@@ -72,11 +74,21 @@ test("ships the expanded, verified artwork and signal libraries", async () => {
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  const paintingRows = paintings.match(/^\s*\["Q\d+"/gm) ?? [];
+  const paintingRowLines = paintings.match(/^\s*\["Q\d+".+\],?$/gm) ?? [];
+  const paintingRows = paintingRowLines.map((line) =>
+    JSON.parse(line.trim().replace(/,$/, "")),
+  );
   const signalRows = signal.match(/^\s*\{ id: "[^"]+".+draw: [a-zA-Z]+ \},?$/gm) ?? [];
   const responsiveSignalUnits = signal.match(/layoutUnit\(width, height\)/g) ?? [];
 
-  assert.ok(paintingRows.length >= 150, `expected at least 150 paintings, found ${paintingRows.length}`);
+  assert.equal(paintingRows.length, 300, `expected exactly 300 paintings, found ${paintingRows.length}`);
+  assert.equal(new Set(paintingRows.map((row) => row[0])).size, 300, "painting QIDs must be unique");
+  assert.equal(new Set(paintingRows.map((row) => row[1])).size, 300, "Wikipedia articles must be unique");
+  assert.equal(new Set(paintingRows.map((row) => row[5])).size, 300, "Commons files must be unique");
+  for (const row of paintingRows) {
+    assert.ok(row[6] * row[7] >= 1_000_000, `${row[0]} must be at least one megapixel`);
+    assert.ok(Math.min(row[6], row[7]) >= 750, `${row[0]} must have a 750px short edge`);
+  }
   assert.ok(signalRows.length >= 18, `expected at least 18 signal scenes, found ${signalRows.length}`);
   assert.ok(
     responsiveSignalUnits.length >= 18,

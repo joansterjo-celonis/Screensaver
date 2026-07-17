@@ -1,11 +1,11 @@
 # Always-On Frame
 
-A portrait digital frame with multiple passive display modes. It is designed for an old tablet, monitor, or kiosk screen that can remain open for days at a time.
+A responsive digital frame with multiple passive display modes. It is designed for a tablet, monitor, TV, or kiosk screen that can remain open for days at a time.
 
 ## Modes
 
 - **Signal Field** — a reference-inspired generative composition of glyphs, grids, telemetry, and checkerboard glitches rendered on one canvas.
-- **Swikipedia** — a slow gallery of twelve Renaissance and old-master paintings. Metadata and public-domain licensing are refreshed from Wikipedia and Wikimedia Commons, then cached locally.
+- **Swikipedia** — a slow gallery of 300 verified public-domain paintings. Metadata and licensing are refreshed from Wikipedia and Wikimedia Commons, then cached locally.
 
 The selected mode is remembered on the device. Press `I` to reopen the frame index, `1` or `2` to switch modes, and `F` to enter fullscreen.
 
