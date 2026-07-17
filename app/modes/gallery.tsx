@@ -290,6 +290,34 @@ export function GalleryMode() {
     preloader.src = following.imageUrl;
   }, [artworks, current.imageUrl, currentIndex]);
 
+  useEffect(() => {
+    let cancelled = false;
+    let timeout = 0;
+    let cursor = 0;
+    const queue = artworks.map((artwork) => artwork.imageUrl);
+
+    const warmNextImage = () => {
+      if (cancelled || cursor >= queue.length) return;
+      const image = new Image();
+      const finish = () => {
+        image.onload = null;
+        image.onerror = null;
+        timeout = window.setTimeout(warmNextImage, 1800);
+      };
+      image.decoding = "async";
+      image.onload = finish;
+      image.onerror = finish;
+      image.src = queue[cursor];
+      cursor += 1;
+    };
+
+    timeout = window.setTimeout(warmNextImage, 5000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [artworks]);
+
   const showNext = () => {
     advance();
     setTimerReset((value) => value + 1);

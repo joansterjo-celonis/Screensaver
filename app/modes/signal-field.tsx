@@ -69,15 +69,16 @@ function drawGrid(
   context: CanvasRenderingContext2D,
   width: number,
   height: number,
+  color = FAINT,
 ) {
-  context.strokeStyle = FAINT;
+  context.strokeStyle = color;
   context.lineWidth = 1;
   const unit = Math.max(18, width / 18);
   for (let x = 0; x <= width; x += unit) {
-    line(context, x, 0, x, height, FAINT);
+    line(context, x, 0, x, height, color);
   }
   for (let y = 0; y <= height; y += unit) {
-    line(context, 0, y, width, y, FAINT);
+    line(context, 0, y, width, y, color);
   }
 }
 
@@ -312,8 +313,7 @@ function drawErrorState(
   const tiny = Math.max(7, width * 0.023);
   context.fillStyle = INK;
   context.fillRect(0, 0, width, height);
-  context.strokeStyle = "rgba(37, 16, 21, 0.16)";
-  drawGrid(context, width, height);
+  drawGrid(context, width, height, "rgba(37, 16, 21, 0.16)");
   text(context, "[ ONLINE ]", pad, pad * 1.15, tiny * 1.35, PAPER);
   text(context, "FRAME / RECLOCK", width - pad, pad * 1.15, tiny, PAPER, "right");
   line(context, pad, pad * 1.6, width - pad, pad * 1.6, PAPER);
