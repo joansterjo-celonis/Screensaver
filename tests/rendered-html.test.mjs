@@ -92,7 +92,11 @@ test("ships the expanded, verified artwork and signal libraries", async () => {
   );
   assert.match(
     styles,
-    /\.gallery-artwork-matte\s*\{[\s\S]*?top: var\(--gallery-header-safe\)/,
+    /\.gallery-artwork-matte\s*\{[\s\S]*?top: var\(--gallery-header-safe\);\s*right: 0;[\s\S]*?left: 0;[\s\S]*?overflow: visible;/,
+  );
+  assert.match(
+    styles,
+    /\.gallery-artwork\s*\{[\s\S]*?width: 100%;\s*height: auto;\s*max-width: none;\s*max-height: none;/,
   );
   assert.match(
     styles,
