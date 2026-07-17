@@ -7,7 +7,6 @@ const nextConfig: NextConfig = {
   ...(isGitHubPages
     ? {
         output: "export" as const,
-        basePath: "/Screensaver",
         trailingSlash: true,
         images: { unoptimized: true },
       }

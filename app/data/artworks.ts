@@ -119,15 +119,16 @@ export const ARTWORK_SEEDS: ArtworkSeed[] = [
 ];
 
 export function commonsRedirect(fileName: string) {
-  return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(fileName)}`;
+  return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(fileName)}?width=1600`;
 }
 
 export function fallbackArtwork(seed: ArtworkSeed): GalleryArtwork {
   return {
     ...seed,
     imageUrl: commonsRedirect(seed.fallbackFile),
-    articleUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(seed.articleTitle.replaceAll(" ", "_"))}`,
+    articleUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(seed.articleTitle.replace(/ /g, "_"))}`,
     description: `${seed.title} is a work by ${seed.artist}, presented from a curated public-domain collection of Renaissance painting.`,
     license: "Public domain",
+    licenseUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(seed.fallbackFile.replace(/ /g, "_"))}`,
   };
 }

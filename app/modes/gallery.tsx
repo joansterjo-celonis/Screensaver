@@ -37,6 +37,7 @@ type CommonsResponse = {
       imageinfo?: Array<{
         thumburl?: string;
         url?: string;
+        descriptionurl?: string;
         extmetadata?: CommonsMetadata;
       }>;
     }>;
@@ -50,7 +51,7 @@ type CachedGallery = {
 };
 
 function normalizeTitle(value: string) {
-  return value.replace(/^File:/i, "").replaceAll("_", " ").trim().toLocaleLowerCase();
+  return value.replace(/^File:/i, "").replace(/_/g, " ").trim().toLocaleLowerCase();
 }
 
 function shorten(value: string, limit = 330) {
@@ -97,9 +98,13 @@ async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
     exintro: "1",
     explaintext: "1",
     exsentences: "3",
+    exlimit: "max",
     inprop: "url",
     piprop: "thumbnail|original|name",
     pithumbsize: "1800",
+    pilicense: "free",
+    maxage: "86400",
+    smaxage: "86400",
     titles: ARTWORK_SEEDS.map((item) => item.articleTitle).join("|"),
   }).toString();
 
@@ -135,8 +140,13 @@ async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
       formatversion: "2",
       origin: "*",
       prop: "imageinfo",
-      iiprop: "url|extmetadata",
+      iiprop: "url|dimensions|mime|extmetadata",
       iiurlwidth: "1800",
+      iiextmetadatalanguage: "en",
+      iiextmetadatafilter:
+        "LicenseShortName|LicenseUrl|UsageTerms|AttributionRequired|Copyrighted",
+      maxage: "86400",
+      smaxage: "86400",
       titles: pageImages.map((file) => `File:${file}`).join("|"),
     }).toString();
 
@@ -152,7 +162,7 @@ async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
         licenseByFile.set(normalizeTitle(filePage.title), {
           imageUrl: info?.thumburl ?? info?.url,
           license: meta?.LicenseShortName?.value ?? meta?.UsageTerms?.value,
-          licenseUrl: meta?.LicenseUrl?.value,
+          licenseUrl: meta?.LicenseUrl?.value ?? info?.descriptionurl,
           copyrighted: meta?.Copyrighted?.value,
         });
       }
@@ -177,7 +187,7 @@ async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
           license?.imageUrl ?? page.thumbnail?.source ?? commonsRedirect(seed.fallbackFile),
         articleUrl:
           page.fullurl ??
-          `https://en.wikipedia.org/wiki/${encodeURIComponent(seed.articleTitle.replaceAll(" ", "_"))}`,
+          `https://en.wikipedia.org/wiki/${encodeURIComponent(seed.articleTitle.replace(/ /g, "_"))}`,
         description: page.extract
           ? shorten(page.extract)
           : fallbackArtwork(seed).description,
@@ -334,7 +344,11 @@ export function GalleryMode() {
         </div>
         <p className="gallery-description">{current.description}</p>
         <div className="gallery-meta">
-          <span>{current.license}</span>
+          <span>
+            <a href={current.articleUrl} target="_blank" rel="noreferrer">Wikipedia text</a>
+            {" / "}
+            <a href={current.licenseUrl} target="_blank" rel="noreferrer">{current.license}</a>
+          </span>
           <span>Next plate / {formatCountdown(remaining)}</span>
         </div>
       </div>

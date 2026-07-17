@@ -18,12 +18,21 @@ export const metadata: Metadata = {
     description:
       "A living portrait display for generative typography and Renaissance painting.",
     type: "website",
+    images: [
+      {
+        url: "https://joansterjo-celonis.github.io/Screensaver/og.png",
+        width: 1731,
+        height: 909,
+        alt: "Always-On Frame — generative typography meets Renaissance painting",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Always-On Frame",
     description:
       "A living portrait display for generative typography and Renaissance painting.",
+    images: ["https://joansterjo-celonis.github.io/Screensaver/og.png"],
   },
 };
 

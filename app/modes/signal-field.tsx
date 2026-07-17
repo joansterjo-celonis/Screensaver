@@ -446,14 +446,17 @@ export function SignalField() {
     };
 
     resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
+    const observer =
+      "ResizeObserver" in window ? new ResizeObserver(resize) : null;
+    observer?.observe(canvas);
+    window.addEventListener("resize", resize);
     window.addEventListener("orientationchange", resize);
     frame = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(frame);
-      observer.disconnect();
+      observer?.disconnect();
+      window.removeEventListener("resize", resize);
       window.removeEventListener("orientationchange", resize);
     };
   }, []);

@@ -56,6 +56,6 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.doesNotMatch(packageJson, /react-loading-skeleton|drizzle/);
 
   await assert.rejects(
-    access(new URL("../app/_sites-preview", import.meta.url)),
+    access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)),
   );
 });

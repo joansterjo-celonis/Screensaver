@@ -252,6 +252,19 @@ export default function FrameApp() {
     setHydrated(true);
   }, []);
 
+  useEffect(() => {
+    if (
+      !("serviceWorker" in navigator) ||
+      window.location.protocol !== "https:"
+    ) {
+      return;
+    }
+    const base = window.location.pathname.endsWith("/")
+      ? window.location.pathname
+      : `${window.location.pathname}/`;
+    void navigator.serviceWorker.register(`${base}sw.js`).catch(() => undefined);
+  }, []);
+
   const revealControls = useCallback(() => {
     window.clearTimeout(hideTimer.current);
     setControlsVisible(true);
@@ -308,7 +321,10 @@ export default function FrameApp() {
     <main
       className="frame-root"
       onPointerMove={revealControls}
-      onPointerDown={revealControls}
+      onPointerDown={() => {
+        revealControls();
+        void requestWakeLock();
+      }}
     >
       <div className="portrait-frame">
         {ActiveComponent ? (
