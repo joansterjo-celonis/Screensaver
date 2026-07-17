@@ -88,7 +88,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
 });
 
 test("ships the expanded artwork, signal and composition libraries", async () => {
-  const [paintings, artworks, frame, signal, gallery, compositions, compositionLibrary, styles, serviceWorker] = await Promise.all([
+  const [paintings, artworks, frame, signal, gallery, compositions, compositionLibrary, compositionModule, styles, serviceWorker] = await Promise.all([
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/data/artworks.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
@@ -96,6 +96,7 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
     readFile(new URL("../app/modes/gallery.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/compositions.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/composition-library.ts", import.meta.url), "utf8"),
+    import(new URL("../app/modes/composition-library.ts", import.meta.url).href),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
   ]);
@@ -106,12 +107,7 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   );
   const signalRows = signal.match(/^\s*\{ id: "[^"]+".+draw: [a-zA-Z]+ \},?$/gm) ?? [];
   const responsiveSignalUnits = signal.match(/layoutUnit\(width, height\)/g) ?? [];
-  const compositionRowLines = compositionLibrary.match(
-    /^\s*\["[^"]+","[^"]+","(?:crown|horizon|shrine|split|cabinet|monolith|ribbon|ledger|radial|folio|bleed)".+\],?$/gm,
-  ) ?? [];
-  const compositionRows = compositionRowLines.map((line) =>
-    JSON.parse(line.trim().replace(/,$/, "")),
-  );
+  const { COMPOSITION_RECIPES } = compositionModule;
 
   assert.equal(paintingRows.length, 300, `expected exactly 300 paintings, found ${paintingRows.length}`);
   assert.equal(new Set(paintingRows.map((row) => row[0])).size, 300, "painting QIDs must be unique");
@@ -128,31 +124,46 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   );
   assert.match(signal, /function layoutUnit\(width: number, height: number\)/);
   assert.match(signal, /Math\.min\(width, height\)/);
-  assert.equal(compositionRows.length, 32, `expected exactly 32 composition recipes, found ${compositionRows.length}`);
-  assert.equal(new Set(compositionRows.map((row) => row[0])).size, 32, "composition IDs must be unique");
-  assert.equal(new Set(compositionRows.map((row) => row[1])).size, 32, "composition names must be unique");
-  assert.ok(new Set(compositionRows.map((row) => row[2])).size >= 10, "composition layouts must span at least ten families");
-  assert.ok(new Set(compositionRows.map((row) => row[4])).size >= 8, "composition recipes must use all eight motifs");
-  assert.equal(new Set(compositionRows.map((row) => row[5])).size, 4, "composition recipes must use four palettes");
-  assert.equal(new Set(compositionRows.map((row) => row[6])).size, 4, "composition headlines must use four source strategies");
-  for (const row of compositionRows) {
-    assert.match(row[7], /^[TPSLW]+$/, `${row[0]} must declare valid artwork shapes`);
-    assert.ok(row[8] > 0, `${row[0]} must declare a positive portal aspect`);
-    assert.ok(row[9] >= 0.7 && row[9] <= 1, `${row[0]} must keep a sensible crop-retention floor`);
-    assert.ok(row[10] >= 28, `${row[0]} must declare a usable headline limit`);
+  assert.equal(COMPOSITION_RECIPES.length, 32, `expected exactly 32 composition recipes, found ${COMPOSITION_RECIPES.length}`);
+  for (const [property, label] of [
+    ["id", "IDs"],
+    ["name", "names"],
+    ["artworkQid", "artwork QIDs"],
+    ["motif", "semantic motifs"],
+  ]) {
+    assert.equal(
+      new Set(COMPOSITION_RECIPES.map((recipe) => recipe[property])).size,
+      32,
+      `composition ${label} must be unique`,
+    );
   }
-  assert.match(compositionLibrary, /function candidatePool/);
-  assert.match(compositionLibrary, /usedArtists/);
-  assert.match(compositionLibrary, /recentArtists\.length > 6/);
+  const paintingQids = new Set(paintingRows.map((row) => row[0]));
+  for (const recipe of COMPOSITION_RECIPES) {
+    assert.ok(paintingQids.has(recipe.artworkQid), `${recipe.id} must reference a bundled artwork`);
+  }
+  assert.equal(new Set(COMPOSITION_RECIPES.map((recipe) => recipe.palette)).size, 6, "compositions must use all six palettes");
+  assert.equal(new Set(COMPOSITION_RECIPES.map((recipe) => recipe.surface)).size, 6, "compositions must use all six print surfaces");
+  assert.equal(new Set(COMPOSITION_RECIPES.map((recipe) => recipe.titleMode)).size, 6, "compositions must use all six title treatments");
+  assert.equal(new Set(COMPOSITION_RECIPES.map((recipe) => recipe.artTreatment)).size, 6, "compositions must use all six artwork treatments");
+  assert.match(compositionLibrary, /artworkQid/);
+  assert.match(compositionLibrary, /CompositionGeometry/);
+  assert.match(compositionLibrary, /compositionArtCoverage/);
   assert.match(compositionLibrary, /minimumCropRetention/);
-  assert.match(compositionLibrary, /headlineLength/);
-  assert.match(compositionLibrary, /resolutionTarget/);
   assert.match(compositionLibrary, /resolveCompositionObjectFit/);
   assert.match(compositions, /ARTWORK_DATASET_VERSION/);
   assert.match(compositions, /const compositionImageUrl = useRemoteImage/);
   assert.match(compositions, /srcSet=/);
-  assert.match(compositions, /localPreloader\.src = localArtworkUrl\(adjacent\.artwork\.qid\)/);
+  assert.match(
+    compositions,
+    /const localPreloader = new Image\(\);[\s\S]*?localPreloader\.src = localArtworkUrl\(adjacent\.artwork\.qid\);[\s\S]*?const remotePreloader = new Image\(\);/,
+  );
+  assert.match(compositions, /commonsRedirect\(adjacent\.artwork\.fallbackFile, 4096\)/);
+  assert.match(compositions, /commonsRedirect\(artwork\.fallbackFile, 4096\)/);
   assert.match(compositions, /remotePreloader\.onload/);
+  assert.match(compositions, /function CompositionMark/);
+  assert.match(compositions, /composition-motif-\$\{recipe\.motif\}/);
+  assert.match(compositions, /data-theme=\{recipe\.theme\}/);
+  assert.match(compositions, /recipe\.motifLabel/);
   assert.match(compositions, /composition-navigation-help/);
   assert.match(paintings, /Copyrighted=False \/ Public domain/);
   assert.match(artworks, /ARTWORK_DATASET_VERSION/);
@@ -216,20 +227,43 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.doesNotMatch(styles, /\.gallery-next/);
   assert.match(styles, /grid-template-rows: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(styles, /\.composition-mode/);
-  assert.match(styles, /\.composition-sheet\s*\{[\s\S]*?grid-template-columns: repeat\(24, minmax\(0, 1fr\)\);[\s\S]*?grid-template-rows: repeat\(16, minmax\(0, 1fr\)\);/);
-  assert.match(styles, /@media \(max-aspect-ratio: 1 \/ 1\)/);
-  assert.match(styles, /@media \(min-aspect-ratio: 21 \/ 9\)/);
-  assert.match(styles, /\.composition-shape-t > \.composition-art/);
-  assert.match(styles, /\.composition-family-crown|\.composition-family-horizon/);
-  assert.match(styles, /\.composition-family-bleed\.composition-variant-d/);
-  assert.match(styles, /composition-art-grid/);
   assert.match(styles, /\.composition-art-backdrop/);
-  assert.match(styles, /\.composition-sheet\.is-contained \.composition-art-image/);
-  assert.match(styles, /composition-cell-field/);
-  assert.match(styles, /\.composition-bars\.is-bars/);
-  assert.match(styles, /\.composition-bars\.is-ledger/);
-  assert.match(styles, /\.composition-family-horizon > \.composition-art/);
-  assert.match(styles, /\.composition-family-cabinet > \.composition-art/);
+  assert.doesNotMatch(styles, /\.composition-panel\b/);
+  assert.doesNotMatch(compositions, /composition-panel\b/);
+  assert.match(styles, /\.composition-sheet::before/);
+  assert.match(styles, /\.composition-sheet::after/);
+  assert.match(styles, /repeating-radial-gradient/);
+  assert.match(styles, /repeating-linear-gradient/);
+  assert.match(styles, /mix-blend-mode: soft-light/);
+  assert.match(styles, /--composition-grain/);
+  for (const surface of new Set(COMPOSITION_RECIPES.map((recipe) => recipe.surface))) {
+    assert.match(styles, new RegExp(`\\.composition-surface-${surface}\\b`));
+  }
+  for (const motif of COMPOSITION_RECIPES.map((recipe) => recipe.motif)) {
+    const contextualSelectors = styles.match(
+      new RegExp(`\\.composition-motif-${motif}\\b`, "g"),
+    ) ?? [];
+    assert.ok(
+      contextualSelectors.length >= 3,
+      `${motif} must have multiple contextual mark treatments`,
+    );
+  }
+  const portraitMediaStart = styles.indexOf("@media (max-aspect-ratio: 5 / 4)");
+  assert.notEqual(portraitMediaStart, -1, "compositions must switch to authored portrait geometry at 5:4");
+  const nextMediaStart = styles.indexOf("@media", portraitMediaStart + 7);
+  const portraitMedia = styles.slice(
+    portraitMediaStart,
+    nextMediaStart === -1 ? styles.length : nextMediaStart,
+  );
+  for (const region of ["art", "heading", "motif", "details"]) {
+    for (const axis of ["x", "y", "w", "h"]) {
+      assert.match(
+        portraitMedia,
+        new RegExp(`var\\(--portrait-${region}-${axis},\\s*var\\(--${region}-${axis}\\)\\)`),
+        `portrait ${region} geometry must resolve its ${axis} coordinate`,
+      );
+    }
+  }
 });
 
 test("bundles an exact high-resolution local fallback for every painting", async () => {
@@ -268,8 +302,8 @@ test("bundles an exact high-resolution local fallback for every painting", async
   }
 });
 
-test("builds diverse composition decks without unsafe crops or repeats", async () => {
-  const [{ buildCompositionDeck, COMPOSITION_COUNT, COMPOSITION_RECIPES, compositionCropRetention, resolveCompositionObjectFit }, paintings] = await Promise.all([
+test("builds the fixed curated composition deck with bounded geometry and safe crops", async () => {
+  const [{ buildCompositionDeck, COMPOSITION_COUNT, COMPOSITION_RECIPES, compositionArtCoverage, compositionCropRetention, resolveCompositionObjectFit }, paintings] = await Promise.all([
     import(new URL("../app/modes/composition-library.ts", import.meta.url).href),
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
   ]);
@@ -290,45 +324,84 @@ test("builds diverse composition decks without unsafe crops or repeats", async (
     licenseUrl: "https://commons.wikimedia.org/",
     descriptionUrl: "https://commons.wikimedia.org/",
   }));
-  const circulated = new Set();
-
-  for (let seed = 0; seed < 64; seed += 1) {
-    const deck = buildCompositionDeck(artworks, `regression:${seed}`);
+  const expectedPairings = COMPOSITION_RECIPES.map((recipe) => [recipe.id, recipe.artworkQid]);
+  for (const seed of ["first-light", "midday", "after-dark", "another-year"]) {
+    const deck = buildCompositionDeck(artworks, seed);
     assert.equal(deck.length, COMPOSITION_COUNT);
     assert.equal(new Set(deck.map((item) => item.artwork.qid)).size, COMPOSITION_COUNT);
-    assert.equal(new Set(deck.map((item) => item.artwork.artist)).size, COMPOSITION_COUNT);
+    assert.deepEqual(
+      deck.map((item) => [item.recipe.id, item.artwork.qid]),
+      expectedPairings,
+      "curated recipe-to-artwork pairings must not change with the daily seed",
+    );
     for (const item of deck) {
-      circulated.add(item.artwork.qid);
+      assert.equal(item.artwork.qid, item.recipe.artworkQid);
+      assert.equal(item.focusX, item.recipe.focusX);
+      assert.equal(item.focusY, item.recipe.focusY);
       assert.ok(
         item.objectFit === "contain" || item.cropRetention >= item.recipe.minimumCropRetention,
         `${item.recipe.id} must not use an unsafe cover crop`,
       );
-      for (const portalAspect of [0.5, 1, 2, 4]) {
+      for (const portalAspect of [0.35, 0.5, 0.75, 1, 1.25, 16 / 9, 2.5, 4, 8]) {
         const fit = resolveCompositionObjectFit(item.recipe, item.artwork, portalAspect);
         assert.ok(
           fit === "contain" ||
             compositionCropRetention(item.artwork, portalAspect) >= item.recipe.minimumCropRetention,
           `${item.recipe.id} must adapt its fit to the measured portal`,
         );
+        if (item.recipe.artTreatment === "folio" || item.recipe.artTreatment === "scroll") {
+          assert.equal(fit, "contain", `${item.recipe.id} must preserve the full composition`);
+        }
       }
     }
   }
 
-  const ribbonRecipe = COMPOSITION_RECIPES.find((recipe) => recipe.id === "scanline-strip");
-  const horizonRecipe = COMPOSITION_RECIPES.find((recipe) => recipe.id === "horizon-banner");
-  const wideArtwork = artworks.find(
-    (artwork) => artwork.width / artwork.height > 2.2 && artwork.width / artwork.height < 3,
+  const geometryValues = (recipe) =>
+    ["landscape", "portrait"].flatMap((orientation) =>
+      ["art", "heading", "motif", "details"].flatMap((region) => recipe[orientation][region]),
+    );
+  const geometrySignatures = new Set(
+    COMPOSITION_RECIPES.map((recipe) => geometryValues(recipe).join(",")),
   );
-  const landscapeArtwork = artworks.find(
-    (artwork) => artwork.width / artwork.height > 1.3 && artwork.width / artwork.height < 1.6,
+  assert.equal(geometrySignatures.size, 32, "every composition must have a unique authored geometry signature");
+  assert.ok(
+    new Set(COMPOSITION_RECIPES.map((recipe) => recipe.landscape.art.join(","))).size >= 20,
+    "landscape artwork placement must materially vary",
   );
-  assert.ok(ribbonRecipe && horizonRecipe && wideArtwork && landscapeArtwork);
-  assert.equal(resolveCompositionObjectFit(ribbonRecipe, wideArtwork, 1.02), "contain");
-  assert.equal(
-    resolveCompositionObjectFit(ribbonRecipe, wideArtwork, wideArtwork.width / wideArtwork.height),
-    "cover",
+  assert.ok(
+    new Set(COMPOSITION_RECIPES.map((recipe) => recipe.portrait.art.join(","))).size >= 16,
+    "portrait artwork placement must materially vary",
   );
-  assert.equal(resolveCompositionObjectFit(horizonRecipe, landscapeArtwork, 4.15), "contain");
+  let nearestGeometryDistance = Number.POSITIVE_INFINITY;
+  for (let leftIndex = 0; leftIndex < COMPOSITION_RECIPES.length; leftIndex += 1) {
+    const left = geometryValues(COMPOSITION_RECIPES[leftIndex]);
+    for (let rightIndex = leftIndex + 1; rightIndex < COMPOSITION_RECIPES.length; rightIndex += 1) {
+      const right = geometryValues(COMPOSITION_RECIPES[rightIndex]);
+      const distance = left.reduce((total, value, index) => total + Math.abs(value - right[index]), 0);
+      nearestGeometryDistance = Math.min(nearestGeometryDistance, distance);
+    }
+  }
+  assert.ok(nearestGeometryDistance >= 16, `geometry signatures are too similar (${nearestGeometryDistance})`);
 
-  assert.ok(circulated.size >= 160, `expected broad collection circulation, found ${circulated.size} paintings`);
+  for (const recipe of COMPOSITION_RECIPES) {
+    assert.ok(recipe.focusX >= 0 && recipe.focusX <= 100, `${recipe.id} must have a valid horizontal focus`);
+    assert.ok(recipe.focusY >= 0 && recipe.focusY <= 100, `${recipe.id} must have a valid vertical focus`);
+    assert.ok(
+      recipe.minimumCropRetention >= 0.5 && recipe.minimumCropRetention <= 1,
+      `${recipe.id} must have a valid crop-retention floor`,
+    );
+    for (const [orientation, minimumCoverage] of [["landscape", 0.6], ["portrait", 0.64]]) {
+      const geometry = recipe[orientation];
+      assert.ok(
+        compositionArtCoverage(geometry) >= minimumCoverage,
+        `${recipe.id} must keep the artwork dominant in ${orientation}`,
+      );
+      for (const region of ["art", "heading", "motif", "details"]) {
+        const [x, y, width, height] = geometry[region];
+        assert.ok([x, y, width, height].every(Number.isFinite), `${recipe.id} ${orientation} ${region} must be finite`);
+        assert.ok(x >= 0 && y >= 0 && width > 0 && height > 0, `${recipe.id} ${orientation} ${region} must have positive bounds`);
+        assert.ok(x + width <= 100 && y + height <= 100, `${recipe.id} ${orientation} ${region} must stay on canvas`);
+      }
+    }
+  }
 });

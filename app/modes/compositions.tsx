@@ -24,7 +24,8 @@ import {
   COMPOSITION_CYCLE_TIME,
   resolveCompositionObjectFit,
   type CompositionDeckItem,
-  type CompositionMotif,
+  type CompositionRecipe,
+  type CompositionRect,
 } from "./composition-library";
 
 function hashString(value: string) {
@@ -59,177 +60,71 @@ function balancedLines(value: string): [string, string] {
   return [words.slice(0, split).join(" "), words.slice(split).join(" ")];
 }
 
-function headlineFor(item: CompositionDeckItem): [string, string] {
-  const { artwork, recipe } = item;
-  if (recipe.headlineSource === "frame") return ["ALWAYS–ON", "FRAME"];
-  if (recipe.headlineSource === "year") return [artwork.year, artwork.title];
-  if (recipe.headlineSource === "artist") return balancedLines(artwork.artist);
-  return balancedLines(artwork.title);
-}
-
-function artistMonogram(artwork: ArtworkSeed) {
-  return artwork.artist
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toLocaleUpperCase();
-}
-
 function imageSizesFor(item: CompositionDeckItem) {
-  const fullWidth =
-    item.recipe.family === "horizon" ||
-    item.recipe.family === "ribbon" ||
-    (item.recipe.family === "bleed" && item.recipe.variant === "d");
-  return fullWidth
-    ? "100vw"
-    : "(max-aspect-ratio: 1/1) 100vw, 70vw";
+  if (item.recipe.artTreatment === "portrait-anchor") {
+    return "(max-aspect-ratio: 5/4) 100vw, 72vw";
+  }
+  return "100vw";
 }
 
-function CompositionDiagram({
-  motif,
-  signature,
-  year,
-}: {
-  motif: CompositionMotif;
-  signature: string;
-  year: string;
-}) {
-  const seed = hashString(signature);
-  const yearNumber = Number.parseInt(year.match(/\d{4}/)?.[0] ?? "1500", 10);
+function rectVariables(prefix: string, rect: CompositionRect) {
+  const [x, y, width, height] = rect;
+  return {
+    [`--${prefix}-x`]: `${x}%`,
+    [`--${prefix}-y`]: `${y}%`,
+    [`--${prefix}-w`]: `${width}%`,
+    [`--${prefix}-h`]: `${height}%`,
+  };
+}
 
-  if (motif === "constellation") {
-    return (
-      <div className="composition-constellation">
-        {Array.from({ length: 8 }, (_, index) => (
+function compositionStyle(recipe: CompositionRecipe, artwork: ArtworkSeed) {
+  const signature = `${recipe.id}:${artwork.qid}`;
+  const seed = hashString(signature);
+  return {
+    ...rectVariables("art", recipe.landscape.art),
+    ...rectVariables("heading", recipe.landscape.heading),
+    ...rectVariables("motif", recipe.landscape.motif),
+    ...rectVariables("details", recipe.landscape.details),
+    ...rectVariables("portrait-art", recipe.portrait.art),
+    ...rectVariables("portrait-heading", recipe.portrait.heading),
+    ...rectVariables("portrait-motif", recipe.portrait.motif),
+    ...rectVariables("portrait-details", recipe.portrait.details),
+    "--composition-art-accent": artwork.accent,
+    "--composition-focus-x": `${recipe.focusX}%`,
+    "--composition-focus-y": `${recipe.focusY}%`,
+    "--composition-grain": String(0.14 + (seed % 8) / 100),
+    "--composition-wear-x": `${12 + (seed % 77)}%`,
+    "--composition-wear-y": `${10 + ((seed >> 8) % 79)}%`,
+    "--composition-register": `${(seed % 3) + 1}px`,
+  } as CSSProperties;
+}
+
+function CompositionMark({ recipe, signature }: { recipe: CompositionRecipe; signature: string }) {
+  const seed = hashString(signature);
+  return (
+    <div className="composition-mark">
+      <span className="mark-axis-a" />
+      <span className="mark-axis-b" />
+      {Array.from({ length: 14 }, (_, index) => {
+        const value = hashString(`${seed}:${recipe.motif}:${index}`);
+        return (
           <i
             key={index}
             style={
               {
-                "--constellation-angle": `${(seed % 37) + index * 45}deg`,
-                "--constellation-reach": `${38 + ((seed >> (index % 12)) % 42)}%`,
+                "--mark-index": index,
+                "--mark-value": value % 100,
+                "--mark-angle": `${(value + index * 29) % 360}deg`,
+                "--mark-x": `${7 + (value % 86)}%`,
+                "--mark-y": `${8 + ((value >> 7) % 84)}%`,
+                "--mark-size": `${2 + ((value >> 13) % 7)}px`,
               } as CSSProperties
             }
           />
-        ))}
-        <b />
-      </div>
-    );
-  }
-
-  if (motif === "orbit") {
-    return (
-      <div className="composition-orbit">
-        <i /><i /><i />
-        {Array.from({ length: 16 }, (_, index) => (
-          <b key={index} style={{ transform: `rotate(${index * 22.5}deg)` }} />
-        ))}
-        <span>{String(yearNumber).slice(-2)}</span>
-      </div>
-    );
-  }
-
-  if (motif === "coordinate") {
-    return (
-      <div className="composition-coordinate">
-        <i className="axis-x" /><i className="axis-y" />
-        {Array.from({ length: 7 }, (_, index) => (
-          <b
-            key={index}
-            style={{
-              left: `${14 + ((seed >> (index % 16)) % 72)}%`,
-              top: `${14 + ((seed >> ((index + 5) % 16)) % 72)}%`,
-            }}
-          />
-        ))}
-        <span>X / Y</span>
-      </div>
-    );
-  }
-
-  if (motif === "waveform") {
-    return (
-      <div className="composition-waveform">
-        {Array.from({ length: 24 }, (_, index) => (
-          <i
-            key={index}
-            style={{ height: `${18 + ((seed >> (index % 20)) % 72)}%` }}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  if (motif === "timeline") {
-    return (
-      <div className="composition-timeline">
-        {Array.from({ length: 7 }, (_, index) => {
-          const century = 1300 + index * 100;
-          return (
-            <span key={century} className={yearNumber >= century && yearNumber < century + 100 ? "is-active" : ""}>
-              <b>{String(century).slice(0, 2)}</b><i />
-            </span>
-          );
-        })}
-      </div>
-    );
-  }
-
-  if (motif === "matrix") {
-    return (
-      <div className="composition-mini-matrix">
-        {Array.from({ length: 42 }, (_, index) => (
-          <i key={index} className={((seed + index * 13) >>> (index % 17)) % 5 < 2 ? "is-on" : ""} />
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className={`composition-bars is-${motif}`}>
-      {Array.from({ length: 9 }, (_, index) => (
-        <span key={index}>
-          <b>.{String(index + 1).padStart(2, "0")}</b>
-          <i style={{ width: `${32 + ((seed >> (index % 18)) % 64)}%` }} />
-          <em>{String((seed + index * 17) % 97).padStart(2, "0")}</em>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function CompositionMatrix({ signature }: { signature: string }) {
-  const seed = hashString(signature);
-  return (
-    <div className="composition-cell-field">
-      {Array.from({ length: 96 }, (_, index) => {
-        const value = hashString(`${seed}:${index}`) % 13;
-        return <i key={index} className={value === 0 ? "is-accent" : value < 6 ? "is-on" : ""} />;
+        );
       })}
-    </div>
-  );
-}
-
-function CompositionLedger({ item, position }: { item: CompositionDeckItem; position: number }) {
-  const { artwork } = item;
-  const values = [
-    ["QID", artwork.qid],
-    ["YEAR", artwork.year],
-    ["PX–W", String(artwork.width)],
-    ["PX–H", String(artwork.height)],
-    ["RATIO", (artwork.width / artwork.height).toFixed(3)],
-    ["TITLE", String(artwork.title.length).padStart(2, "0")],
-    ["ARTIST", artistMonogram(artwork)],
-    ["PLATE", String(position + 1).padStart(3, "0")],
-  ];
-  return (
-    <div className="composition-ledger-list">
-      {values.map(([label, value], index) => (
-        <span key={label}>
-          <b>{label}</b><i /><em className={index === 1 ? "is-accent" : ""}>{value}</em>
-        </span>
-      ))}
+      <b />
+      <small>{recipe.motifLabel}</small>
     </div>
   );
 }
@@ -237,10 +132,9 @@ function CompositionLedger({ item, position }: { item: CompositionDeckItem; posi
 export function CompositionsMode({ paused = false }: { paused?: boolean }) {
   const sectionRef = useRef<HTMLElement>(null);
   const artRef = useRef<HTMLDivElement>(null);
-  const [daySeed] = useState(() => Math.floor(Date.now() / 86_400_000));
   const deck = useMemo(
-    () => buildCompositionDeck(ARTWORK_SEEDS, `${ARTWORK_DATASET_VERSION}:${daySeed}`),
-    [daySeed],
+    () => buildCompositionDeck(ARTWORK_SEEDS, ARTWORK_DATASET_VERSION),
+    [],
   );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timerReset, setTimerReset] = useState(0);
@@ -316,18 +210,13 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
   }, [advance, paused, timerReset, currentIndex]);
 
   useEffect(() => {
-    if (paused) return;
-    if (deck.length < 2) return;
+    if (paused || deck.length < 2) return;
     let disposed = false;
     const preloaders: HTMLImageElement[] = [];
     const queued = new Set<string>();
     for (const offset of [0, -1, 1]) {
       const adjacent = deck[(activeIndex + offset + deck.length) % deck.length];
-      if (
-        !adjacent ||
-        queued.has(adjacent.artwork.qid) ||
-        failedImages.has(adjacent.artwork.qid)
-      ) continue;
+      if (!adjacent || queued.has(adjacent.artwork.qid) || failedImages.has(adjacent.artwork.qid)) continue;
       queued.add(adjacent.artwork.qid);
 
       const localPreloader = new Image();
@@ -347,8 +236,8 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
           return next;
         });
       };
-      remotePreloader.srcset = `${commonsRedirect(adjacent.artwork.fallbackFile, 1200)} 1200w, ${commonsRedirect(adjacent.artwork.fallbackFile, 2000)} 2000w, ${commonsRedirect(adjacent.artwork.fallbackFile, 2800)} 2800w`;
-      remotePreloader.src = commonsRedirect(adjacent.artwork.fallbackFile, 2400);
+      remotePreloader.srcset = `${commonsRedirect(adjacent.artwork.fallbackFile, 1600)} 1600w, ${commonsRedirect(adjacent.artwork.fallbackFile, 2400)} 2400w, ${commonsRedirect(adjacent.artwork.fallbackFile, 3200)} 3200w, ${commonsRedirect(adjacent.artwork.fallbackFile, 4096)} 4096w`;
+      remotePreloader.src = commonsRedirect(adjacent.artwork.fallbackFile, 3200);
       preloaders.push(remotePreloader);
     }
     return () => {
@@ -383,36 +272,28 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
   }
 
   const { artwork, recipe } = current;
-  const headline = headlineFor(current);
+  const headline = balancedLines(artwork.title);
   const sourceShape = artworkShape(artwork);
-  const headlineLength = headline.join(" ").length;
+  const headlineLength = artwork.title.length;
   const headlineClass = headlineLength > 46 ? "is-long" : headlineLength > 28 ? "is-medium" : "is-short";
   const signature = `${recipe.id}:${artwork.qid}:${artwork.year}:${artwork.width}x${artwork.height}`;
   const articleUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(artwork.articleTitle.replace(/ /g, "_"))}`;
   const imageMissing = failedImages.has(artwork.qid);
-  const measuredPortalAspect = portalMeasurement?.key === currentKey
-    ? portalMeasurement.aspect
-    : null;
+  const measuredPortalAspect = portalMeasurement?.key === currentKey ? portalMeasurement.aspect : null;
   const measuredCropRetention = measuredPortalAspect
     ? Math.min(
         (artwork.width / artwork.height) / measuredPortalAspect,
         measuredPortalAspect / (artwork.width / artwork.height),
       )
     : 0;
-  const resolvedObjectFit =
-    measuredPortalAspect === null
-      ? "contain"
-      : resolveCompositionObjectFit(recipe, artwork, measuredPortalAspect);
+  const resolvedObjectFit = measuredPortalAspect === null
+    ? "contain"
+    : resolveCompositionObjectFit(recipe, artwork, measuredPortalAspect);
   const imageSizes = imageSizesFor(current);
   const useRemoteImage = remoteReady.has(artwork.qid);
   const compositionImageUrl = useRemoteImage
-    ? commonsRedirect(artwork.fallbackFile, 2400)
+    ? commonsRedirect(artwork.fallbackFile, 3200)
     : localArtworkUrl(artwork.qid);
-  const style = {
-    "--composition-art-accent": artwork.accent,
-    "--composition-focus-x": `${current.focusX}%`,
-    "--composition-focus-y": `${current.focusY}%`,
-  } as CSSProperties;
 
   return (
     <section
@@ -438,30 +319,33 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
           navigateManually(1);
         }
       }}
-      style={style}
     >
       <article
         key={`${recipe.id}-${artwork.qid}`}
-        className={`composition-sheet composition-family-${recipe.family} composition-variant-${recipe.variant} composition-palette-${recipe.palette} composition-motif-${recipe.motif} composition-shape-${sourceShape.toLocaleLowerCase()} ${headlineClass}${resolvedObjectFit === "contain" ? " is-contained" : ""}`}
+        className={`composition-sheet composition-palette-${recipe.palette} composition-surface-${recipe.surface} composition-title-${recipe.titleMode} composition-treatment-${recipe.artTreatment} composition-motif-${recipe.motif} composition-shape-${sourceShape.toLocaleLowerCase()} ${headlineClass}${resolvedObjectFit === "contain" ? " is-contained" : ""}`}
         data-composition={recipe.id}
+        data-artwork={artwork.qid}
+        data-theme={recipe.theme}
         data-crop-retention={measuredPortalAspect ? measuredCropRetention.toFixed(3) : "measuring"}
+        style={compositionStyle(recipe, artwork)}
       >
-        <header className="composition-chrome composition-panel">
-          <span>ALWAYS–ON / COMPOSITION ATLAS</span>
-          <span>{recipe.name.toLocaleUpperCase()} / {String(activeIndex + 1).padStart(2, "0")}</span>
+        <header className="composition-chrome">
+          <span>SWIKIPEDIA / COMPOSITION ATLAS</span>
+          <span>{String(activeIndex + 1).padStart(2, "0")} / {String(COMPOSITION_COUNT).padStart(2, "0")}</span>
+          <span>{recipe.name.toLocaleUpperCase()}</span>
         </header>
 
-        <div ref={artRef} className={`composition-art composition-panel${imageMissing ? " is-missing" : ""}`}>
+        <div ref={artRef} className={`composition-art${imageMissing ? " is-missing" : ""}`}>
           {!imageMissing && (
             <>
               {resolvedObjectFit === "contain" && (
                 <img
                   className="composition-art-backdrop"
-                  src={useRemoteImage ? commonsRedirect(artwork.fallbackFile, 1200) : localArtworkUrl(artwork.qid)}
+                  src={useRemoteImage ? commonsRedirect(artwork.fallbackFile, 1600) : localArtworkUrl(artwork.qid)}
                   alt=""
                   aria-hidden="true"
                   decoding="async"
-                  style={{ objectPosition: `${current.focusX}% ${current.focusY}%` }}
+                  style={{ objectPosition: `${recipe.focusX}% ${recipe.focusY}%` }}
                   onError={(event) => {
                     const image = event.currentTarget;
                     if (image.dataset.recovery === "local") {
@@ -476,14 +360,14 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
               <img
                 className="composition-art-image"
                 src={compositionImageUrl}
-                srcSet={useRemoteImage ? `${commonsRedirect(artwork.fallbackFile, 1200)} 1200w, ${commonsRedirect(artwork.fallbackFile, 2000)} 2000w, ${commonsRedirect(artwork.fallbackFile, 2800)} 2800w` : undefined}
+                srcSet={useRemoteImage ? `${commonsRedirect(artwork.fallbackFile, 1600)} 1600w, ${commonsRedirect(artwork.fallbackFile, 2400)} 2400w, ${commonsRedirect(artwork.fallbackFile, 3200)} 3200w, ${commonsRedirect(artwork.fallbackFile, 4096)} 4096w` : undefined}
                 sizes={imageSizes}
                 alt={`${artwork.title} by ${artwork.artist}, ${artwork.year}`}
                 decoding="async"
                 fetchPriority="high"
                 style={{
                   objectFit: resolvedObjectFit,
-                  objectPosition: `${current.focusX}% ${current.focusY}%`,
+                  objectPosition: `${recipe.focusX}% ${recipe.focusY}%`,
                 }}
                 onError={() => {
                   if (useRemoteImage) {
@@ -503,39 +387,32 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
               />
             </>
           )}
-          <div className="composition-art-grid" aria-hidden="true" />
-          <div className="composition-art-dissolve" aria-hidden="true" />
+          <div className="composition-art-wash" aria-hidden="true" />
           <span className="composition-art-label">{artwork.qid} / {artwork.width}×{artwork.height}</span>
-          {imageMissing && <span className="composition-image-status">IMAGE SIGNAL RETRYING</span>}
+          {imageMissing && <span className="composition-image-status">LOCAL IMAGE SIGNAL RETRYING</span>}
         </div>
 
-        <section className="composition-heading composition-panel">
-          <p>PUBLIC DOMAIN / PLATE {String(activeIndex + 1).padStart(3, "0")}</p>
+        <section className="composition-heading">
+          <p>{recipe.theme} / {artwork.year}</p>
           <h1 id="composition-title">
             <span>{headline[0]}</span>
             {headline[1] && <span>{headline[1]}</span>}
           </h1>
-          <small>{artwork.title} · {artwork.artist}</small>
+          <small>{artwork.artist} · {recipe.motifLabel}</small>
         </section>
 
-        <div className="composition-diagram composition-panel" aria-hidden="true">
-          <CompositionDiagram motif={recipe.motif} signature={signature} year={artwork.year} />
+        <div className="composition-motif" aria-hidden="true">
+          <CompositionMark recipe={recipe} signature={signature} />
         </div>
 
-        <div className="composition-matrix composition-panel" aria-hidden="true">
-          <CompositionMatrix signature={signature} />
-        </div>
+        <aside className="composition-details" aria-label="Artwork details">
+          <span>PLATE {String(activeIndex + 1).padStart(3, "0")}</span>
+          <strong>{artwork.artist}</strong>
+          <span>{artwork.year} · {artwork.width}×{artwork.height}</span>
+          <span>{recipe.motifLabel}</span>
+        </aside>
 
-        <div className="composition-ledger composition-panel" aria-hidden="true">
-          <CompositionLedger item={current} position={activeIndex} />
-        </div>
-
-        <div className="composition-monogram composition-panel" aria-hidden="true">
-          <strong>{artistMonogram(artwork)}</strong>
-          <span>{artwork.year}</span>
-        </div>
-
-        <footer className="composition-footer composition-panel">
+        <footer className="composition-footer">
           <span>WIKIMEDIA COMMONS / PUBLIC DOMAIN</span>
           <a
             href={articleUrl}
@@ -545,7 +422,7 @@ export function CompositionsMode({ paused = false }: { paused?: boolean }) {
           >
             {artwork.title}
           </a>
-          <span>NEXT SYSTEM / {formatCountdown(remaining)}</span>
+          <span>NEXT POSTER / {formatCountdown(remaining)}</span>
         </footer>
       </article>
 

@@ -850,7 +850,7 @@ a:focus-visible {
 .composition-mode {
   overflow: hidden;
   color: #eadfce;
-  background: #12090c;
+  background: #10080b;
 }
 
 .composition-mode:focus {
@@ -858,109 +858,285 @@ a:focus-visible {
 }
 
 .composition-mode:focus-visible {
-  outline: 1px solid rgba(234, 223, 206, 0.5);
-  outline-offset: -4px;
+  outline: 2px solid rgba(234, 223, 206, 0.62);
+  outline-offset: -5px;
 }
 
 .composition-sheet {
-  --composition-bg: #160c0f;
-  --composition-ink: #eadfce;
-  --composition-dim: rgba(234, 223, 206, 0.56);
-  --composition-line: rgba(234, 223, 206, 0.24);
-  --composition-panel: rgba(17, 8, 11, 0.64);
-  --composition-accent: #e34c82;
+  --composition-bg: #160b0f;
+  --composition-ink: #eee1cf;
+  --composition-dim: rgba(238, 225, 207, 0.62);
+  --composition-line: rgba(238, 225, 207, 0.26);
+  --composition-accent: #d64270;
+  --composition-spot: color-mix(in srgb, var(--composition-accent) 76%, var(--composition-art-accent, #8c6a58));
+  --composition-grain: 0.17;
+  --composition-shadow: rgba(5, 2, 3, 0.54);
+  --art-x: 34%;
+  --art-y: 0%;
+  --art-w: 66%;
+  --art-h: 100%;
+  --heading-x: 4%;
+  --heading-y: 28%;
+  --heading-w: 58%;
+  --heading-h: 48%;
+  --motif-x: 4%;
+  --motif-y: 5%;
+  --motif-w: 26%;
+  --motif-h: 20%;
+  --details-x: 4%;
+  --details-y: 79%;
+  --details-w: 27%;
+  --details-h: 13%;
+  --layout-art-x: var(--art-x);
+  --layout-art-y: var(--art-y);
+  --layout-art-w: var(--art-w);
+  --layout-art-h: var(--art-h);
+  --layout-heading-x: var(--heading-x);
+  --layout-heading-y: var(--heading-y);
+  --layout-heading-w: var(--heading-w);
+  --layout-heading-h: var(--heading-h);
+  --layout-motif-x: var(--motif-x);
+  --layout-motif-y: var(--motif-y);
+  --layout-motif-w: var(--motif-w);
+  --layout-motif-h: var(--motif-h);
+  --layout-details-x: var(--details-x);
+  --layout-details-y: var(--details-y);
+  --layout-details-w: var(--details-w);
+  --layout-details-h: var(--details-h);
   position: absolute;
   inset: 0;
-  display: grid;
-  grid-template-columns: repeat(24, minmax(0, 1fr));
-  grid-template-rows: repeat(16, minmax(0, 1fr));
-  padding:
-    max(clamp(13px, 2.2vmin, 30px), env(safe-area-inset-top))
-    max(clamp(13px, 2.2vmin, 30px), env(safe-area-inset-right))
-    max(clamp(13px, 2.2vmin, 30px), env(safe-area-inset-bottom))
-    max(clamp(13px, 2.2vmin, 30px), env(safe-area-inset-left));
   overflow: hidden;
   isolation: isolate;
   color: var(--composition-ink);
   background-color: var(--composition-bg);
   background-image:
-    linear-gradient(var(--composition-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--composition-line) 1px, transparent 1px),
-    radial-gradient(circle at 68% 36%, color-mix(in srgb, var(--composition-art-accent) 23%, transparent), transparent 38%);
-  background-size: 4.1667% 6.25%, 4.1667% 6.25%, 100% 100%;
-  animation: composition-in 950ms cubic-bezier(0.2, 0.78, 0.2, 1) both;
+    radial-gradient(circle at 76% 34%, color-mix(in srgb, var(--composition-art-accent, #73584c) 20%, transparent), transparent 42%),
+    linear-gradient(118deg, color-mix(in srgb, var(--composition-bg) 84%, #000) 0%, var(--composition-bg) 64%);
+  animation: composition-in 760ms cubic-bezier(0.2, 0.78, 0.2, 1) both;
+}
+
+.composition-sheet::before,
+.composition-sheet::after {
+  content: "";
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  pointer-events: none;
 }
 
 .composition-sheet::before {
-  content: "";
-  position: absolute;
-  z-index: 8;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.18;
+  opacity: var(--composition-grain);
   mix-blend-mode: soft-light;
   background-image:
-    repeating-radial-gradient(circle at 28% 43%, transparent 0 1px, rgba(255, 255, 255, 0.18) 1.5px 2px, transparent 2.5px 4px),
-    linear-gradient(100deg, transparent 0 48%, rgba(255, 255, 255, 0.06) 50%, transparent 52%);
-  background-size: 5px 5px, 100% 100%;
+    repeating-radial-gradient(circle at 13% 19%, transparent 0 1px, rgba(255, 255, 255, 0.16) 1.35px 1.8px, transparent 2.15px 4px),
+    repeating-radial-gradient(circle at 71% 63%, transparent 0 1.2px, rgba(0, 0, 0, 0.28) 1.45px 1.9px, transparent 2.2px 5px),
+    repeating-linear-gradient(97deg, transparent 0 29px, rgba(255, 255, 255, 0.032) 30px 31px, transparent 32px 67px);
+  background-size: 5px 7px, 9px 13px, 100% 100%;
+  background-position: 1px 2px, 4px 1px, 0 0;
+}
+
+.composition-sheet::after {
+  z-index: 19;
+  opacity: 0.46;
+  background:
+    radial-gradient(ellipse at var(--composition-wear-x, 50%) var(--composition-wear-y, 44%), transparent 34%, rgba(0, 0, 0, 0.12) 72%, rgba(0, 0, 0, 0.34) 122%),
+    linear-gradient(101deg, transparent 0 48%, rgba(255, 255, 255, 0.018) 49%, transparent 51%);
+  mix-blend-mode: multiply;
 }
 
 .composition-palette-umber {
-  --composition-bg: #1c100b;
-  --composition-panel: rgba(24, 13, 8, 0.65);
-  --composition-accent: #d34b68;
+  --composition-bg: #1a0f0a;
+  --composition-ink: #eee0cb;
+  --composition-dim: rgba(238, 224, 203, 0.61);
+  --composition-line: rgba(238, 224, 203, 0.24);
+  --composition-accent: #c84b61;
 }
 
 .composition-palette-carbon {
-  --composition-bg: #0d1114;
-  --composition-panel: rgba(8, 13, 16, 0.68);
-  --composition-line: rgba(226, 220, 209, 0.2);
-  --composition-accent: #e24979;
+  --composition-bg: #0b0e11;
+  --composition-ink: #e8e1d5;
+  --composition-dim: rgba(232, 225, 213, 0.6);
+  --composition-line: rgba(232, 225, 213, 0.22);
+  --composition-accent: #dd3e70;
 }
 
 .composition-palette-parchment {
-  --composition-bg: #dfd2bc;
-  --composition-ink: #251015;
-  --composition-dim: rgba(37, 16, 21, 0.6);
-  --composition-line: rgba(37, 16, 21, 0.24);
-  --composition-panel: rgba(232, 221, 201, 0.72);
-  --composition-accent: #b92555;
+  --composition-bg: #ded0b7;
+  --composition-ink: #291217;
+  --composition-dim: rgba(41, 18, 23, 0.64);
+  --composition-line: rgba(41, 18, 23, 0.25);
+  --composition-accent: #b51f4c;
+  --composition-shadow: rgba(69, 39, 28, 0.25);
 }
 
-.composition-panel {
-  position: relative;
+.composition-palette-indigo {
+  --composition-bg: #0a1320;
+  --composition-ink: #e5ddcf;
+  --composition-dim: rgba(229, 221, 207, 0.62);
+  --composition-line: rgba(229, 221, 207, 0.23);
+  --composition-accent: #e05865;
+}
+
+.composition-palette-verdigris {
+  --composition-bg: #12201d;
+  --composition-ink: #eadfc9;
+  --composition-dim: rgba(234, 223, 201, 0.6);
+  --composition-line: rgba(234, 223, 201, 0.23);
+  --composition-accent: #d64b62;
+}
+
+.composition-surface-dry-ink {
+  --composition-grain: 0.25;
+}
+
+.composition-surface-dry-ink::after {
+  opacity: 0.6;
+  background:
+    repeating-linear-gradient(7deg, transparent 0 18px, rgba(0, 0, 0, 0.035) 19px, transparent 20px 39px),
+    radial-gradient(ellipse at 50% 42%, transparent 35%, rgba(0, 0, 0, 0.34) 122%);
+}
+
+.composition-surface-fiber {
+  --composition-grain: 0.2;
+}
+
+.composition-surface-fiber::before {
+  background-image:
+    repeating-linear-gradient(4deg, transparent 0 3px, rgba(255, 255, 255, 0.055) 4px, transparent 5px 13px),
+    repeating-linear-gradient(92deg, transparent 0 7px, rgba(0, 0, 0, 0.055) 8px, transparent 9px 21px),
+    repeating-radial-gradient(circle, transparent 0 1px, rgba(0, 0, 0, 0.18) 1.3px 1.7px, transparent 2px 5px);
+  background-size: 100% 100%, 100% 100%, 8px 11px;
+}
+
+.composition-surface-dust {
+  --composition-grain: 0.22;
+}
+
+.composition-surface-dust::before {
+  background-image:
+    repeating-radial-gradient(circle at 24% 38%, transparent 0 2px, rgba(255, 255, 255, 0.2) 2.3px 2.7px, transparent 3px 8px),
+    repeating-radial-gradient(circle at 82% 14%, transparent 0 1px, rgba(0, 0, 0, 0.36) 1.2px 1.6px, transparent 1.9px 6px);
+  background-size: 13px 17px, 7px 11px;
+}
+
+.composition-surface-halftone {
+  --composition-grain: 0.14;
+}
+
+.composition-surface-halftone::before {
+  opacity: 0.2;
+  mix-blend-mode: multiply;
+  background-image:
+    radial-gradient(circle, currentColor 0 0.55px, transparent 0.8px),
+    repeating-linear-gradient(103deg, transparent 0 31px, rgba(255, 255, 255, 0.045) 32px, transparent 33px 73px);
+  background-size: 4px 4px, 100% 100%;
+}
+
+.composition-surface-etched {
+  --composition-grain: 0.18;
+}
+
+.composition-surface-etched::before {
+  background-image:
+    repeating-linear-gradient(13deg, transparent 0 5px, rgba(255, 255, 255, 0.04) 6px, transparent 7px 14px),
+    repeating-linear-gradient(167deg, transparent 0 11px, rgba(0, 0, 0, 0.08) 12px, transparent 13px 23px);
+  background-size: 100% 100%;
+}
+
+.composition-surface-washed {
+  --composition-grain: 0.13;
+}
+
+.composition-surface-washed::after {
+  opacity: 0.54;
+  background:
+    radial-gradient(ellipse at 18% 72%, color-mix(in srgb, var(--composition-art-accent, #6c675c) 22%, transparent), transparent 46%),
+    radial-gradient(ellipse at 77% 22%, transparent 28%, rgba(0, 0, 0, 0.18) 118%);
+}
+
+.composition-treatment-bleed {
+  --art-x: 0%;
+  --art-y: 0%;
+  --art-w: 100%;
+  --art-h: 100%;
+}
+
+.composition-treatment-portrait-anchor {
+  --art-x: 42%;
+  --art-y: 0%;
+  --art-w: 58%;
+  --art-h: 100%;
+}
+
+.composition-treatment-cinema {
+  --art-x: 0%;
+  --art-y: 7%;
+  --art-w: 100%;
+  --art-h: 77%;
+}
+
+.composition-treatment-folio {
+  --art-x: 18%;
+  --art-y: 5%;
+  --art-w: 76%;
+  --art-h: 90%;
+}
+
+.composition-treatment-scroll {
+  --art-x: 0%;
+  --art-y: 14%;
+  --art-w: 100%;
+  --art-h: 66%;
+}
+
+.composition-treatment-offset {
+  --art-x: 10%;
+  --art-y: 0%;
+  --art-w: 90%;
+  --art-h: 88%;
+}
+
+.composition-art,
+.composition-heading,
+.composition-motif,
+.composition-details {
+  position: absolute;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
-  border: 1px solid var(--composition-line);
-  background: var(--composition-panel);
-}
-
-.composition-chrome {
-  z-index: 5;
-  grid-area: 1 / 1 / 2 / 17;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 0 clamp(8px, 1.25vmin, 18px);
-  color: var(--composition-dim);
-  font-size: clamp(6px, 0.9vmin, 11px);
-  letter-spacing: 0.13em;
-  white-space: nowrap;
-}
-
-.composition-chrome span:last-child {
-  color: var(--composition-accent);
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .composition-art {
   z-index: 1;
-  grid-area: 1 / 17 / 17 / 25;
+  left: var(--layout-art-x);
+  top: var(--layout-art-y);
+  width: var(--layout-art-w);
+  height: var(--layout-art-h);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--composition-bg) 72%, var(--composition-art-accent, #6f594e));
+  box-shadow: 0 24px 70px var(--composition-shadow);
+}
+
+.composition-art.is-missing {
   background:
-    radial-gradient(circle at center, color-mix(in srgb, var(--composition-art-accent) 68%, #2b1713), var(--composition-bg) 76%);
+    repeating-linear-gradient(128deg, transparent 0 18px, var(--composition-line) 19px, transparent 20px 39px),
+    color-mix(in srgb, var(--composition-bg) 78%, var(--composition-art-accent, #665247));
+}
+
+.composition-treatment-bleed .composition-art {
+  box-shadow: none;
+}
+
+.composition-treatment-folio .composition-art {
+  outline: 1px solid var(--composition-line);
+  outline-offset: clamp(5px, 0.8vmin, 12px);
+}
+
+.composition-treatment-scroll .composition-art {
+  box-shadow: 0 12px 38px var(--composition-shadow);
+}
+
+.composition-treatment-offset .composition-art {
+  clip-path: polygon(4% 0, 100% 0, 100% 96%, 0 100%);
 }
 
 .composition-art img {
@@ -969,106 +1145,141 @@ a:focus-visible {
   display: block;
   width: 100%;
   height: 100%;
+  object-position: var(--composition-focus-x, 50%) var(--composition-focus-y, 50%);
 }
 
 .composition-art-backdrop {
   z-index: 0;
   object-fit: cover;
-  opacity: 0.72;
-  transform: scale(1.09);
-  filter: blur(clamp(18px, 3.2vmin, 46px)) sepia(0.38) saturate(0.58) contrast(1.12) brightness(0.46);
+  opacity: 0;
+  transform: scale(1.045);
+  filter: blur(clamp(14px, 2.4vmin, 34px)) saturate(0.7) brightness(0.56);
+}
+
+.composition-sheet.is-contained .composition-art-backdrop {
+  opacity: 0.42;
 }
 
 .composition-art-image {
   z-index: 1;
-  filter: sepia(0.22) saturate(0.72) contrast(1.08) brightness(0.88);
-  animation: composition-art-in 1.4s cubic-bezier(0.22, 0.8, 0.2, 1) both;
+  filter: saturate(0.93) contrast(1.025) brightness(0.985);
+  animation: composition-art-in 980ms cubic-bezier(0.22, 0.8, 0.2, 1) both;
 }
 
 .composition-palette-parchment .composition-art-image {
-  filter: sepia(0.12) saturate(0.82) contrast(1.04) brightness(0.95);
+  filter: saturate(0.95) contrast(1.02) brightness(1.01);
 }
 
-.composition-variant-b .composition-art-image {
-  filter: sepia(0.34) saturate(0.64) contrast(1.12) brightness(0.82);
+.composition-surface-dry-ink .composition-art-image {
+  filter: saturate(0.9) contrast(1.055) brightness(0.97);
 }
 
-.composition-variant-c .composition-art-image {
-  filter: sepia(0.08) saturate(0.54) contrast(1.18) brightness(0.8);
+.composition-surface-washed .composition-art-image {
+  filter: saturate(0.88) contrast(1.015) brightness(0.99);
 }
 
-.composition-sheet.is-contained .composition-art-image {
-  filter: sepia(0.16) saturate(0.78) contrast(1.06) brightness(0.92);
-  box-shadow:
-    0 0 0 1px var(--composition-line),
-    0 16px 48px rgba(0, 0, 0, 0.34);
-}
-
-.composition-art.is-missing {
-  display: grid;
-  place-items: center;
-  background:
-    repeating-linear-gradient(135deg, transparent 0 20px, var(--composition-line) 20px 21px),
-    var(--composition-bg);
-}
-
-.composition-image-status {
-  position: relative;
-  z-index: 3;
-  color: var(--composition-accent);
-  font-size: clamp(7px, 1vmin, 11px);
-  letter-spacing: 0.14em;
-}
-
-.composition-art-grid {
+.composition-art-wash {
   position: absolute;
   z-index: 2;
   inset: 0;
   pointer-events: none;
-  background-image:
-    linear-gradient(var(--composition-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--composition-line) 1px, transparent 1px);
-  background-size: 16.666% 12.5%;
-  box-shadow: inset 0 0 0 1px var(--composition-line);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--composition-bg) 54%, transparent), transparent 36% 82%, rgba(0, 0, 0, 0.08));
 }
 
-.composition-art-dissolve {
-  position: absolute;
-  z-index: 3;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, rgba(18, 9, 12, 0.62), transparent 34%, transparent 82%, rgba(18, 9, 12, 0.22));
-  mix-blend-mode: multiply;
+.composition-title-overlay .composition-art-wash,
+.composition-treatment-bleed .composition-art-wash {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--composition-bg) 76%, transparent) 0%, color-mix(in srgb, var(--composition-bg) 34%, transparent) 36%, transparent 62%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.34), transparent 38% 82%, rgba(0, 0, 0, 0.16));
 }
 
-.composition-palette-parchment .composition-art-dissolve {
-  background: linear-gradient(90deg, rgba(223, 210, 188, 0.46), transparent 32%, transparent 86%, rgba(223, 210, 188, 0.18));
-  mix-blend-mode: screen;
+.composition-title-banner .composition-art-wash {
+  background: linear-gradient(0deg, color-mix(in srgb, var(--composition-bg) 72%, transparent), transparent 36% 76%, rgba(0, 0, 0, 0.12));
 }
 
 .composition-art-label {
   position: absolute;
   z-index: 4;
-  right: clamp(8px, 1.25vmin, 18px);
-  bottom: clamp(8px, 1.25vmin, 18px);
-  padding: 4px 6px;
-  color: rgba(234, 223, 206, 0.72);
-  background: rgba(13, 7, 9, 0.52);
-  font-size: clamp(5px, 0.75vmin, 9px);
-  letter-spacing: 0.08em;
-  backdrop-filter: blur(8px);
+  right: clamp(8px, 1.2vmin, 17px);
+  bottom: clamp(8px, 1.2vmin, 17px);
+  color: rgba(246, 236, 220, 0.74);
+  font-size: clamp(5px, 0.72vmin, 9px);
+  letter-spacing: 0.09em;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.8);
+}
+
+.composition-image-status {
+  position: absolute;
+  z-index: 5;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  color: var(--composition-accent);
+  font-size: clamp(7px, 0.9vmin, 11px);
+  letter-spacing: 0.14em;
+}
+
+.composition-chrome {
+  position: absolute;
+  z-index: 8;
+  top: max(clamp(10px, 1.7vmin, 24px), env(safe-area-inset-top));
+  right: max(clamp(12px, 2.1vmin, 30px), env(safe-area-inset-right));
+  left: max(clamp(12px, 2.1vmin, 30px), env(safe-area-inset-left));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--composition-dim);
+  font-size: clamp(6px, 0.82vmin, 10px);
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+  text-shadow: 0 1px 14px var(--composition-shadow);
+}
+
+.composition-chrome::after {
+  content: "";
+  position: absolute;
+  top: calc(100% + clamp(5px, 0.8vmin, 10px));
+  right: 0;
+  left: 0;
+  height: 1px;
+  opacity: 0.48;
+  background: linear-gradient(90deg, var(--composition-line), transparent 72%);
+}
+
+.composition-chrome span:last-child {
+  max-width: 48%;
+  overflow: hidden;
+  color: var(--composition-accent);
+  text-overflow: ellipsis;
 }
 
 .composition-heading {
-  z-index: 4;
-  grid-area: 5 / 1 / 9 / 17;
+  z-index: 6;
+  left: var(--layout-heading-x);
+  top: var(--layout-heading-y);
+  width: var(--layout-heading-w);
+  height: var(--layout-heading-h);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: clamp(9px, 1.7vmin, 24px);
+  padding: clamp(5px, 1vmin, 14px);
   overflow: visible;
-  background: color-mix(in srgb, var(--composition-bg) 78%, transparent);
-  backdrop-filter: blur(4px);
+  isolation: isolate;
+}
+
+.composition-heading::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -10% -8%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at 24% 50%, color-mix(in srgb, var(--composition-bg) 72%, transparent), transparent 72%);
+}
+
+.composition-title-overlay .composition-heading::before,
+.composition-title-monumental .composition-heading::before {
+  opacity: 0.76;
 }
 
 .composition-heading p,
@@ -1078,107 +1289,873 @@ a:focus-visible {
 }
 
 .composition-heading p {
-  margin-bottom: clamp(5px, 0.8vmin, 10px);
+  margin-bottom: clamp(5px, 0.8vmin, 11px);
   color: var(--composition-accent);
-  font-size: clamp(6px, 0.86vmin, 10px);
-  letter-spacing: 0.16em;
+  font-size: clamp(6px, 0.78vmin, 10px);
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
 }
 
 .composition-heading h1 {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  padding-block: 0.08em;
   overflow: visible;
   font-family: var(--font-serif);
-  font-size: clamp(34px, 8.1vmin, 132px);
+  font-size: clamp(42px, min(9.2vw, 14.2vh), 172px);
   font-weight: 400;
-  line-height: 0.76;
-  letter-spacing: -0.065em;
+  line-height: 0.88;
+  letter-spacing: -0.055em;
   text-wrap: balance;
+  text-shadow: 0 2px 24px var(--composition-shadow);
 }
 
 .composition-heading h1 span {
   display: block;
+  max-width: 100%;
   white-space: nowrap;
 }
 
+.composition-heading small {
+  max-width: 66ch;
+  margin-top: clamp(6px, 1vmin, 13px);
+  overflow: hidden;
+  color: var(--composition-dim);
+  font-size: clamp(6px, 0.82vmin, 10px);
+  letter-spacing: 0.07em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 13px var(--composition-shadow);
+}
+
+.composition-title-monumental .composition-heading h1 {
+  font-size: clamp(54px, min(11.4vw, 17.5vh), 208px);
+  line-height: 0.84;
+  letter-spacing: -0.067em;
+}
+
+.composition-title-overlay .composition-heading h1 {
+  font-size: clamp(48px, min(10vw, 15.5vh), 188px);
+  color: var(--composition-ink);
+  text-shadow: 0 3px 28px rgba(0, 0, 0, 0.68);
+}
+
+.composition-title-margin .composition-heading {
+  justify-content: flex-end;
+}
+
+.composition-title-margin .composition-heading h1 {
+  font-size: clamp(36px, min(6.7vw, 11vh), 126px);
+  line-height: 0.92;
+  letter-spacing: -0.038em;
+}
+
+.composition-title-vertical .composition-heading {
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.composition-title-vertical .composition-heading h1 {
+  max-height: 100%;
+  flex-direction: row;
+  gap: 0.12em;
+  font-size: clamp(38px, min(7vw, 10.5vh), 122px);
+  line-height: 0.9;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.composition-title-vertical .composition-heading h1 span {
+  white-space: nowrap;
+}
+
+.composition-title-banner .composition-heading {
+  justify-content: center;
+  border-block: 1px solid var(--composition-line);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--composition-bg) 78%, transparent), color-mix(in srgb, var(--composition-bg) 22%, transparent) 72%, transparent);
+}
+
+.composition-title-banner .composition-heading h1 {
+  font-size: clamp(36px, min(7.8vw, 12vh), 144px);
+  line-height: 0.9;
+}
+
+.composition-title-caption .composition-heading {
+  justify-content: flex-end;
+}
+
+.composition-title-caption .composition-heading h1 {
+  font-size: clamp(28px, min(5.2vw, 8.6vh), 96px);
+  line-height: 0.96;
+  letter-spacing: -0.032em;
+}
+
 .composition-sheet.is-medium .composition-heading h1 {
-  font-size: clamp(30px, 6.7vmin, 106px);
+  font-size: clamp(34px, min(7.7vw, 12.3vh), 146px);
 }
 
 .composition-sheet.is-long .composition-heading h1 {
-  font-size: clamp(24px, 5.2vmin, 82px);
-  line-height: 0.82;
+  font-size: clamp(27px, min(6.2vw, 10vh), 116px);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
 }
 
-.composition-heading small {
-  max-width: 70ch;
-  margin-top: clamp(6px, 0.9vmin, 12px);
+.composition-sheet.is-long .composition-heading h1 span {
+  white-space: normal;
+}
+
+.composition-motif {
+  z-index: 5;
+  left: var(--layout-motif-x);
+  top: var(--layout-motif-y);
+  width: var(--layout-motif-w);
+  height: var(--layout-motif-h);
+  color: var(--composition-spot);
+  pointer-events: none;
+}
+
+.composition-mark {
+  position: absolute;
+  inset: 0;
+  color: inherit;
+}
+
+.composition-mark .mark-axis-a,
+.composition-mark .mark-axis-b {
+  position: absolute;
+  display: block;
+  opacity: 0.7;
+  background: currentColor;
+}
+
+.composition-mark .mark-axis-a {
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 1px;
+}
+
+.composition-mark .mark-axis-b {
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 100%;
+}
+
+.composition-mark i {
+  position: absolute;
+  width: var(--mark-size, clamp(3px, 0.42vmin, 6px));
+  height: var(--mark-size, clamp(3px, 0.42vmin, 6px));
+  transform: rotate(var(--mark-angle, 0deg));
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: var(--composition-register, 1px) 1px color-mix(in srgb, var(--composition-accent) 38%, transparent);
+}
+
+.composition-mark i:nth-of-type(1) { top: 3%; left: 50%; }
+.composition-mark i:nth-of-type(2) { top: 8%; left: 70%; }
+.composition-mark i:nth-of-type(3) { top: 22%; left: 86%; }
+.composition-mark i:nth-of-type(4) { top: 44%; left: 96%; }
+.composition-mark i:nth-of-type(5) { top: 68%; left: 91%; }
+.composition-mark i:nth-of-type(6) { top: 86%; left: 76%; }
+.composition-mark i:nth-of-type(7) { top: 96%; left: 54%; }
+.composition-mark i:nth-of-type(8) { top: 90%; left: 32%; }
+.composition-mark i:nth-of-type(9) { top: 74%; left: 14%; }
+.composition-mark i:nth-of-type(10) { top: 51%; left: 4%; }
+.composition-mark i:nth-of-type(11) { top: 28%; left: 9%; }
+.composition-mark i:nth-of-type(12) { top: 11%; left: 25%; }
+.composition-mark i:nth-of-type(13) { top: 50%; left: 50%; }
+.composition-mark i:nth-of-type(14) { top: 58%; left: 65%; }
+
+.composition-mark > b {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: clamp(7px, 0.9vmin, 13px);
+  height: clamp(7px, 0.9vmin, 13px);
+  transform: translate(-50%, -50%);
+  background: var(--composition-accent);
+  border-radius: 50%;
+}
+
+.composition-mark > small {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  color: var(--composition-dim);
+  font-size: clamp(5px, 0.68vmin, 8px);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+/* The 32 marks share ink and material, but each follows its painting's gesture. */
+.composition-motif-ermine-arc .composition-mark {
+  inset: 5% 8%;
+  transform: rotate(-13deg);
+  border: 1px solid var(--composition-line);
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+  border-radius: 54% 46% 60% 40%;
+}
+
+.composition-motif-ermine-arc .mark-axis-a {
+  top: 64%;
+  transform: rotate(18deg);
+  transform-origin: 0 50%;
+}
+
+.composition-motif-ermine-arc .mark-axis-b {
+  left: 69%;
+  height: 72%;
+  transform: rotate(-31deg);
+  transform-origin: 50% 100%;
+}
+
+.composition-motif-ermine-arc .composition-mark i {
+  width: clamp(6px, 0.8vmin, 12px);
+  height: 1px;
+  border-radius: 0;
+}
+
+.composition-motif-sea-born .composition-mark {
+  inset: 2% 7% 0;
+}
+
+.composition-motif-sea-born .composition-mark i {
+  top: auto;
+  bottom: 4%;
+  left: 50%;
+  width: 1px;
+  height: 82%;
+  transform-origin: 50% 100%;
+  border-radius: 0;
+}
+
+.composition-motif-sea-born .composition-mark i:nth-of-type(1) { height: 52%; transform: rotate(-70deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(2) { height: 58%; transform: rotate(-59deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(3) { height: 64%; transform: rotate(-48deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(4) { height: 70%; transform: rotate(-37deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(5) { height: 75%; transform: rotate(-26deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(6) { height: 79%; transform: rotate(-15deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(7) { transform: rotate(-5deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(8) { transform: rotate(5deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(9) { height: 79%; transform: rotate(15deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(10) { height: 75%; transform: rotate(26deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(11) { height: 70%; transform: rotate(37deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(12) { height: 64%; transform: rotate(48deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(13) { height: 58%; transform: rotate(59deg); }
+.composition-motif-sea-born .composition-mark i:nth-of-type(14) { height: 52%; transform: rotate(70deg); }
+
+.composition-motif-sea-born .mark-axis-a { top: auto; bottom: 4%; }
+.composition-motif-sea-born .mark-axis-b { display: none; }
+.composition-motif-sea-born .composition-mark > b { top: auto; bottom: 1%; }
+
+.composition-motif-triptych-spill .composition-mark {
+  background:
+    linear-gradient(90deg, transparent 32.8%, var(--composition-line) 33%, transparent 33.3%),
+    linear-gradient(90deg, transparent 66.2%, var(--composition-line) 66.4%, transparent 66.7%);
+}
+
+.composition-motif-triptych-spill .mark-axis-a { display: none; }
+.composition-motif-triptych-spill .mark-axis-b { left: 33%; }
+.composition-motif-triptych-spill .composition-mark i {
+  width: clamp(8px, 1.3vmin, 20px);
+  height: auto;
+  aspect-ratio: 1;
+  background: transparent;
+  border: 1px solid currentColor;
+}
+.composition-motif-triptych-spill .composition-mark i:nth-of-type(3n) { width: clamp(15px, 2.3vmin, 34px); }
+
+.composition-motif-convex-witness .composition-mark {
+  inset: 7% 16%;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 clamp(5px, 1vmin, 14px) color-mix(in srgb, var(--composition-bg) 72%, transparent);
+}
+
+.composition-motif-convex-witness .mark-axis-a,
+.composition-motif-convex-witness .mark-axis-b { opacity: 0.34; }
+.composition-motif-convex-witness .composition-mark i { width: 2px; height: clamp(6px, 1vmin, 15px); border-radius: 0; }
+.composition-motif-convex-witness .composition-mark > b { background: var(--composition-ink); }
+
+.composition-motif-pearl-orbit .composition-mark {
+  inset: 4%;
+  border: 1px solid var(--composition-line);
+  border-radius: 50%;
+}
+
+.composition-motif-pearl-orbit .composition-mark::before,
+.composition-motif-pearl-orbit .composition-mark::after {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border: 1px solid var(--composition-line);
+  border-radius: 50%;
+}
+
+.composition-motif-pearl-orbit .composition-mark::after { inset: 35%; border-color: var(--composition-accent); }
+.composition-motif-pearl-orbit .composition-mark > b {
+  width: clamp(18px, 3.2vmin, 48px);
+  height: clamp(18px, 3.2vmin, 48px);
+  background: radial-gradient(circle at 34% 29%, #fff8e9, #c9bda9 55%, #74695c 100%);
+  box-shadow: 1px 2px 0 var(--composition-accent);
+}
+
+.composition-motif-anatomical-index .composition-mark {
+  inset: 2% 4%;
+}
+
+.composition-motif-anatomical-index .mark-axis-a {
+  top: 12%;
+  left: 18%;
+  width: 62%;
+  height: 74%;
+  background: transparent;
+  border-left: 2px solid var(--composition-accent);
+  border-radius: 48%;
+  transform: rotate(17deg);
+}
+
+.composition-motif-anatomical-index .mark-axis-b { display: none; }
+.composition-motif-anatomical-index .composition-mark i {
+  left: 9%;
+  width: 72%;
+  height: 1px;
+  border-radius: 0;
+}
+.composition-motif-anatomical-index .composition-mark i:nth-of-type(odd) { left: 20%; width: 58%; }
+.composition-motif-anatomical-index .composition-mark i:nth-of-type(3n) { background: var(--composition-accent); }
+
+.composition-motif-vanishing-court .mark-axis-a,
+.composition-motif-vanishing-court .mark-axis-b {
+  top: auto;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  height: 112%;
+  transform-origin: 50% 100%;
+}
+.composition-motif-vanishing-court .mark-axis-a { transform: rotate(-47deg); }
+.composition-motif-vanishing-court .mark-axis-b { transform: rotate(47deg); }
+.composition-motif-vanishing-court .composition-mark i {
+  top: auto;
+  bottom: -16%;
+  left: 50%;
+  width: 1px;
+  height: 128%;
+  transform-origin: 50% 100%;
+  border-radius: 0;
+  opacity: 0.44;
+}
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(1) { transform: rotate(-41deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(2) { transform: rotate(-35deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(3) { transform: rotate(-29deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(4) { transform: rotate(-23deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(5) { transform: rotate(-17deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(6) { transform: rotate(-11deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(7) { transform: rotate(-5deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(8) { transform: rotate(5deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(9) { transform: rotate(11deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(10) { transform: rotate(17deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(11) { transform: rotate(23deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(12) { transform: rotate(29deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(13) { transform: rotate(35deg); }
+.composition-motif-vanishing-court .composition-mark i:nth-of-type(14) { transform: rotate(41deg); }
+.composition-motif-vanishing-court .composition-mark > b { top: auto; bottom: -2%; }
+
+.composition-motif-rising-diagonal .composition-mark::before {
+  content: "";
+  position: absolute;
+  right: -10%;
+  bottom: 18%;
+  left: -10%;
+  height: clamp(8px, 1.6vmin, 24px);
+  transform: rotate(-27deg);
+  background: color-mix(in srgb, var(--composition-accent) 72%, transparent);
+  box-shadow: 3px 2px 0 color-mix(in srgb, var(--composition-ink) 22%, transparent);
+}
+.composition-motif-rising-diagonal .mark-axis-a { transform: rotate(-27deg); }
+.composition-motif-rising-diagonal .mark-axis-b { transform: rotate(28deg); opacity: 0.34; }
+.composition-motif-rising-diagonal .composition-mark i { opacity: 0.72; }
+
+.composition-motif-signal-mast .mark-axis-a { top: 50%; left: 46%; width: 32%; }
+.composition-motif-signal-mast .mark-axis-b { left: 48%; }
+.composition-motif-signal-mast .composition-mark i {
+  width: clamp(11px, 2vmin, 30px);
+  height: clamp(4px, 0.68vmin, 10px);
+  border-radius: 0;
+  left: 49%;
+}
+.composition-motif-signal-mast .composition-mark i:nth-of-type(odd) { transform: translateX(-100%); }
+.composition-motif-signal-mast .composition-mark i:nth-of-type(even) { background: var(--composition-accent); }
+
+.composition-motif-final-tow .mark-axis-a { top: 72%; transform: rotate(-7deg); }
+.composition-motif-final-tow .mark-axis-b { display: none; }
+.composition-motif-final-tow .composition-mark i {
+  top: 72%;
+  width: 4.5%;
+  height: 1px;
+  border-radius: 0;
+  transform: rotate(-7deg);
+}
+.composition-motif-final-tow .composition-mark > b {
+  top: 27%;
+  left: 78%;
+  width: clamp(24px, 4vmin, 64px);
+  height: clamp(24px, 4vmin, 64px);
+  background: #d45a3d;
+}
+
+.composition-motif-fog-register .mark-axis-a,
+.composition-motif-fog-register .mark-axis-b { display: none; }
+.composition-motif-fog-register .composition-mark i {
+  right: 0;
+  left: auto;
+  width: 72%;
+  height: 1px;
+  border-radius: 50%;
+  opacity: 0.5;
+}
+.composition-motif-fog-register .composition-mark i:nth-of-type(3n) { right: 18%; width: 54%; opacity: 0.28; }
+.composition-motif-fog-register .composition-mark i:nth-of-type(4n) { width: 92%; }
+.composition-motif-fog-register .composition-mark > b { top: 16%; left: 74%; width: 5px; height: 5px; }
+
+.composition-motif-orange-signal .mark-axis-a { top: 68%; }
+.composition-motif-orange-signal .mark-axis-b { display: none; }
+.composition-motif-orange-signal .composition-mark i {
+  left: 0;
+  width: 100%;
+  height: 1px;
+  border-radius: 0;
+  opacity: 0.42;
+}
+.composition-motif-orange-signal .composition-mark > b {
+  top: 31%;
+  left: 63%;
+  width: clamp(23px, 3.8vmin, 58px);
+  height: clamp(23px, 3.8vmin, 58px);
+  background: #ef6029;
+  box-shadow: 3px 1px 0 rgba(255, 190, 91, 0.24);
+}
+
+.composition-motif-celestial-current .composition-mark::before,
+.composition-motif-celestial-current .composition-mark::after {
+  content: "";
+  position: absolute;
+  inset: 7% 2% 21% 13%;
+  border: 1px solid var(--composition-line);
+  border-right-color: transparent;
+  border-radius: 52% 48% 56% 44%;
+  transform: rotate(-12deg);
+}
+.composition-motif-celestial-current .composition-mark::after {
+  inset: 26% 22% 6% 2%;
+  transform: rotate(18deg);
+  border-color: var(--composition-accent) transparent transparent var(--composition-line);
+}
+.composition-motif-celestial-current .mark-axis-a,
+.composition-motif-celestial-current .mark-axis-b { display: none; }
+.composition-motif-celestial-current .composition-mark i:nth-of-type(3n) { background: var(--composition-ink); box-shadow: 0 0 6px currentColor; }
+
+.composition-motif-solar-fold .composition-mark {
+  inset: 3%;
+  border: 1px solid var(--composition-line);
+  border-radius: 50%;
+}
+.composition-motif-solar-fold .composition-mark::before,
+.composition-motif-solar-fold .composition-mark::after {
+  content: "";
+  position: absolute;
+  inset: 15%;
+  border: 1px solid var(--composition-line);
+  border-radius: 50%;
+}
+.composition-motif-solar-fold .composition-mark::after { inset: 31%; border-color: var(--composition-accent); }
+.composition-motif-solar-fold .composition-mark > b { width: 18%; height: auto; aspect-ratio: 1; background: #db5d2d; }
+
+.composition-motif-winter-descent .mark-axis-a { top: 48%; transform: rotate(20deg); }
+.composition-motif-winter-descent .mark-axis-b { left: 36%; transform: rotate(-32deg); opacity: 0.42; }
+.composition-motif-winter-descent .composition-mark i {
+  width: clamp(3px, 0.45vmin, 7px);
+  height: clamp(7px, 1.1vmin, 16px);
+  transform: rotate(24deg);
+  border-radius: 50%;
+}
+.composition-motif-winter-descent .composition-mark i:nth-of-type(even) { transform: translate(7px, 4px) rotate(24deg); opacity: 0.45; }
+
+.composition-motif-pressed-garden .mark-axis-a {
+  top: 8%;
+  left: 45%;
+  width: 1px;
+  height: 88%;
+  transform: rotate(-11deg);
+}
+.composition-motif-pressed-garden .mark-axis-b {
+  top: 20%;
+  left: 28%;
+  width: 44%;
+  height: 64%;
+  background: transparent;
+  border-left: 1px solid var(--composition-line);
+  border-radius: 50%;
+  transform: rotate(24deg);
+}
+.composition-motif-pressed-garden .composition-mark i {
+  width: clamp(5px, 0.8vmin, 12px);
+  height: clamp(10px, 1.5vmin, 22px);
+  transform: rotate(36deg);
+  border-radius: 100% 0 100% 0;
+}
+.composition-motif-pressed-garden .composition-mark i:nth-of-type(3n) { color: var(--composition-accent); background: currentColor; transform: rotate(-28deg); }
+
+.composition-motif-anamorphic-datum .composition-mark {
+  inset: 18% 3%;
+  transform: skewX(-28deg) rotate(-7deg);
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.composition-motif-anamorphic-datum .mark-axis-a { transform: rotate(8deg); }
+.composition-motif-anamorphic-datum .mark-axis-b { left: 62%; transform: rotate(-12deg); }
+.composition-motif-anamorphic-datum .composition-mark i { width: 2px; height: clamp(8px, 1.2vmin, 18px); border-radius: 0; }
+.composition-motif-anamorphic-datum .composition-mark > b { width: 4px; height: 4px; }
+
+.composition-motif-measured-motion .composition-mark::before,
+.composition-motif-measured-motion .composition-mark::after {
+  content: "";
+  position: absolute;
+  right: 4%;
+  bottom: 5%;
+  left: 4%;
+  height: 64%;
+  border-top: 1px solid currentColor;
+  border-radius: 50%;
+  transform: rotate(-7deg);
+}
+.composition-motif-measured-motion .composition-mark::after { right: 24%; left: 24%; height: 42%; border-color: var(--composition-accent); }
+.composition-motif-measured-motion .mark-axis-a { top: auto; bottom: 12%; }
+.composition-motif-measured-motion .mark-axis-b { display: none; }
+.composition-motif-measured-motion .composition-mark i { width: clamp(8px, 1.2vmin, 18px); height: 2px; border-radius: 50%; transform: rotate(-17deg); }
+
+.composition-motif-unrolled-river .mark-axis-a {
+  top: 42%;
+  left: -3%;
+  width: 106%;
+  height: 44%;
+  background: transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  transform: rotate(-5deg);
+}
+.composition-motif-unrolled-river .mark-axis-b {
+  top: 22%;
+  left: 10%;
+  width: 84%;
+  height: 48%;
+  background: transparent;
+  border-bottom: 1px solid var(--composition-line);
+  border-radius: 50%;
+  transform: rotate(7deg);
+}
+.composition-motif-unrolled-river .composition-mark i { width: clamp(4px, 0.7vmin, 10px); height: clamp(4px, 0.7vmin, 10px); opacity: 0.48; }
+.composition-motif-unrolled-river .composition-mark i:nth-of-type(4n) { width: clamp(11px, 1.6vmin, 24px); height: 3px; }
+
+.composition-motif-screen-current .composition-mark::before {
+  content: "";
+  position: absolute;
+  inset: 0 50% 0 auto;
+  width: 1px;
+  background: var(--composition-line);
+}
+.composition-motif-screen-current .mark-axis-a {
+  top: 26%;
+  left: 3%;
+  width: 94%;
+  height: 56%;
+  background: transparent;
+  border-bottom: 2px solid currentColor;
+  border-radius: 50%;
+  transform: rotate(-8deg);
+}
+.composition-motif-screen-current .mark-axis-b { display: none; }
+.composition-motif-screen-current .composition-mark i { background: #e8dfca; }
+.composition-motif-screen-current .composition-mark i:nth-of-type(3n) { background: var(--composition-accent); }
+
+.composition-motif-three-measures .composition-mark {
+  background:
+    linear-gradient(60deg, transparent 49.7%, var(--composition-line) 50%, transparent 50.3%),
+    linear-gradient(-60deg, transparent 49.7%, var(--composition-line) 50%, transparent 50.3%),
+    linear-gradient(0deg, transparent 11%, var(--composition-line) 11.3%, transparent 11.6%);
+}
+.composition-motif-three-measures .mark-axis-a,
+.composition-motif-three-measures .mark-axis-b { display: none; }
+.composition-motif-three-measures .composition-mark i:nth-of-type(-n + 5) { left: 18%; }
+.composition-motif-three-measures .composition-mark i:nth-of-type(n + 6):nth-of-type(-n + 10) { left: 50%; }
+.composition-motif-three-measures .composition-mark i:nth-of-type(n + 11) { left: 82%; }
+.composition-motif-three-measures .composition-mark > b { top: 13%; }
+
+.composition-motif-mechanical-sun .composition-mark {
+  inset: 3%;
+  border: 1px solid var(--composition-line);
+  border-radius: 50%;
+}
+.composition-motif-mechanical-sun .composition-mark i {
+  top: 50%;
+  left: 50%;
+  width: 1px;
+  height: 48%;
+  transform-origin: 50% 0;
+  border-radius: 0;
+}
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(1) { transform: rotate(0deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(2) { transform: rotate(25.7deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(3) { transform: rotate(51.4deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(4) { transform: rotate(77.1deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(5) { transform: rotate(102.8deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(6) { transform: rotate(128.5deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(7) { transform: rotate(154.2deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(8) { transform: rotate(180deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(9) { transform: rotate(205.7deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(10) { transform: rotate(231.4deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(11) { transform: rotate(257.1deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(12) { transform: rotate(282.8deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(13) { transform: rotate(308.5deg); }
+.composition-motif-mechanical-sun .composition-mark i:nth-of-type(14) { transform: rotate(334.2deg); }
+.composition-motif-mechanical-sun .composition-mark > b { width: 20%; height: auto; aspect-ratio: 1; background: #d89444; }
+
+.composition-motif-sleep-pressure .composition-mark {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  align-items: center;
+  gap: clamp(2px, 0.4vmin, 6px);
+}
+.composition-motif-sleep-pressure .mark-axis-a { top: 50%; }
+.composition-motif-sleep-pressure .mark-axis-b { display: none; }
+.composition-motif-sleep-pressure .composition-mark i {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: 2px;
+  height: 36%;
+  justify-self: center;
+  border-radius: 0;
+}
+.composition-motif-sleep-pressure .composition-mark i:nth-of-type(3n) { height: 78%; }
+.composition-motif-sleep-pressure .composition-mark i:nth-of-type(4n) { height: 54%; background: var(--composition-accent); }
+.composition-motif-sleep-pressure .composition-mark > b { left: 78%; width: clamp(8px, 1.2vmin, 18px); height: clamp(5px, 0.7vmin, 11px); background: #b62443; border-radius: 50%; }
+
+.composition-motif-perspective-proof .composition-mark {
+  overflow: hidden;
+  background:
+    linear-gradient(33deg, transparent 49.7%, var(--composition-line) 50%, transparent 50.3%),
+    linear-gradient(-33deg, transparent 49.7%, var(--composition-line) 50%, transparent 50.3%);
+}
+.composition-motif-perspective-proof .mark-axis-a { top: auto; bottom: 6%; }
+.composition-motif-perspective-proof .mark-axis-b { left: 50%; }
+.composition-motif-perspective-proof .composition-mark i {
+  right: 0;
+  left: 0;
+  width: auto;
+  height: 1px;
+  border-radius: 0;
+  opacity: 0.48;
+}
+
+.composition-motif-severed-baseline .mark-axis-a {
+  top: 54%;
+  left: -8%;
+  width: 116%;
+  height: 2px;
+  transform: rotate(-32deg);
+  background: var(--composition-accent);
+  box-shadow: 2px 1px 0 color-mix(in srgb, var(--composition-ink) 28%, transparent);
+}
+.composition-motif-severed-baseline .mark-axis-b {
+  top: 18%;
+  left: 47%;
+  height: 68%;
+  transform: rotate(42deg);
+  opacity: 0.4;
+}
+.composition-motif-severed-baseline .composition-mark i { width: 1px; height: 34%; border-radius: 0; transform-origin: 50% 100%; opacity: 0.5; }
+
+.composition-motif-two-armies .composition-mark {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 1fr;
+  gap: clamp(2px, 0.5vmin, 7px) clamp(15px, 4vmin, 58px);
+  align-items: center;
+}
+.composition-motif-two-armies .mark-axis-a { transform: rotate(-8deg); }
+.composition-motif-two-armies .mark-axis-b { opacity: 0.34; }
+.composition-motif-two-armies .composition-mark i {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: clamp(7px, 1vmin, 14px);
+  height: clamp(7px, 1vmin, 14px);
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+  border-radius: 0;
+}
+.composition-motif-two-armies .composition-mark i:nth-of-type(even) { justify-self: end; transform: scaleX(-1); background: var(--composition-accent); }
+
+.composition-motif-petal-avalanche .mark-axis-a,
+.composition-motif-petal-avalanche .mark-axis-b { display: none; }
+.composition-motif-petal-avalanche .composition-mark {
+  transform: rotate(17deg) scale(1.12);
+}
+.composition-motif-petal-avalanche .composition-mark i {
+  width: clamp(8px, 1.3vmin, 20px);
+  height: clamp(4px, 0.72vmin, 11px);
+  transform: rotate(31deg);
+  border-radius: 100% 0 100% 0;
+  background: color-mix(in srgb, var(--composition-accent) 72%, var(--composition-ink));
+}
+.composition-motif-petal-avalanche .composition-mark i:nth-of-type(3n) { transform: rotate(-46deg); opacity: 0.54; }
+
+.composition-motif-acid-cabaret .composition-mark::before {
+  content: "";
+  position: absolute;
+  inset: 5% -10%;
+  clip-path: polygon(0 76%, 100% 10%, 100% 52%, 0 94%);
+  opacity: 0.34;
+  background: #a8d728;
+}
+.composition-motif-acid-cabaret .mark-axis-a { top: 72%; transform: rotate(-13deg); }
+.composition-motif-acid-cabaret .mark-axis-b { left: 78%; transform: rotate(17deg); }
+.composition-motif-acid-cabaret .composition-mark i { background: #d7e36c; box-shadow: 0 0 7px rgba(217, 231, 101, 0.62); }
+
+.composition-motif-unstable-table .composition-mark {
+  inset: 10% 5%;
+  transform: rotate(-7deg) skewX(-9deg);
+  border: 1px solid var(--composition-line);
+}
+.composition-motif-unstable-table .mark-axis-a { top: 72%; }
+.composition-motif-unstable-table .mark-axis-b { left: 67%; }
+.composition-motif-unstable-table .composition-mark i {
+  width: clamp(10px, 1.7vmin, 26px);
+  height: auto;
+  aspect-ratio: 1;
+  background: transparent;
+  border: 2px solid currentColor;
+}
+.composition-motif-unstable-table .composition-mark i:nth-of-type(3n) { border-color: var(--composition-accent); transform: translate(9px, -4px); }
+
+.composition-motif-falling-sun .composition-mark {
+  border-top: 1px solid var(--composition-line);
+  border-right: 1px solid transparent;
+  border-radius: 50%;
+  transform: rotate(18deg);
+}
+.composition-motif-falling-sun .mark-axis-a { transform: rotate(24deg); }
+.composition-motif-falling-sun .mark-axis-b { display: none; }
+.composition-motif-falling-sun .composition-mark i {
+  width: clamp(8px, 1.2vmin, 18px);
+  height: 1px;
+  transform: rotate(39deg);
+  border-radius: 0;
+}
+.composition-motif-falling-sun .composition-mark > b { top: 72%; left: 26%; width: clamp(22px, 3.4vmin, 52px); height: clamp(22px, 3.4vmin, 52px); background: #c99a43; }
+
+.composition-motif-basin-rhythm .composition-mark {
+  inset: 7% 3%;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.composition-motif-basin-rhythm .composition-mark::before,
+.composition-motif-basin-rhythm .composition-mark::after {
+  content: "";
+  position: absolute;
+  inset: 18% 12%;
+  border: 1px solid var(--composition-line);
+  border-radius: 50%;
+}
+.composition-motif-basin-rhythm .composition-mark::after { inset: 34% 26%; border-color: var(--composition-accent); }
+.composition-motif-basin-rhythm .composition-mark i { width: clamp(5px, 0.8vmin, 12px); height: clamp(5px, 0.8vmin, 12px); border-radius: 0; opacity: 0.52; }
+
+.composition-motif-name-restored .composition-mark {
+  display: grid;
+  grid-template-rows: repeat(14, minmax(0, 1fr));
+  align-items: center;
+}
+.composition-motif-name-restored .mark-axis-a { display: none; }
+.composition-motif-name-restored .mark-axis-b { left: 27%; width: 2px; background: var(--composition-accent); }
+.composition-motif-name-restored .composition-mark i {
+  position: relative;
+  top: auto;
+  left: 27%;
+  width: 42%;
+  height: 1px;
+  border-radius: 0;
+  opacity: 0.52;
+}
+.composition-motif-name-restored .composition-mark i:nth-of-type(4n) { width: 68%; background: var(--composition-accent); }
+.composition-motif-name-restored .composition-mark > b { top: 12%; left: 27%; width: 7px; height: 7px; }
+
+.composition-details {
+  z-index: 7;
+  left: var(--layout-details-x);
+  top: var(--layout-details-y);
+  width: var(--layout-details-w);
+  height: var(--layout-details-h);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: clamp(3px, 0.55vmin, 8px);
+  padding-top: clamp(7px, 1vmin, 14px);
   overflow: hidden;
   color: var(--composition-dim);
-  font-size: clamp(6px, 0.86vmin, 10px);
-  letter-spacing: 0.06em;
+  font-size: clamp(5px, 0.73vmin, 9px);
+  line-height: 1.35;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 12px var(--composition-shadow);
+}
+
+.composition-details::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: min(76%, 18rem);
+  height: 1px;
+  background: linear-gradient(90deg, var(--composition-accent), var(--composition-line) 34%, transparent);
+}
+
+.composition-details span,
+.composition-details strong {
+  display: block;
+  overflow: hidden;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.composition-diagram {
-  z-index: 3;
-  grid-area: 2 / 10 / 5 / 14;
-  display: grid;
-  place-items: center;
-  padding: clamp(7px, 1vmin, 14px);
-}
-
-.composition-matrix {
-  z-index: 3;
-  grid-area: 9 / 1 / 15 / 7;
-  display: grid;
-  place-items: stretch;
-  padding: clamp(8px, 1.25vmin, 18px);
-}
-
-.composition-ledger {
-  z-index: 3;
-  grid-area: 2 / 14 / 5 / 17;
-  padding: clamp(7px, 1vmin, 14px);
-}
-
-.composition-monogram {
-  z-index: 3;
-  grid-area: 9 / 7 / 15 / 10;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(4px, 0.8vmin, 10px);
-}
-
-.composition-monogram strong {
+.composition-details strong {
+  color: var(--composition-ink);
   font-family: var(--font-serif);
-  font-size: clamp(44px, 10vmin, 154px);
-  font-weight: 400;
-  line-height: 0.7;
-  letter-spacing: -0.09em;
-}
-
-.composition-monogram span {
-  color: var(--composition-accent);
-  font-size: clamp(6px, 0.92vmin, 10px);
-  letter-spacing: 0.16em;
+  font-size: clamp(12px, 1.7vmin, 26px);
+  line-height: 1;
+  letter-spacing: -0.025em;
+  text-transform: none;
 }
 
 .composition-footer {
-  z-index: 5;
-  grid-area: 16 / 1 / 17 / 17;
+  position: absolute;
+  z-index: 8;
+  right: max(clamp(12px, 2.1vmin, 30px), env(safe-area-inset-right));
+  bottom: max(clamp(9px, 1.5vmin, 21px), env(safe-area-inset-bottom));
+  left: max(clamp(12px, 2.1vmin, 30px), env(safe-area-inset-left));
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  padding: 0 clamp(8px, 1.25vmin, 18px);
+  gap: 14px;
   color: var(--composition-dim);
-  font-size: clamp(5px, 0.78vmin, 9px);
-  letter-spacing: 0.08em;
+  font-size: clamp(5px, 0.7vmin, 9px);
+  letter-spacing: 0.09em;
   white-space: nowrap;
+  text-shadow: 0 1px 12px var(--composition-shadow);
 }
 
 .composition-footer a {
@@ -1197,425 +2174,93 @@ a:focus-visible {
   text-align: right;
 }
 
-.composition-cell-field,
-.composition-mini-matrix {
-  width: 100%;
-  height: 100%;
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: clamp(2px, 0.34vmin, 5px);
+@media (max-aspect-ratio: 5 / 4) {
+  .composition-sheet {
+    --layout-art-x: var(--portrait-art-x, var(--art-x));
+    --layout-art-y: var(--portrait-art-y, var(--art-y));
+    --layout-art-w: var(--portrait-art-w, var(--art-w));
+    --layout-art-h: var(--portrait-art-h, var(--art-h));
+    --layout-heading-x: var(--portrait-heading-x, var(--heading-x));
+    --layout-heading-y: var(--portrait-heading-y, var(--heading-y));
+    --layout-heading-w: var(--portrait-heading-w, var(--heading-w));
+    --layout-heading-h: var(--portrait-heading-h, var(--heading-h));
+    --layout-motif-x: var(--portrait-motif-x, var(--motif-x));
+    --layout-motif-y: var(--portrait-motif-y, var(--motif-y));
+    --layout-motif-w: var(--portrait-motif-w, var(--motif-w));
+    --layout-motif-h: var(--portrait-motif-h, var(--motif-h));
+    --layout-details-x: var(--portrait-details-x, var(--details-x));
+    --layout-details-y: var(--portrait-details-y, var(--details-y));
+    --layout-details-w: var(--portrait-details-w, var(--details-w));
+    --layout-details-h: var(--portrait-details-h, var(--details-h));
+  }
+
+  .composition-heading {
+    padding: clamp(7px, 1.5vmin, 16px);
+  }
+
+  .composition-heading h1 {
+    font-size: clamp(34px, min(10.8vw, 10.8vh), 106px);
+  }
+
+  .composition-title-monumental .composition-heading h1,
+  .composition-title-overlay .composition-heading h1 {
+    font-size: clamp(40px, min(13vw, 13vh), 126px);
+  }
+
+  .composition-title-margin .composition-heading h1,
+  .composition-title-banner .composition-heading h1 {
+    font-size: clamp(30px, min(9.2vw, 9.2vh), 90px);
+  }
+
+  .composition-title-caption .composition-heading h1,
+  .composition-sheet.is-long .composition-heading h1 {
+    font-size: clamp(24px, min(7.4vw, 7.4vh), 72px);
+  }
+
+  .composition-heading h1 span {
+    white-space: normal;
+  }
+
+  .composition-title-vertical .composition-heading h1 span {
+    white-space: nowrap;
+  }
+
+  .composition-details strong {
+    font-size: clamp(11px, 2.4vmin, 22px);
+  }
+
+  .composition-chrome span:first-child,
+  .composition-footer span:first-child {
+    max-width: 42%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
-.composition-cell-field i,
-.composition-mini-matrix i {
-  min-width: 0;
-  min-height: 0;
-  border: 1px solid var(--composition-line);
-}
+@media (min-aspect-ratio: 21 / 9) {
+  .composition-heading h1 {
+    font-size: clamp(48px, min(8.5vw, 17vh), 188px);
+  }
 
-.composition-cell-field i.is-on,
-.composition-mini-matrix i.is-on {
-  background: var(--composition-ink);
-}
-
-.composition-cell-field i.is-accent {
-  background: var(--composition-accent);
-  border-color: var(--composition-accent);
-}
-
-.composition-mini-matrix {
-  grid-template-columns: repeat(7, 1fr);
-  aspect-ratio: 7 / 6;
-}
-
-.composition-ledger-list,
-.composition-bars {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 3px;
-}
-
-.composition-ledger-list span,
-.composition-bars span {
-  min-height: 0;
-  display: grid;
-  grid-template-columns: auto minmax(8px, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  color: var(--composition-dim);
-  font-size: clamp(5px, 0.72vmin, 9px);
-  font-style: normal;
-}
-
-.composition-ledger-list b,
-.composition-ledger-list em,
-.composition-bars b,
-.composition-bars em {
-  font-weight: 400;
-  font-style: normal;
-}
-
-.composition-ledger-list i,
-.composition-bars i {
-  height: 1px;
-  background: var(--composition-line);
-}
-
-.composition-ledger-list em.is-accent,
-.composition-bars em {
-  color: var(--composition-accent);
-}
-
-.composition-bars.is-bars span {
-  grid-template-columns: 2.2em minmax(8px, 1fr) 1.4em;
-}
-
-.composition-bars.is-bars i {
-  height: 3px;
-  background: linear-gradient(90deg, var(--composition-ink), var(--composition-accent));
-}
-
-.composition-bars.is-bars span:nth-child(3n) i {
-  height: 1px;
-  background: var(--composition-line);
-}
-
-.composition-bars.is-ledger span:nth-child(even) {
-  grid-template-columns: auto minmax(8px, 1fr) auto;
-  direction: rtl;
-}
-
-.composition-bars.is-ledger span:nth-child(even) b,
-.composition-bars.is-ledger span:nth-child(even) em {
-  direction: ltr;
-}
-
-.composition-bars.is-ledger i {
-  height: 4px;
-  background: repeating-linear-gradient(90deg, var(--composition-dim) 0 1px, transparent 1px 5px);
-}
-
-.composition-constellation,
-.composition-orbit,
-.composition-coordinate,
-.composition-waveform,
-.composition-timeline {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.composition-constellation i {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: var(--constellation-reach);
-  height: 1px;
-  transform: rotate(var(--constellation-angle));
-  transform-origin: left center;
-  background: var(--composition-line);
-}
-
-.composition-constellation i::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: -3px;
-  width: 5px;
-  height: 5px;
-  transform: translateY(-50%);
-  background: var(--composition-ink);
-  border-radius: 50%;
-}
-
-.composition-constellation b {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 8px;
-  height: 8px;
-  transform: translate(-50%, -50%);
-  background: var(--composition-accent);
-  border-radius: 50%;
-}
-
-.composition-orbit {
-  display: grid;
-  place-items: center;
-}
-
-.composition-orbit > i {
-  position: absolute;
-  width: 78%;
-  aspect-ratio: 1;
-  border: 1px solid var(--composition-line);
-  border-radius: 50%;
-}
-
-.composition-orbit > i:nth-child(2) { width: 54%; }
-.composition-orbit > i:nth-child(3) { width: 28%; border-color: var(--composition-accent); }
-
-.composition-orbit b {
-  position: absolute;
-  width: 1px;
-  height: 49%;
-  transform-origin: center bottom;
-  background: linear-gradient(transparent 0 86%, var(--composition-dim) 86% 100%);
-}
-
-.composition-orbit span {
-  position: relative;
-  z-index: 2;
-  color: var(--composition-accent);
-  font-size: clamp(8px, 1.4vmin, 18px);
-}
-
-.composition-coordinate .axis-x,
-.composition-coordinate .axis-y {
-  position: absolute;
-  top: 50%;
-  left: 8%;
-  width: 84%;
-  height: 1px;
-  background: var(--composition-line);
-}
-
-.composition-coordinate .axis-y {
-  top: 8%;
-  left: 50%;
-  width: 1px;
-  height: 84%;
-}
-
-.composition-coordinate b {
-  position: absolute;
-  width: 5px;
-  height: 5px;
-  transform: translate(-50%, -50%);
-  background: var(--composition-ink);
-  border-radius: 50%;
-}
-
-.composition-coordinate b:nth-of-type(3n) {
-  background: var(--composition-accent);
-}
-
-.composition-coordinate span {
-  position: absolute;
-  right: 4%;
-  bottom: 3%;
-  color: var(--composition-dim);
-  font-size: clamp(5px, 0.72vmin, 8px);
-}
-
-.composition-waveform {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2px;
-}
-
-.composition-waveform i {
-  width: 2px;
-  min-height: 6%;
-  background: var(--composition-dim);
-}
-
-.composition-waveform i:nth-child(7n) {
-  width: 3px;
-  background: var(--composition-accent);
-}
-
-.composition-timeline {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-}
-
-.composition-timeline span {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 7px;
-  color: var(--composition-dim);
-  font-size: clamp(5px, 0.7vmin, 8px);
-}
-
-.composition-timeline i {
-  width: 100%;
-  height: 1px;
-  background: var(--composition-line);
-}
-
-.composition-timeline span.is-active {
-  color: var(--composition-accent);
-}
-
-.composition-timeline span.is-active i {
-  height: 3px;
-  background: var(--composition-accent);
-}
-
-/* 11 layout families form 32 systems through palette, motif and variant changes. */
-.composition-family-horizon .composition-art { grid-area: 1 / 1 / 10 / 25; }
-.composition-family-horizon .composition-chrome { grid-area: 1 / 1 / 2 / 25; }
-.composition-family-horizon .composition-heading { grid-area: 10 / 1 / 14 / 25; }
-.composition-family-horizon .composition-diagram { grid-area: 14 / 1 / 16 / 8; }
-.composition-family-horizon .composition-matrix { grid-area: 14 / 8 / 16 / 17; }
-.composition-family-horizon .composition-ledger { grid-area: 14 / 17 / 16 / 25; }
-.composition-family-horizon .composition-monogram { grid-area: 2 / 1 / 6 / 6; }
-.composition-family-horizon .composition-footer { grid-area: 16 / 1 / 17 / 25; }
-
-.composition-family-shrine .composition-art { grid-area: 2 / 8 / 16 / 18; }
-.composition-family-shrine .composition-chrome { grid-area: 1 / 1 / 2 / 25; }
-.composition-family-shrine .composition-heading { grid-area: 4 / 1 / 12 / 9; }
-.composition-family-shrine .composition-diagram { grid-area: 2 / 18 / 8 / 25; }
-.composition-family-shrine .composition-ledger { grid-area: 8 / 18 / 16 / 25; }
-.composition-family-shrine .composition-matrix { grid-area: 12 / 1 / 16 / 8; }
-.composition-family-shrine .composition-monogram { grid-area: 2 / 1 / 5 / 5; opacity: 0.3; }
-.composition-family-shrine .composition-footer { grid-area: 16 / 1 / 17 / 25; }
-
-.composition-family-split .composition-art { grid-area: 1 / 1 / 17 / 11; }
-.composition-family-split .composition-chrome { grid-area: 1 / 11 / 2 / 25; }
-.composition-family-split .composition-heading { grid-area: 5 / 10 / 11 / 25; }
-.composition-family-split .composition-diagram { grid-area: 2 / 11 / 5 / 18; }
-.composition-family-split .composition-ledger { grid-area: 2 / 18 / 5 / 25; }
-.composition-family-split .composition-matrix { grid-area: 11 / 11 / 16 / 19; }
-.composition-family-split .composition-monogram { grid-area: 11 / 19 / 16 / 25; }
-.composition-family-split .composition-footer { grid-area: 16 / 11 / 17 / 25; }
-
-.composition-family-split.composition-variant-b .composition-art,
-.composition-family-split.composition-variant-d .composition-art { grid-area: 1 / 14 / 17 / 25; }
-.composition-family-split.composition-variant-b .composition-chrome,
-.composition-family-split.composition-variant-d .composition-chrome { grid-area: 1 / 1 / 2 / 14; }
-.composition-family-split.composition-variant-b .composition-heading,
-.composition-family-split.composition-variant-d .composition-heading { grid-area: 5 / 1 / 11 / 15; }
-.composition-family-split.composition-variant-b .composition-diagram,
-.composition-family-split.composition-variant-d .composition-diagram { grid-area: 2 / 1 / 5 / 7; }
-.composition-family-split.composition-variant-b .composition-ledger,
-.composition-family-split.composition-variant-d .composition-ledger { grid-area: 2 / 7 / 5 / 14; }
-.composition-family-split.composition-variant-b .composition-matrix,
-.composition-family-split.composition-variant-d .composition-matrix { grid-area: 11 / 1 / 16 / 8; }
-.composition-family-split.composition-variant-b .composition-monogram,
-.composition-family-split.composition-variant-d .composition-monogram { grid-area: 11 / 8 / 16 / 14; }
-.composition-family-split.composition-variant-b .composition-footer,
-.composition-family-split.composition-variant-d .composition-footer { grid-area: 16 / 1 / 17 / 14; }
-
-.composition-family-cabinet .composition-chrome { grid-area: 1 / 1 / 2 / 25; }
-.composition-family-cabinet .composition-art { grid-area: 2 / 9 / 12 / 25; }
-.composition-family-cabinet .composition-heading { grid-area: 12 / 1 / 16 / 18; }
-.composition-family-cabinet .composition-diagram { grid-area: 2 / 1 / 7 / 9; }
-.composition-family-cabinet .composition-ledger { grid-area: 7 / 1 / 12 / 9; }
-.composition-family-cabinet .composition-matrix { grid-area: 12 / 18 / 16 / 25; }
-.composition-family-cabinet .composition-monogram { grid-area: 2 / 9 / 6 / 14; }
-.composition-family-cabinet .composition-footer { grid-area: 16 / 1 / 17 / 25; }
-
-.composition-family-monolith .composition-art { grid-area: 1 / 13 / 17 / 25; }
-.composition-family-monolith .composition-chrome { grid-area: 1 / 1 / 2 / 13; }
-.composition-family-monolith .composition-heading { grid-area: 6 / 1 / 12 / 14; }
-.composition-family-monolith .composition-diagram { grid-area: 2 / 9 / 6 / 13; }
-.composition-family-monolith .composition-ledger { grid-area: 12 / 7 / 16 / 13; }
-.composition-family-monolith .composition-matrix { grid-area: 12 / 1 / 16 / 7; }
-.composition-family-monolith .composition-monogram { grid-area: 2 / 1 / 7 / 9; }
-.composition-family-monolith .composition-footer { grid-area: 16 / 1 / 17 / 13; }
-
-.composition-family-ribbon .composition-art { grid-area: 5 / 1 / 12 / 25; }
-.composition-family-ribbon .composition-chrome { grid-area: 1 / 1 / 2 / 19; }
-.composition-family-ribbon .composition-heading { grid-area: 2 / 1 / 5 / 19; }
-.composition-family-ribbon .composition-diagram { grid-area: 12 / 1 / 16 / 8; }
-.composition-family-ribbon .composition-matrix { grid-area: 12 / 8 / 16 / 18; }
-.composition-family-ribbon .composition-ledger { grid-area: 12 / 18 / 16 / 25; }
-.composition-family-ribbon .composition-monogram { grid-area: 1 / 19 / 5 / 25; }
-.composition-family-ribbon .composition-footer { grid-area: 16 / 1 / 17 / 25; }
-
-.composition-family-ledger .composition-art { grid-area: 1 / 12 / 14 / 25; }
-.composition-family-ledger .composition-chrome { grid-area: 1 / 12 / 2 / 25; }
-.composition-family-ledger .composition-heading { grid-area: 5 / 1 / 11 / 14; }
-.composition-family-ledger .composition-diagram { grid-area: 1 / 1 / 5 / 6; }
-.composition-family-ledger .composition-ledger { grid-area: 1 / 6 / 5 / 12; }
-.composition-family-ledger .composition-matrix { grid-area: 11 / 1 / 16 / 8; }
-.composition-family-ledger .composition-monogram { grid-area: 11 / 8 / 16 / 12; }
-.composition-family-ledger .composition-footer { grid-area: 16 / 1 / 17 / 25; }
-
-.composition-family-radial .composition-art { grid-area: 1 / 14 / 17 / 25; border-radius: 50% 50% 0 0; }
-.composition-family-radial .composition-chrome { grid-area: 1 / 14 / 2 / 25; }
-.composition-family-radial .composition-heading { grid-area: 6 / 1 / 12 / 15; }
-.composition-family-radial .composition-diagram { grid-area: 1 / 1 / 6 / 8; }
-.composition-family-radial .composition-ledger { grid-area: 1 / 8 / 6 / 14; }
-.composition-family-radial .composition-matrix { grid-area: 12 / 1 / 16 / 8; }
-.composition-family-radial .composition-monogram { grid-area: 12 / 8 / 16 / 14; }
-.composition-family-radial .composition-footer { grid-area: 16 / 1 / 17 / 14; }
-
-.composition-family-folio .composition-art { grid-area: 2 / 5 / 15 / 21; margin: clamp(8px, 1.4vmin, 22px); background: color-mix(in srgb, var(--composition-art-accent) 28%, var(--composition-bg)); }
-.composition-family-folio .composition-chrome { grid-area: 1 / 1 / 2 / 25; }
-.composition-family-folio .composition-heading { grid-area: 11 / 1 / 16 / 15; }
-.composition-family-folio .composition-diagram { grid-area: 2 / 1 / 7 / 5; }
-.composition-family-folio .composition-ledger { grid-area: 7 / 1 / 15 / 5; }
-.composition-family-folio .composition-matrix { grid-area: 2 / 21 / 9 / 25; }
-.composition-family-folio .composition-monogram { grid-area: 9 / 21 / 15 / 25; }
-.composition-family-folio .composition-footer { grid-area: 16 / 1 / 17 / 25; }
-
-.composition-family-bleed .composition-art { grid-area: 1 / 9 / 17 / 25; }
-.composition-family-bleed .composition-chrome { grid-area: 1 / 1 / 2 / 9; }
-.composition-family-bleed .composition-heading { grid-area: 5 / 1 / 11 / 15; }
-.composition-family-bleed .composition-diagram { grid-area: 1 / 1 / 5 / 5; }
-.composition-family-bleed .composition-ledger { grid-area: 1 / 5 / 5 / 9; }
-.composition-family-bleed .composition-matrix { grid-area: 11 / 1 / 16 / 7; }
-.composition-family-bleed .composition-monogram { grid-area: 11 / 7 / 16 / 10; }
-.composition-family-bleed .composition-footer { grid-area: 16 / 1 / 17 / 10; }
-
-.composition-family-bleed.composition-variant-c .composition-art {
-  clip-path: polygon(18% 0, 100% 0, 100% 100%, 0 100%);
-}
-
-.composition-family-bleed.composition-variant-d .composition-art {
-  grid-area: 1 / 1 / 17 / 25;
-  opacity: 0.78;
-}
-
-.composition-family-bleed.composition-variant-d .composition-chrome { grid-area: 1 / 1 / 2 / 25; }
-.composition-family-bleed.composition-variant-d .composition-heading { grid-area: 5 / 2 / 11 / 24; text-align: center; }
-.composition-family-bleed.composition-variant-d .composition-diagram { grid-area: 2 / 2 / 5 / 8; }
-.composition-family-bleed.composition-variant-d .composition-ledger { grid-area: 2 / 18 / 5 / 24; }
-.composition-family-bleed.composition-variant-d .composition-matrix { grid-area: 11 / 2 / 16 / 10; }
-.composition-family-bleed.composition-variant-d .composition-monogram { grid-area: 11 / 18 / 16 / 24; }
-.composition-family-bleed.composition-variant-d .composition-footer { grid-area: 16 / 1 / 17 / 25; }
-
-.composition-variant-b .composition-heading {
-  text-align: right;
-}
-
-.composition-variant-b .composition-heading h1 {
-  align-items: flex-end;
-}
-
-.composition-variant-c .composition-monogram strong {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-}
-
-.composition-variant-d .composition-heading {
-  border-width: 1px 0;
+  .composition-title-monumental .composition-heading h1,
+  .composition-title-overlay .composition-heading h1 {
+    font-size: clamp(58px, min(10.6vw, 20vh), 224px);
+  }
 }
 
 @keyframes composition-in {
   from {
     opacity: 0;
-    transform: scale(1.008);
+    transform: scale(1.004);
   }
 }
 
 @keyframes composition-art-in {
   from {
     opacity: 0;
-    transform: scale(1.035);
-    filter: sepia(0.5) saturate(0.35) contrast(1.15) blur(5px);
+    transform: scale(1.018);
   }
 }
-
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1792,241 +2437,6 @@ a:focus-visible {
   }
 }
 
-@media (max-aspect-ratio: 1 / 1) {
-  .composition-sheet {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-template-rows: repeat(20, minmax(0, 1fr));
-    background-size: 8.3333% 5%, 8.3333% 5%, 100% 100%;
-  }
-
-  .composition-sheet > .composition-art {
-    grid-area: 1 / 1 / 12 / 13 !important;
-    margin: 0 !important;
-    clip-path: none !important;
-    border-radius: 0 !important;
-    opacity: 1 !important;
-  }
-
-  .composition-sheet > .composition-chrome {
-    grid-area: 1 / 1 / 2 / 13 !important;
-  }
-
-  .composition-sheet > .composition-heading {
-    grid-area: 8 / 1 / 13 / 13 !important;
-    overflow: hidden;
-    text-align: left;
-    background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--composition-bg) 94%, transparent) 38%);
-  }
-
-  .composition-sheet > .composition-heading h1 {
-    align-items: flex-start;
-    font-size: clamp(32px, 11.5vw, 80px);
-  }
-
-  .composition-sheet > .composition-heading h1 span {
-    white-space: normal;
-  }
-
-  .composition-sheet.is-medium > .composition-heading h1 {
-    font-size: clamp(28px, 9.2vw, 68px);
-  }
-
-  .composition-sheet.is-long > .composition-heading h1 {
-    font-size: clamp(23px, 7.4vw, 54px);
-  }
-
-  .composition-sheet > .composition-diagram {
-    grid-area: 12 / 1 / 16 / 5 !important;
-  }
-
-  .composition-sheet > .composition-ledger {
-    grid-area: 12 / 5 / 16 / 9 !important;
-  }
-
-  .composition-sheet > .composition-monogram {
-    grid-area: 12 / 9 / 16 / 13 !important;
-    opacity: 1;
-  }
-
-  .composition-sheet > .composition-matrix {
-    grid-area: 16 / 1 / 20 / 13 !important;
-  }
-
-  .composition-sheet > .composition-footer {
-    grid-area: 20 / 1 / 21 / 13 !important;
-  }
-
-  .composition-shape-t > .composition-art,
-  .composition-shape-p > .composition-art {
-    grid-area: 1 / 5 / 16 / 13 !important;
-  }
-
-  .composition-shape-t > .composition-heading,
-  .composition-shape-p > .composition-heading {
-    grid-area: 6 / 1 / 12 / 9 !important;
-  }
-
-  .composition-shape-t > .composition-diagram,
-  .composition-shape-p > .composition-diagram {
-    grid-area: 2 / 1 / 6 / 5 !important;
-  }
-
-  .composition-shape-t > .composition-ledger,
-  .composition-shape-p > .composition-ledger {
-    grid-area: 12 / 1 / 16 / 5 !important;
-  }
-
-  .composition-shape-t > .composition-monogram,
-  .composition-shape-p > .composition-monogram {
-    grid-area: 12 / 5 / 16 / 9 !important;
-  }
-
-  .composition-shape-t > .composition-matrix,
-  .composition-shape-p > .composition-matrix {
-    grid-area: 16 / 1 / 20 / 13 !important;
-  }
-
-  .composition-family-horizon > .composition-art,
-  .composition-family-ribbon > .composition-art {
-    grid-area: 4 / 1 / 12 / 13 !important;
-  }
-
-  .composition-family-horizon > .composition-heading,
-  .composition-family-ribbon > .composition-heading {
-    grid-area: 1 / 1 / 5 / 13 !important;
-  }
-
-  .composition-family-horizon > .composition-diagram,
-  .composition-family-ribbon > .composition-diagram {
-    grid-area: 12 / 1 / 16 / 5 !important;
-  }
-
-  .composition-family-horizon > .composition-ledger,
-  .composition-family-ribbon > .composition-ledger {
-    grid-area: 12 / 5 / 16 / 9 !important;
-  }
-
-  .composition-family-horizon > .composition-monogram,
-  .composition-family-ribbon > .composition-monogram {
-    grid-area: 12 / 9 / 16 / 13 !important;
-  }
-
-  .composition-family-shrine > .composition-art,
-  .composition-family-radial > .composition-art {
-    grid-area: 2 / 3 / 15 / 11 !important;
-  }
-
-  .composition-family-radial > .composition-art {
-    border-radius: 48% 48% 0 0 !important;
-  }
-
-  .composition-family-shrine > .composition-heading,
-  .composition-family-radial > .composition-heading {
-    grid-area: 9 / 1 / 15 / 13 !important;
-  }
-
-  .composition-family-shrine > .composition-diagram,
-  .composition-family-radial > .composition-diagram {
-    grid-area: 2 / 1 / 7 / 4 !important;
-  }
-
-  .composition-family-shrine > .composition-ledger,
-  .composition-family-radial > .composition-ledger {
-    grid-area: 2 / 10 / 9 / 13 !important;
-  }
-
-  .composition-family-shrine > .composition-matrix,
-  .composition-family-radial > .composition-matrix {
-    grid-area: 15 / 1 / 20 / 9 !important;
-  }
-
-  .composition-family-shrine > .composition-monogram,
-  .composition-family-radial > .composition-monogram {
-    grid-area: 15 / 9 / 20 / 13 !important;
-  }
-
-  .composition-family-cabinet > .composition-art,
-  .composition-family-ledger > .composition-art {
-    grid-area: 2 / 5 / 12 / 13 !important;
-  }
-
-  .composition-family-cabinet > .composition-heading,
-  .composition-family-ledger > .composition-heading {
-    grid-area: 7 / 1 / 14 / 9 !important;
-  }
-
-  .composition-family-cabinet > .composition-diagram,
-  .composition-family-ledger > .composition-diagram {
-    grid-area: 2 / 1 / 7 / 5 !important;
-  }
-
-  .composition-family-cabinet > .composition-ledger,
-  .composition-family-ledger > .composition-ledger {
-    grid-area: 14 / 1 / 20 / 5 !important;
-  }
-
-  .composition-family-cabinet > .composition-monogram,
-  .composition-family-ledger > .composition-monogram {
-    grid-area: 14 / 5 / 20 / 9 !important;
-  }
-
-  .composition-family-cabinet > .composition-matrix,
-  .composition-family-ledger > .composition-matrix {
-    grid-area: 12 / 9 / 20 / 13 !important;
-  }
-
-  .composition-family-monolith > .composition-art {
-    grid-area: 1 / 7 / 16 / 13 !important;
-  }
-
-  .composition-family-monolith > .composition-heading {
-    grid-area: 5 / 1 / 12 / 9 !important;
-  }
-
-  .composition-family-monolith > .composition-diagram {
-    grid-area: 2 / 1 / 5 / 7 !important;
-  }
-
-  .composition-family-monolith > .composition-ledger {
-    grid-area: 12 / 1 / 16 / 7 !important;
-  }
-
-  .composition-family-monolith > .composition-monogram {
-    grid-area: 2 / 7 / 6 / 13 !important;
-  }
-
-  .composition-family-folio > .composition-art {
-    grid-area: 2 / 2 / 15 / 12 !important;
-    margin: clamp(7px, 1.5vmin, 16px) !important;
-  }
-
-  .composition-family-folio > .composition-heading {
-    grid-area: 10 / 1 / 16 / 13 !important;
-  }
-
-  .composition-family-folio > .composition-diagram {
-    grid-area: 2 / 1 / 6 / 4 !important;
-  }
-
-  .composition-family-folio > .composition-ledger {
-    grid-area: 6 / 1 / 10 / 4 !important;
-  }
-
-  .composition-family-folio > .composition-matrix {
-    grid-area: 15 / 1 / 20 / 9 !important;
-  }
-
-  .composition-family-folio > .composition-monogram {
-    grid-area: 15 / 9 / 20 / 13 !important;
-  }
-}
-
-@media (min-aspect-ratio: 21 / 9) {
-  .composition-heading h1 {
-    font-size: clamp(42px, 9.5vmin, 148px);
-  }
-}
-
 @media (max-width: 420px) {
   .index-footer span {
     display: none;
@@ -2065,7 +2475,8 @@ a:focus-visible {
 
   .composition-heading p,
   .composition-heading small,
-  .composition-art-label {
+  .composition-art-label,
+  .composition-details {
     display: none;
   }
 
@@ -2095,7 +2506,7 @@ a:focus-visible {
   }
 
   .composition-footer span:first-child,
-  .composition-ledger-list span:nth-child(n + 6) {
+  .composition-mark > small {
     display: none;
   }
 }
