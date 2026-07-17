@@ -52,8 +52,8 @@ export const ARTWORK_SEEDS: ArtworkSeed[] = PAINTINGS.map((painting) => ({
   accent: accentFor(`${painting.qid}:${painting.fallbackFile}`),
 }));
 
-export function commonsRedirect(fileName: string) {
-  return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(fileName)}?width=1600`;
+export function commonsRedirect(fileName: string, width = 1600) {
+  return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(fileName)}?width=${width}`;
 }
 
 export function fallbackArtwork(seed: ArtworkSeed): GalleryArtwork {

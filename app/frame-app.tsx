@@ -13,16 +13,18 @@ import {
   type ReactNode,
 } from "react";
 import { commonsRedirect } from "./data/artworks";
+import { CompositionsMode } from "./modes/compositions";
 import { GalleryMode } from "./modes/gallery";
 import { SignalField } from "./modes/signal-field";
 
-type ModeId = "signal" | "gallery";
+type ModeId = "signal" | "gallery" | "compositions";
 type ModeDefinition = {
   id: ModeId;
   number: string;
   name: string;
   description: string;
-  component: ComponentType;
+  component: ComponentType<{ paused?: boolean }>;
+  preview: ComponentType;
 };
 
 type WakeLockHandle = {
@@ -44,6 +46,7 @@ const MODES: ModeDefinition[] = [
     name: "Signal Field",
     description: "Generative glyphs, telemetry and typographic systems.",
     component: SignalField,
+    preview: SignalPreview,
   },
   {
     id: "gallery",
@@ -51,6 +54,15 @@ const MODES: ModeDefinition[] = [
     name: "Swikipedia",
     description: "A slow public-domain gallery spanning six centuries.",
     component: GalleryMode,
+    preview: GalleryPreview,
+  },
+  {
+    id: "compositions",
+    number: "03",
+    name: "Composition Atlas",
+    description: "32 smart arrangements of painting, type and archival signal.",
+    component: CompositionsMode,
+    preview: CompositionPreview,
   },
 ];
 
@@ -165,6 +177,28 @@ function GalleryPreview() {
   );
 }
 
+function CompositionPreview() {
+  return (
+    <div className="composition-preview" aria-hidden="true">
+      <img
+        src={commonsRedirect("Lady with an Ermine - Leonardo da Vinci - Google Art Project.jpg", 560)}
+        alt=""
+      />
+      <div className="composition-preview-grid" />
+      <div className="composition-preview-constellation">
+        {Array.from({ length: 7 }, (_, index) => <i key={index} />)}
+      </div>
+      <strong>ALWAYS–ON<br />FRAME</strong>
+      <div className="composition-preview-matrix">
+        {Array.from({ length: 40 }, (_, index) => (
+          <i key={index} className={(index * 5 + 3) % 11 < 5 ? "is-on" : ""} />
+        ))}
+      </div>
+      <span>ATLAS / 32</span>
+    </div>
+  );
+}
+
 function ModeIndex({
   activeMode,
   onSelect,
@@ -193,32 +227,36 @@ function ModeIndex({
       </div>
 
       <div className="mode-list">
-        {MODES.map((mode) => (
-          <button
-            className={`mode-card ${activeMode === mode.id ? "is-current" : ""}`}
-            data-testid={`mode-${mode.id}`}
-            key={mode.id}
-            type="button"
-            onClick={() => onSelect(mode.id)}
-          >
-            <div className="mode-card-preview">
-              {mode.id === "signal" ? <SignalPreview /> : <GalleryPreview />}
-            </div>
-            <div className="mode-card-copy">
-              <span className="mode-number">/{mode.number}</span>
-              <div>
-                <strong>{mode.name}</strong>
-                <small>{mode.description}</small>
+        {MODES.map((mode) => {
+          const Preview = mode.preview;
+          return (
+            <button
+              className={`mode-card ${activeMode === mode.id ? "is-current" : ""}`}
+              data-testid={`mode-${mode.id}`}
+              key={mode.id}
+              type="button"
+              autoFocus={activeMode ? activeMode === mode.id : mode.id === "signal"}
+              onClick={() => onSelect(mode.id)}
+            >
+              <div className="mode-card-preview">
+                <Preview />
               </div>
-              <span className="mode-arrow" aria-hidden="true">↗</span>
-            </div>
-          </button>
-        ))}
+              <div className="mode-card-copy">
+                <span className="mode-number">/{mode.number}</span>
+                <div>
+                  <strong>{mode.name}</strong>
+                  <small>{mode.description}</small>
+                </div>
+                <span className="mode-arrow" aria-hidden="true">↗</span>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       <footer className="index-footer">
         <button type="button" onClick={onFullscreen}>ENTER FULLSCREEN</button>
-        <span>1–2 SELECT / F FULLSCREEN / I INDEX</span>
+        <span>1–3 SELECT / F FULLSCREEN / I INDEX</span>
         {activeMode && (
           <button type="button" onClick={onClose}>RETURN TO FRAME</button>
         )}
@@ -312,6 +350,7 @@ export default function FrameApp() {
       const key = event.key.toLocaleLowerCase();
       if (key === "1") selectMode("signal");
       if (key === "2") selectMode("gallery");
+      if (key === "3") selectMode("compositions");
       if (key === "i" || key === "escape") setIndexOpen((open) => !open);
       if (key === "f") enterFullscreen();
     };
@@ -338,9 +377,11 @@ export default function FrameApp() {
     >
       <div className="portrait-frame">
         {ActiveComponent ? (
-          <ModeBoundary key={activeMode}>
-            <ActiveComponent />
-          </ModeBoundary>
+          <div className="mode-stage" inert={indexOpen} aria-hidden={indexOpen}>
+            <ModeBoundary key={activeMode}>
+              <ActiveComponent paused={indexOpen} />
+            </ModeBoundary>
+          </div>
         ) : (
           <div className="empty-frame" aria-hidden="true" />
         )}

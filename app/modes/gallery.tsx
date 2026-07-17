@@ -266,7 +266,7 @@ function formatCountdown(milliseconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function GalleryMode() {
+export function GalleryMode({ paused = false }: { paused?: boolean }) {
   const fallbackCollection = useMemo(
     () => ARTWORK_SEEDS.map(fallbackArtwork),
     [],
@@ -324,6 +324,7 @@ export function GalleryMode() {
   }, [artworks.length]);
 
   useEffect(() => {
+    if (paused) return;
     let timeout = 0;
     let disposed = false;
     const schedule = () => {
@@ -340,9 +341,10 @@ export function GalleryMode() {
       disposed = true;
       window.clearTimeout(timeout);
     };
-  }, [advance, timerReset]);
+  }, [advance, paused, timerReset]);
 
   useEffect(() => {
+    if (paused) return;
     let timeout = 0;
     const tick = () => {
       setRemaining(nextAt - Date.now());
@@ -350,7 +352,7 @@ export function GalleryMode() {
     };
     tick();
     return () => window.clearTimeout(timeout);
-  }, [nextAt]);
+  }, [nextAt, paused]);
 
   const activeIndex = artworks.length ? currentIndex % artworks.length : 0;
   const current = artworks[activeIndex] ?? fallbackCollection[0];
@@ -363,6 +365,7 @@ export function GalleryMode() {
       : current.imageUrl;
 
   useEffect(() => {
+    if (paused) return;
     if (artworks.length < 2) return;
     for (const offset of [-1, 1]) {
       const adjacent = artworks[(activeIndex + offset + artworks.length) % artworks.length];
@@ -371,7 +374,7 @@ export function GalleryMode() {
       preloader.decoding = "async";
       preloader.src = adjacent.imageUrl;
     }
-  }, [activeIndex, artworks]);
+  }, [activeIndex, artworks, paused]);
 
   const navigateManually = useCallback((direction: -1 | 1) => {
     const collectionSize = Math.max(1, artworks.length);

@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://joansterjo-celonis.github.io/Screensaver/"),
   title: "Always-On Frame",
   description:
-    "A living display with 18 generative signal scenes and 300 verified public-domain paintings.",
+    "A living display with 18 generative signal scenes, 300 verified public-domain paintings, and 32 smart editorial compositions.",
   applicationName: "Always-On Frame",
   appleWebApp: {
     capable: true,
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Always-On Frame",
     description:
-      "A living display with 18 generative signal scenes and 300 verified public-domain paintings.",
+      "A living display with 18 generative signal scenes, 300 verified public-domain paintings, and 32 smart editorial compositions.",
     type: "website",
     images: [
       {
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Always-On Frame",
     description:
-      "A living display with 18 generative signal scenes and 300 verified public-domain paintings.",
+      "A living display with 18 generative signal scenes, 300 verified public-domain paintings, and 32 smart editorial compositions.",
     images: ["https://joansterjo-celonis.github.io/Screensaver/og.png"],
   },
 };

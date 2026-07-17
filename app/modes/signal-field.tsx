@@ -11,10 +11,11 @@ const REDUCED_MOTION_FRAME_GAP = 1_000;
 const REDUCED_MOTION_SCENE_DURATION = 30_000;
 const MAX_CANVAS_PIXELS = 2_200_000;
 
-export function SignalField() {
+export function SignalField({ paused = false }: { paused?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    if (paused) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const context = canvas.getContext("2d", { alpha: false });
@@ -122,7 +123,7 @@ export function SignalField() {
       document.removeEventListener("visibilitychange", redraw);
       removeMotionListener();
     };
-  }, []);
+  }, [paused]);
 
   return (
     <section

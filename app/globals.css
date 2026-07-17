@@ -180,7 +180,7 @@ a:focus-visible {
 .mode-list {
   min-height: 0;
   display: grid;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
   gap: clamp(10px, 1.5vh, 18px);
 }
 
@@ -376,6 +376,107 @@ a:focus-visible {
   font-size: clamp(4px, 0.8vw, 6px);
 }
 
+.composition-preview {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: #eadfce;
+  background: #160c0f;
+}
+
+.composition-preview img {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  width: 42%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 52% 34%;
+  filter: sepia(0.34) saturate(0.64) contrast(1.08);
+}
+
+.composition-preview-grid {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(234, 223, 206, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(234, 223, 206, 0.16) 1px, transparent 1px);
+  background-size: 12.5% 20%;
+}
+
+.composition-preview strong {
+  position: absolute;
+  z-index: 3;
+  left: 6%;
+  top: 37%;
+  font-family: var(--font-serif);
+  font-size: clamp(12px, 3vw, 23px);
+  font-weight: 400;
+  line-height: 0.82;
+  letter-spacing: -0.055em;
+}
+
+.composition-preview > span {
+  position: absolute;
+  z-index: 3;
+  left: 6%;
+  bottom: 7%;
+  color: var(--frame-accent);
+  font-size: clamp(4px, 0.82vw, 6px);
+  letter-spacing: 0.12em;
+}
+
+.composition-preview-constellation {
+  position: absolute;
+  z-index: 3;
+  top: 8%;
+  left: 34%;
+  width: 19%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(234, 223, 206, 0.28);
+}
+
+.composition-preview-constellation i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44%;
+  height: 1px;
+  transform-origin: left center;
+  transform: rotate(calc(var(--preview-line, 0) * 1deg));
+  background: rgba(234, 223, 206, 0.58);
+}
+
+.composition-preview-constellation i:nth-child(1) { --preview-line: 12; }
+.composition-preview-constellation i:nth-child(2) { --preview-line: 64; }
+.composition-preview-constellation i:nth-child(3) { --preview-line: 118; }
+.composition-preview-constellation i:nth-child(4) { --preview-line: 168; }
+.composition-preview-constellation i:nth-child(5) { --preview-line: 216; }
+.composition-preview-constellation i:nth-child(6) { --preview-line: 274; }
+.composition-preview-constellation i:nth-child(7) { --preview-line: 324; }
+
+.composition-preview-matrix {
+  position: absolute;
+  z-index: 3;
+  right: 43%;
+  bottom: 7%;
+  width: 32%;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 2px;
+}
+
+.composition-preview-matrix i {
+  aspect-ratio: 1;
+  border: 1px solid rgba(234, 223, 206, 0.2);
+}
+
+.composition-preview-matrix i.is-on {
+  background: rgba(234, 223, 206, 0.82);
+}
+
 .index-footer {
   justify-content: space-between;
   gap: 12px;
@@ -399,7 +500,13 @@ a:focus-visible {
 
 .signal-mode,
 .gallery-mode,
+.composition-mode,
 .signal-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.mode-stage {
   position: absolute;
   inset: 0;
 }
@@ -740,6 +847,775 @@ a:focus-visible {
   color: #f0e7d9;
 }
 
+.composition-mode {
+  overflow: hidden;
+  color: #eadfce;
+  background: #12090c;
+}
+
+.composition-mode:focus {
+  outline: none;
+}
+
+.composition-mode:focus-visible {
+  outline: 1px solid rgba(234, 223, 206, 0.5);
+  outline-offset: -4px;
+}
+
+.composition-sheet {
+  --composition-bg: #160c0f;
+  --composition-ink: #eadfce;
+  --composition-dim: rgba(234, 223, 206, 0.56);
+  --composition-line: rgba(234, 223, 206, 0.24);
+  --composition-panel: rgba(17, 8, 11, 0.64);
+  --composition-accent: #e34c82;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  grid-template-rows: repeat(16, minmax(0, 1fr));
+  padding:
+    max(clamp(13px, 2.2vmin, 30px), env(safe-area-inset-top))
+    max(clamp(13px, 2.2vmin, 30px), env(safe-area-inset-right))
+    max(clamp(13px, 2.2vmin, 30px), env(safe-area-inset-bottom))
+    max(clamp(13px, 2.2vmin, 30px), env(safe-area-inset-left));
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--composition-ink);
+  background-color: var(--composition-bg);
+  background-image:
+    linear-gradient(var(--composition-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--composition-line) 1px, transparent 1px),
+    radial-gradient(circle at 68% 36%, color-mix(in srgb, var(--composition-art-accent) 23%, transparent), transparent 38%);
+  background-size: 4.1667% 6.25%, 4.1667% 6.25%, 100% 100%;
+  animation: composition-in 950ms cubic-bezier(0.2, 0.78, 0.2, 1) both;
+}
+
+.composition-sheet::before {
+  content: "";
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  mix-blend-mode: soft-light;
+  background-image:
+    repeating-radial-gradient(circle at 28% 43%, transparent 0 1px, rgba(255, 255, 255, 0.18) 1.5px 2px, transparent 2.5px 4px),
+    linear-gradient(100deg, transparent 0 48%, rgba(255, 255, 255, 0.06) 50%, transparent 52%);
+  background-size: 5px 5px, 100% 100%;
+}
+
+.composition-palette-umber {
+  --composition-bg: #1c100b;
+  --composition-panel: rgba(24, 13, 8, 0.65);
+  --composition-accent: #d34b68;
+}
+
+.composition-palette-carbon {
+  --composition-bg: #0d1114;
+  --composition-panel: rgba(8, 13, 16, 0.68);
+  --composition-line: rgba(226, 220, 209, 0.2);
+  --composition-accent: #e24979;
+}
+
+.composition-palette-parchment {
+  --composition-bg: #dfd2bc;
+  --composition-ink: #251015;
+  --composition-dim: rgba(37, 16, 21, 0.6);
+  --composition-line: rgba(37, 16, 21, 0.24);
+  --composition-panel: rgba(232, 221, 201, 0.72);
+  --composition-accent: #b92555;
+}
+
+.composition-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--composition-line);
+  background: var(--composition-panel);
+}
+
+.composition-chrome {
+  z-index: 5;
+  grid-area: 1 / 1 / 2 / 17;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 clamp(8px, 1.25vmin, 18px);
+  color: var(--composition-dim);
+  font-size: clamp(6px, 0.9vmin, 11px);
+  letter-spacing: 0.13em;
+  white-space: nowrap;
+}
+
+.composition-chrome span:last-child {
+  color: var(--composition-accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composition-art {
+  z-index: 1;
+  grid-area: 1 / 17 / 17 / 25;
+  background:
+    radial-gradient(circle at center, color-mix(in srgb, var(--composition-art-accent) 68%, #2b1713), var(--composition-bg) 76%);
+}
+
+.composition-art img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.composition-art-backdrop {
+  z-index: 0;
+  object-fit: cover;
+  opacity: 0.72;
+  transform: scale(1.09);
+  filter: blur(clamp(18px, 3.2vmin, 46px)) sepia(0.38) saturate(0.58) contrast(1.12) brightness(0.46);
+}
+
+.composition-art-image {
+  z-index: 1;
+  filter: sepia(0.22) saturate(0.72) contrast(1.08) brightness(0.88);
+  animation: composition-art-in 1.4s cubic-bezier(0.22, 0.8, 0.2, 1) both;
+}
+
+.composition-palette-parchment .composition-art-image {
+  filter: sepia(0.12) saturate(0.82) contrast(1.04) brightness(0.95);
+}
+
+.composition-variant-b .composition-art-image {
+  filter: sepia(0.34) saturate(0.64) contrast(1.12) brightness(0.82);
+}
+
+.composition-variant-c .composition-art-image {
+  filter: sepia(0.08) saturate(0.54) contrast(1.18) brightness(0.8);
+}
+
+.composition-sheet.is-contained .composition-art-image {
+  filter: sepia(0.16) saturate(0.78) contrast(1.06) brightness(0.92);
+  box-shadow:
+    0 0 0 1px var(--composition-line),
+    0 16px 48px rgba(0, 0, 0, 0.34);
+}
+
+.composition-art.is-missing {
+  display: grid;
+  place-items: center;
+  background:
+    repeating-linear-gradient(135deg, transparent 0 20px, var(--composition-line) 20px 21px),
+    var(--composition-bg);
+}
+
+.composition-image-status {
+  position: relative;
+  z-index: 3;
+  color: var(--composition-accent);
+  font-size: clamp(7px, 1vmin, 11px);
+  letter-spacing: 0.14em;
+}
+
+.composition-art-grid {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--composition-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--composition-line) 1px, transparent 1px);
+  background-size: 16.666% 12.5%;
+  box-shadow: inset 0 0 0 1px var(--composition-line);
+}
+
+.composition-art-dissolve {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(18, 9, 12, 0.62), transparent 34%, transparent 82%, rgba(18, 9, 12, 0.22));
+  mix-blend-mode: multiply;
+}
+
+.composition-palette-parchment .composition-art-dissolve {
+  background: linear-gradient(90deg, rgba(223, 210, 188, 0.46), transparent 32%, transparent 86%, rgba(223, 210, 188, 0.18));
+  mix-blend-mode: screen;
+}
+
+.composition-art-label {
+  position: absolute;
+  z-index: 4;
+  right: clamp(8px, 1.25vmin, 18px);
+  bottom: clamp(8px, 1.25vmin, 18px);
+  padding: 4px 6px;
+  color: rgba(234, 223, 206, 0.72);
+  background: rgba(13, 7, 9, 0.52);
+  font-size: clamp(5px, 0.75vmin, 9px);
+  letter-spacing: 0.08em;
+  backdrop-filter: blur(8px);
+}
+
+.composition-heading {
+  z-index: 4;
+  grid-area: 5 / 1 / 9 / 17;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(9px, 1.7vmin, 24px);
+  overflow: visible;
+  background: color-mix(in srgb, var(--composition-bg) 78%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.composition-heading p,
+.composition-heading h1,
+.composition-heading small {
+  margin: 0;
+}
+
+.composition-heading p {
+  margin-bottom: clamp(5px, 0.8vmin, 10px);
+  color: var(--composition-accent);
+  font-size: clamp(6px, 0.86vmin, 10px);
+  letter-spacing: 0.16em;
+}
+
+.composition-heading h1 {
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  font-family: var(--font-serif);
+  font-size: clamp(34px, 8.1vmin, 132px);
+  font-weight: 400;
+  line-height: 0.76;
+  letter-spacing: -0.065em;
+  text-wrap: balance;
+}
+
+.composition-heading h1 span {
+  display: block;
+  white-space: nowrap;
+}
+
+.composition-sheet.is-medium .composition-heading h1 {
+  font-size: clamp(30px, 6.7vmin, 106px);
+}
+
+.composition-sheet.is-long .composition-heading h1 {
+  font-size: clamp(24px, 5.2vmin, 82px);
+  line-height: 0.82;
+}
+
+.composition-heading small {
+  max-width: 70ch;
+  margin-top: clamp(6px, 0.9vmin, 12px);
+  overflow: hidden;
+  color: var(--composition-dim);
+  font-size: clamp(6px, 0.86vmin, 10px);
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composition-diagram {
+  z-index: 3;
+  grid-area: 2 / 10 / 5 / 14;
+  display: grid;
+  place-items: center;
+  padding: clamp(7px, 1vmin, 14px);
+}
+
+.composition-matrix {
+  z-index: 3;
+  grid-area: 9 / 1 / 15 / 7;
+  display: grid;
+  place-items: stretch;
+  padding: clamp(8px, 1.25vmin, 18px);
+}
+
+.composition-ledger {
+  z-index: 3;
+  grid-area: 2 / 14 / 5 / 17;
+  padding: clamp(7px, 1vmin, 14px);
+}
+
+.composition-monogram {
+  z-index: 3;
+  grid-area: 9 / 7 / 15 / 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 0.8vmin, 10px);
+}
+
+.composition-monogram strong {
+  font-family: var(--font-serif);
+  font-size: clamp(44px, 10vmin, 154px);
+  font-weight: 400;
+  line-height: 0.7;
+  letter-spacing: -0.09em;
+}
+
+.composition-monogram span {
+  color: var(--composition-accent);
+  font-size: clamp(6px, 0.92vmin, 10px);
+  letter-spacing: 0.16em;
+}
+
+.composition-footer {
+  z-index: 5;
+  grid-area: 16 / 1 / 17 / 17;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 0 clamp(8px, 1.25vmin, 18px);
+  color: var(--composition-dim);
+  font-size: clamp(5px, 0.78vmin, 9px);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.composition-footer a {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--composition-ink);
+  text-decoration: none;
+  text-overflow: ellipsis;
+}
+
+.composition-footer a:hover {
+  color: var(--composition-accent);
+}
+
+.composition-footer span:last-child {
+  text-align: right;
+}
+
+.composition-cell-field,
+.composition-mini-matrix {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: clamp(2px, 0.34vmin, 5px);
+}
+
+.composition-cell-field i,
+.composition-mini-matrix i {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--composition-line);
+}
+
+.composition-cell-field i.is-on,
+.composition-mini-matrix i.is-on {
+  background: var(--composition-ink);
+}
+
+.composition-cell-field i.is-accent {
+  background: var(--composition-accent);
+  border-color: var(--composition-accent);
+}
+
+.composition-mini-matrix {
+  grid-template-columns: repeat(7, 1fr);
+  aspect-ratio: 7 / 6;
+}
+
+.composition-ledger-list,
+.composition-bars {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 3px;
+}
+
+.composition-ledger-list span,
+.composition-bars span {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto minmax(8px, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--composition-dim);
+  font-size: clamp(5px, 0.72vmin, 9px);
+  font-style: normal;
+}
+
+.composition-ledger-list b,
+.composition-ledger-list em,
+.composition-bars b,
+.composition-bars em {
+  font-weight: 400;
+  font-style: normal;
+}
+
+.composition-ledger-list i,
+.composition-bars i {
+  height: 1px;
+  background: var(--composition-line);
+}
+
+.composition-ledger-list em.is-accent,
+.composition-bars em {
+  color: var(--composition-accent);
+}
+
+.composition-bars.is-bars span {
+  grid-template-columns: 2.2em minmax(8px, 1fr) 1.4em;
+}
+
+.composition-bars.is-bars i {
+  height: 3px;
+  background: linear-gradient(90deg, var(--composition-ink), var(--composition-accent));
+}
+
+.composition-bars.is-bars span:nth-child(3n) i {
+  height: 1px;
+  background: var(--composition-line);
+}
+
+.composition-bars.is-ledger span:nth-child(even) {
+  grid-template-columns: auto minmax(8px, 1fr) auto;
+  direction: rtl;
+}
+
+.composition-bars.is-ledger span:nth-child(even) b,
+.composition-bars.is-ledger span:nth-child(even) em {
+  direction: ltr;
+}
+
+.composition-bars.is-ledger i {
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--composition-dim) 0 1px, transparent 1px 5px);
+}
+
+.composition-constellation,
+.composition-orbit,
+.composition-coordinate,
+.composition-waveform,
+.composition-timeline {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.composition-constellation i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--constellation-reach);
+  height: 1px;
+  transform: rotate(var(--constellation-angle));
+  transform-origin: left center;
+  background: var(--composition-line);
+}
+
+.composition-constellation i::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -3px;
+  width: 5px;
+  height: 5px;
+  transform: translateY(-50%);
+  background: var(--composition-ink);
+  border-radius: 50%;
+}
+
+.composition-constellation b {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  background: var(--composition-accent);
+  border-radius: 50%;
+}
+
+.composition-orbit {
+  display: grid;
+  place-items: center;
+}
+
+.composition-orbit > i {
+  position: absolute;
+  width: 78%;
+  aspect-ratio: 1;
+  border: 1px solid var(--composition-line);
+  border-radius: 50%;
+}
+
+.composition-orbit > i:nth-child(2) { width: 54%; }
+.composition-orbit > i:nth-child(3) { width: 28%; border-color: var(--composition-accent); }
+
+.composition-orbit b {
+  position: absolute;
+  width: 1px;
+  height: 49%;
+  transform-origin: center bottom;
+  background: linear-gradient(transparent 0 86%, var(--composition-dim) 86% 100%);
+}
+
+.composition-orbit span {
+  position: relative;
+  z-index: 2;
+  color: var(--composition-accent);
+  font-size: clamp(8px, 1.4vmin, 18px);
+}
+
+.composition-coordinate .axis-x,
+.composition-coordinate .axis-y {
+  position: absolute;
+  top: 50%;
+  left: 8%;
+  width: 84%;
+  height: 1px;
+  background: var(--composition-line);
+}
+
+.composition-coordinate .axis-y {
+  top: 8%;
+  left: 50%;
+  width: 1px;
+  height: 84%;
+}
+
+.composition-coordinate b {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  transform: translate(-50%, -50%);
+  background: var(--composition-ink);
+  border-radius: 50%;
+}
+
+.composition-coordinate b:nth-of-type(3n) {
+  background: var(--composition-accent);
+}
+
+.composition-coordinate span {
+  position: absolute;
+  right: 4%;
+  bottom: 3%;
+  color: var(--composition-dim);
+  font-size: clamp(5px, 0.72vmin, 8px);
+}
+
+.composition-waveform {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+}
+
+.composition-waveform i {
+  width: 2px;
+  min-height: 6%;
+  background: var(--composition-dim);
+}
+
+.composition-waveform i:nth-child(7n) {
+  width: 3px;
+  background: var(--composition-accent);
+}
+
+.composition-timeline {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+}
+
+.composition-timeline span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  color: var(--composition-dim);
+  font-size: clamp(5px, 0.7vmin, 8px);
+}
+
+.composition-timeline i {
+  width: 100%;
+  height: 1px;
+  background: var(--composition-line);
+}
+
+.composition-timeline span.is-active {
+  color: var(--composition-accent);
+}
+
+.composition-timeline span.is-active i {
+  height: 3px;
+  background: var(--composition-accent);
+}
+
+/* 11 layout families form 32 systems through palette, motif and variant changes. */
+.composition-family-horizon .composition-art { grid-area: 1 / 1 / 10 / 25; }
+.composition-family-horizon .composition-chrome { grid-area: 1 / 1 / 2 / 25; }
+.composition-family-horizon .composition-heading { grid-area: 10 / 1 / 14 / 25; }
+.composition-family-horizon .composition-diagram { grid-area: 14 / 1 / 16 / 8; }
+.composition-family-horizon .composition-matrix { grid-area: 14 / 8 / 16 / 17; }
+.composition-family-horizon .composition-ledger { grid-area: 14 / 17 / 16 / 25; }
+.composition-family-horizon .composition-monogram { grid-area: 2 / 1 / 6 / 6; }
+.composition-family-horizon .composition-footer { grid-area: 16 / 1 / 17 / 25; }
+
+.composition-family-shrine .composition-art { grid-area: 2 / 8 / 16 / 18; }
+.composition-family-shrine .composition-chrome { grid-area: 1 / 1 / 2 / 25; }
+.composition-family-shrine .composition-heading { grid-area: 4 / 1 / 12 / 9; }
+.composition-family-shrine .composition-diagram { grid-area: 2 / 18 / 8 / 25; }
+.composition-family-shrine .composition-ledger { grid-area: 8 / 18 / 16 / 25; }
+.composition-family-shrine .composition-matrix { grid-area: 12 / 1 / 16 / 8; }
+.composition-family-shrine .composition-monogram { grid-area: 2 / 1 / 5 / 5; opacity: 0.3; }
+.composition-family-shrine .composition-footer { grid-area: 16 / 1 / 17 / 25; }
+
+.composition-family-split .composition-art { grid-area: 1 / 1 / 17 / 11; }
+.composition-family-split .composition-chrome { grid-area: 1 / 11 / 2 / 25; }
+.composition-family-split .composition-heading { grid-area: 5 / 10 / 11 / 25; }
+.composition-family-split .composition-diagram { grid-area: 2 / 11 / 5 / 18; }
+.composition-family-split .composition-ledger { grid-area: 2 / 18 / 5 / 25; }
+.composition-family-split .composition-matrix { grid-area: 11 / 11 / 16 / 19; }
+.composition-family-split .composition-monogram { grid-area: 11 / 19 / 16 / 25; }
+.composition-family-split .composition-footer { grid-area: 16 / 11 / 17 / 25; }
+
+.composition-family-split.composition-variant-b .composition-art,
+.composition-family-split.composition-variant-d .composition-art { grid-area: 1 / 14 / 17 / 25; }
+.composition-family-split.composition-variant-b .composition-chrome,
+.composition-family-split.composition-variant-d .composition-chrome { grid-area: 1 / 1 / 2 / 14; }
+.composition-family-split.composition-variant-b .composition-heading,
+.composition-family-split.composition-variant-d .composition-heading { grid-area: 5 / 1 / 11 / 15; }
+.composition-family-split.composition-variant-b .composition-diagram,
+.composition-family-split.composition-variant-d .composition-diagram { grid-area: 2 / 1 / 5 / 7; }
+.composition-family-split.composition-variant-b .composition-ledger,
+.composition-family-split.composition-variant-d .composition-ledger { grid-area: 2 / 7 / 5 / 14; }
+.composition-family-split.composition-variant-b .composition-matrix,
+.composition-family-split.composition-variant-d .composition-matrix { grid-area: 11 / 1 / 16 / 8; }
+.composition-family-split.composition-variant-b .composition-monogram,
+.composition-family-split.composition-variant-d .composition-monogram { grid-area: 11 / 8 / 16 / 14; }
+.composition-family-split.composition-variant-b .composition-footer,
+.composition-family-split.composition-variant-d .composition-footer { grid-area: 16 / 1 / 17 / 14; }
+
+.composition-family-cabinet .composition-chrome { grid-area: 1 / 1 / 2 / 25; }
+.composition-family-cabinet .composition-art { grid-area: 2 / 9 / 12 / 25; }
+.composition-family-cabinet .composition-heading { grid-area: 12 / 1 / 16 / 18; }
+.composition-family-cabinet .composition-diagram { grid-area: 2 / 1 / 7 / 9; }
+.composition-family-cabinet .composition-ledger { grid-area: 7 / 1 / 12 / 9; }
+.composition-family-cabinet .composition-matrix { grid-area: 12 / 18 / 16 / 25; }
+.composition-family-cabinet .composition-monogram { grid-area: 2 / 9 / 6 / 14; }
+.composition-family-cabinet .composition-footer { grid-area: 16 / 1 / 17 / 25; }
+
+.composition-family-monolith .composition-art { grid-area: 1 / 13 / 17 / 25; }
+.composition-family-monolith .composition-chrome { grid-area: 1 / 1 / 2 / 13; }
+.composition-family-monolith .composition-heading { grid-area: 6 / 1 / 12 / 14; }
+.composition-family-monolith .composition-diagram { grid-area: 2 / 9 / 6 / 13; }
+.composition-family-monolith .composition-ledger { grid-area: 12 / 7 / 16 / 13; }
+.composition-family-monolith .composition-matrix { grid-area: 12 / 1 / 16 / 7; }
+.composition-family-monolith .composition-monogram { grid-area: 2 / 1 / 7 / 9; }
+.composition-family-monolith .composition-footer { grid-area: 16 / 1 / 17 / 13; }
+
+.composition-family-ribbon .composition-art { grid-area: 5 / 1 / 12 / 25; }
+.composition-family-ribbon .composition-chrome { grid-area: 1 / 1 / 2 / 19; }
+.composition-family-ribbon .composition-heading { grid-area: 2 / 1 / 5 / 19; }
+.composition-family-ribbon .composition-diagram { grid-area: 12 / 1 / 16 / 8; }
+.composition-family-ribbon .composition-matrix { grid-area: 12 / 8 / 16 / 18; }
+.composition-family-ribbon .composition-ledger { grid-area: 12 / 18 / 16 / 25; }
+.composition-family-ribbon .composition-monogram { grid-area: 1 / 19 / 5 / 25; }
+.composition-family-ribbon .composition-footer { grid-area: 16 / 1 / 17 / 25; }
+
+.composition-family-ledger .composition-art { grid-area: 1 / 12 / 14 / 25; }
+.composition-family-ledger .composition-chrome { grid-area: 1 / 12 / 2 / 25; }
+.composition-family-ledger .composition-heading { grid-area: 5 / 1 / 11 / 14; }
+.composition-family-ledger .composition-diagram { grid-area: 1 / 1 / 5 / 6; }
+.composition-family-ledger .composition-ledger { grid-area: 1 / 6 / 5 / 12; }
+.composition-family-ledger .composition-matrix { grid-area: 11 / 1 / 16 / 8; }
+.composition-family-ledger .composition-monogram { grid-area: 11 / 8 / 16 / 12; }
+.composition-family-ledger .composition-footer { grid-area: 16 / 1 / 17 / 25; }
+
+.composition-family-radial .composition-art { grid-area: 1 / 14 / 17 / 25; border-radius: 50% 50% 0 0; }
+.composition-family-radial .composition-chrome { grid-area: 1 / 14 / 2 / 25; }
+.composition-family-radial .composition-heading { grid-area: 6 / 1 / 12 / 15; }
+.composition-family-radial .composition-diagram { grid-area: 1 / 1 / 6 / 8; }
+.composition-family-radial .composition-ledger { grid-area: 1 / 8 / 6 / 14; }
+.composition-family-radial .composition-matrix { grid-area: 12 / 1 / 16 / 8; }
+.composition-family-radial .composition-monogram { grid-area: 12 / 8 / 16 / 14; }
+.composition-family-radial .composition-footer { grid-area: 16 / 1 / 17 / 14; }
+
+.composition-family-folio .composition-art { grid-area: 2 / 5 / 15 / 21; margin: clamp(8px, 1.4vmin, 22px); background: color-mix(in srgb, var(--composition-art-accent) 28%, var(--composition-bg)); }
+.composition-family-folio .composition-chrome { grid-area: 1 / 1 / 2 / 25; }
+.composition-family-folio .composition-heading { grid-area: 11 / 1 / 16 / 15; }
+.composition-family-folio .composition-diagram { grid-area: 2 / 1 / 7 / 5; }
+.composition-family-folio .composition-ledger { grid-area: 7 / 1 / 15 / 5; }
+.composition-family-folio .composition-matrix { grid-area: 2 / 21 / 9 / 25; }
+.composition-family-folio .composition-monogram { grid-area: 9 / 21 / 15 / 25; }
+.composition-family-folio .composition-footer { grid-area: 16 / 1 / 17 / 25; }
+
+.composition-family-bleed .composition-art { grid-area: 1 / 9 / 17 / 25; }
+.composition-family-bleed .composition-chrome { grid-area: 1 / 1 / 2 / 9; }
+.composition-family-bleed .composition-heading { grid-area: 5 / 1 / 11 / 15; }
+.composition-family-bleed .composition-diagram { grid-area: 1 / 1 / 5 / 5; }
+.composition-family-bleed .composition-ledger { grid-area: 1 / 5 / 5 / 9; }
+.composition-family-bleed .composition-matrix { grid-area: 11 / 1 / 16 / 7; }
+.composition-family-bleed .composition-monogram { grid-area: 11 / 7 / 16 / 10; }
+.composition-family-bleed .composition-footer { grid-area: 16 / 1 / 17 / 10; }
+
+.composition-family-bleed.composition-variant-c .composition-art {
+  clip-path: polygon(18% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.composition-family-bleed.composition-variant-d .composition-art {
+  grid-area: 1 / 1 / 17 / 25;
+  opacity: 0.78;
+}
+
+.composition-family-bleed.composition-variant-d .composition-chrome { grid-area: 1 / 1 / 2 / 25; }
+.composition-family-bleed.composition-variant-d .composition-heading { grid-area: 5 / 2 / 11 / 24; text-align: center; }
+.composition-family-bleed.composition-variant-d .composition-diagram { grid-area: 2 / 2 / 5 / 8; }
+.composition-family-bleed.composition-variant-d .composition-ledger { grid-area: 2 / 18 / 5 / 24; }
+.composition-family-bleed.composition-variant-d .composition-matrix { grid-area: 11 / 2 / 16 / 10; }
+.composition-family-bleed.composition-variant-d .composition-monogram { grid-area: 11 / 18 / 16 / 24; }
+.composition-family-bleed.composition-variant-d .composition-footer { grid-area: 16 / 1 / 17 / 25; }
+
+.composition-variant-b .composition-heading {
+  text-align: right;
+}
+
+.composition-variant-b .composition-heading h1 {
+  align-items: flex-end;
+}
+
+.composition-variant-c .composition-monogram strong {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.composition-variant-d .composition-heading {
+  border-width: 1px 0;
+}
+
+@keyframes composition-in {
+  from {
+    opacity: 0;
+    transform: scale(1.008);
+  }
+}
+
+@keyframes composition-art-in {
+  from {
+    opacity: 0;
+    transform: scale(1.035);
+    filter: sepia(0.5) saturate(0.35) contrast(1.15) blur(5px);
+  }
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -859,6 +1735,26 @@ a:focus-visible {
 }
 
 @media (min-aspect-ratio: 4 / 3) {
+  .mode-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .mode-card {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .mode-card-copy {
+    min-height: clamp(84px, 14vh, 126px);
+    border-top: 1px solid rgba(234, 223, 206, 0.28);
+    border-left: 0;
+  }
+
+  .mode-card-copy strong {
+    font-size: clamp(20px, 3vw, 38px);
+  }
+
   .gallery-plate {
     display: block;
   }
@@ -893,6 +1789,241 @@ a:focus-visible {
 
   .gallery-description {
     max-width: 72ch;
+  }
+}
+
+@media (max-aspect-ratio: 1 / 1) {
+  .composition-sheet {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-rows: repeat(20, minmax(0, 1fr));
+    background-size: 8.3333% 5%, 8.3333% 5%, 100% 100%;
+  }
+
+  .composition-sheet > .composition-art {
+    grid-area: 1 / 1 / 12 / 13 !important;
+    margin: 0 !important;
+    clip-path: none !important;
+    border-radius: 0 !important;
+    opacity: 1 !important;
+  }
+
+  .composition-sheet > .composition-chrome {
+    grid-area: 1 / 1 / 2 / 13 !important;
+  }
+
+  .composition-sheet > .composition-heading {
+    grid-area: 8 / 1 / 13 / 13 !important;
+    overflow: hidden;
+    text-align: left;
+    background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--composition-bg) 94%, transparent) 38%);
+  }
+
+  .composition-sheet > .composition-heading h1 {
+    align-items: flex-start;
+    font-size: clamp(32px, 11.5vw, 80px);
+  }
+
+  .composition-sheet > .composition-heading h1 span {
+    white-space: normal;
+  }
+
+  .composition-sheet.is-medium > .composition-heading h1 {
+    font-size: clamp(28px, 9.2vw, 68px);
+  }
+
+  .composition-sheet.is-long > .composition-heading h1 {
+    font-size: clamp(23px, 7.4vw, 54px);
+  }
+
+  .composition-sheet > .composition-diagram {
+    grid-area: 12 / 1 / 16 / 5 !important;
+  }
+
+  .composition-sheet > .composition-ledger {
+    grid-area: 12 / 5 / 16 / 9 !important;
+  }
+
+  .composition-sheet > .composition-monogram {
+    grid-area: 12 / 9 / 16 / 13 !important;
+    opacity: 1;
+  }
+
+  .composition-sheet > .composition-matrix {
+    grid-area: 16 / 1 / 20 / 13 !important;
+  }
+
+  .composition-sheet > .composition-footer {
+    grid-area: 20 / 1 / 21 / 13 !important;
+  }
+
+  .composition-shape-t > .composition-art,
+  .composition-shape-p > .composition-art {
+    grid-area: 1 / 5 / 16 / 13 !important;
+  }
+
+  .composition-shape-t > .composition-heading,
+  .composition-shape-p > .composition-heading {
+    grid-area: 6 / 1 / 12 / 9 !important;
+  }
+
+  .composition-shape-t > .composition-diagram,
+  .composition-shape-p > .composition-diagram {
+    grid-area: 2 / 1 / 6 / 5 !important;
+  }
+
+  .composition-shape-t > .composition-ledger,
+  .composition-shape-p > .composition-ledger {
+    grid-area: 12 / 1 / 16 / 5 !important;
+  }
+
+  .composition-shape-t > .composition-monogram,
+  .composition-shape-p > .composition-monogram {
+    grid-area: 12 / 5 / 16 / 9 !important;
+  }
+
+  .composition-shape-t > .composition-matrix,
+  .composition-shape-p > .composition-matrix {
+    grid-area: 16 / 1 / 20 / 13 !important;
+  }
+
+  .composition-family-horizon > .composition-art,
+  .composition-family-ribbon > .composition-art {
+    grid-area: 4 / 1 / 12 / 13 !important;
+  }
+
+  .composition-family-horizon > .composition-heading,
+  .composition-family-ribbon > .composition-heading {
+    grid-area: 1 / 1 / 5 / 13 !important;
+  }
+
+  .composition-family-horizon > .composition-diagram,
+  .composition-family-ribbon > .composition-diagram {
+    grid-area: 12 / 1 / 16 / 5 !important;
+  }
+
+  .composition-family-horizon > .composition-ledger,
+  .composition-family-ribbon > .composition-ledger {
+    grid-area: 12 / 5 / 16 / 9 !important;
+  }
+
+  .composition-family-horizon > .composition-monogram,
+  .composition-family-ribbon > .composition-monogram {
+    grid-area: 12 / 9 / 16 / 13 !important;
+  }
+
+  .composition-family-shrine > .composition-art,
+  .composition-family-radial > .composition-art {
+    grid-area: 2 / 3 / 15 / 11 !important;
+  }
+
+  .composition-family-radial > .composition-art {
+    border-radius: 48% 48% 0 0 !important;
+  }
+
+  .composition-family-shrine > .composition-heading,
+  .composition-family-radial > .composition-heading {
+    grid-area: 9 / 1 / 15 / 13 !important;
+  }
+
+  .composition-family-shrine > .composition-diagram,
+  .composition-family-radial > .composition-diagram {
+    grid-area: 2 / 1 / 7 / 4 !important;
+  }
+
+  .composition-family-shrine > .composition-ledger,
+  .composition-family-radial > .composition-ledger {
+    grid-area: 2 / 10 / 9 / 13 !important;
+  }
+
+  .composition-family-shrine > .composition-matrix,
+  .composition-family-radial > .composition-matrix {
+    grid-area: 15 / 1 / 20 / 9 !important;
+  }
+
+  .composition-family-shrine > .composition-monogram,
+  .composition-family-radial > .composition-monogram {
+    grid-area: 15 / 9 / 20 / 13 !important;
+  }
+
+  .composition-family-cabinet > .composition-art,
+  .composition-family-ledger > .composition-art {
+    grid-area: 2 / 5 / 12 / 13 !important;
+  }
+
+  .composition-family-cabinet > .composition-heading,
+  .composition-family-ledger > .composition-heading {
+    grid-area: 7 / 1 / 14 / 9 !important;
+  }
+
+  .composition-family-cabinet > .composition-diagram,
+  .composition-family-ledger > .composition-diagram {
+    grid-area: 2 / 1 / 7 / 5 !important;
+  }
+
+  .composition-family-cabinet > .composition-ledger,
+  .composition-family-ledger > .composition-ledger {
+    grid-area: 14 / 1 / 20 / 5 !important;
+  }
+
+  .composition-family-cabinet > .composition-monogram,
+  .composition-family-ledger > .composition-monogram {
+    grid-area: 14 / 5 / 20 / 9 !important;
+  }
+
+  .composition-family-cabinet > .composition-matrix,
+  .composition-family-ledger > .composition-matrix {
+    grid-area: 12 / 9 / 20 / 13 !important;
+  }
+
+  .composition-family-monolith > .composition-art {
+    grid-area: 1 / 7 / 16 / 13 !important;
+  }
+
+  .composition-family-monolith > .composition-heading {
+    grid-area: 5 / 1 / 12 / 9 !important;
+  }
+
+  .composition-family-monolith > .composition-diagram {
+    grid-area: 2 / 1 / 5 / 7 !important;
+  }
+
+  .composition-family-monolith > .composition-ledger {
+    grid-area: 12 / 1 / 16 / 7 !important;
+  }
+
+  .composition-family-monolith > .composition-monogram {
+    grid-area: 2 / 7 / 6 / 13 !important;
+  }
+
+  .composition-family-folio > .composition-art {
+    grid-area: 2 / 2 / 15 / 12 !important;
+    margin: clamp(7px, 1.5vmin, 16px) !important;
+  }
+
+  .composition-family-folio > .composition-heading {
+    grid-area: 10 / 1 / 16 / 13 !important;
+  }
+
+  .composition-family-folio > .composition-diagram {
+    grid-area: 2 / 1 / 6 / 4 !important;
+  }
+
+  .composition-family-folio > .composition-ledger {
+    grid-area: 6 / 1 / 10 / 4 !important;
+  }
+
+  .composition-family-folio > .composition-matrix {
+    grid-area: 15 / 1 / 20 / 9 !important;
+  }
+
+  .composition-family-folio > .composition-monogram {
+    grid-area: 15 / 9 / 20 / 13 !important;
+  }
+}
+
+@media (min-aspect-ratio: 21 / 9) {
+  .composition-heading h1 {
+    font-size: clamp(42px, 9.5vmin, 148px);
   }
 }
 
@@ -931,6 +2062,16 @@ a:focus-visible {
   .gallery-description {
     -webkit-line-clamp: 2;
   }
+
+  .composition-heading p,
+  .composition-heading small,
+  .composition-art-label {
+    display: none;
+  }
+
+  .composition-footer {
+    font-size: 6px;
+  }
 }
 
 @media (max-height: 540px) {
@@ -951,6 +2092,11 @@ a:focus-visible {
   .gallery-caption h1 {
     max-width: 100%;
     -webkit-line-clamp: 1;
+  }
+
+  .composition-footer span:first-child,
+  .composition-ledger-list span:nth-child(n + 6) {
+    display: none;
   }
 }
 
