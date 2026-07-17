@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Geist Signal";
+  src: url("./fonts/geist-signal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
   --frame-paper: #eadfce;
   --frame-ink: #251015;
@@ -5,6 +13,7 @@
   --frame-accent: #e34c82;
   --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco,
     Consolas, "Liberation Mono", monospace;
+  --font-signal: "Geist Signal", var(--font-mono);
   --font-serif: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
 }
 
@@ -269,6 +278,7 @@ a:focus-visible {
   padding: 10%;
   overflow: hidden;
   color: var(--frame-paper);
+  font-family: var(--font-signal);
   background-color: #2a1017;
   background-image:
     linear-gradient(rgba(234, 223, 206, 0.08) 1px, transparent 1px),
@@ -295,7 +305,6 @@ a:focus-visible {
   color: var(--frame-paper);
   font-size: clamp(30px, 11vw, 72px);
   line-height: 1;
-  animation: rotor 12s linear infinite;
 }
 
 .signal-preview-cells {
@@ -2614,12 +2623,6 @@ a:focus-visible {
     opacity: 0;
     transform: scale(1.018);
     filter: saturate(0.62) contrast(1.06) blur(5px);
-  }
-}
-
-@keyframes rotor {
-  to {
-    transform: rotate(360deg);
   }
 }
 

@@ -110,7 +110,6 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
     JSON.parse(line.trim().replace(/,$/, "")),
   );
   const signalRows = signal.match(/^\s*\{ id: "[^"]+".+draw: [a-zA-Z]+ \},?$/gm) ?? [];
-  const responsiveSignalUnits = signal.match(/layoutUnit\(width, height\)/g) ?? [];
   const { COMPOSITION_RECIPES } = compositionModule;
   const { MOTIF_BLUEPRINTS, fitMotifFrame } = motifModule;
 
@@ -123,12 +122,6 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
     assert.ok(Math.min(row[6], row[7]) >= 750, `${row[0]} must have a 750px short edge`);
   }
   assert.ok(signalRows.length >= 18, `expected at least 18 signal scenes, found ${signalRows.length}`);
-  assert.ok(
-    responsiveSignalUnits.length >= 18,
-    `expected short-edge sizing across the signal library, found ${responsiveSignalUnits.length} uses`,
-  );
-  assert.match(signal, /function layoutUnit\(width: number, height: number\)/);
-  assert.match(signal, /Math\.min\(width, height\)/);
   assert.equal(COMPOSITION_RECIPES.length, 32, `expected exactly 32 composition recipes, found ${COMPOSITION_RECIPES.length}`);
   for (const [property, label] of [
     ["id", "IDs"],
@@ -301,6 +294,336 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
       );
     }
   }
+});
+
+test("keeps Signal Field geometry deterministic across display shapes", async () => {
+  const signalGridModule = await import(
+    new URL("../app/modes/signal-grid.ts", import.meta.url).href
+  );
+  const {
+    buildCellFlipPlan,
+    cellFlipProgress,
+    classifySignalViewport,
+    fitCellGrid,
+    quantizeSignalTime,
+    resolveBackingStore,
+    resolveSignalLayout,
+    signalConfidence,
+    signalWeight,
+  } = signalGridModule.default ?? signalGridModule;
+  const viewports = [
+    { width: 3440, height: 1440, profile: "wide" },
+    { width: 1920, height: 1080, profile: "standard" },
+    { width: 1080, height: 1920, profile: "portrait" },
+    { width: 1280, height: 480, profile: "short" },
+  ];
+  const epsilon = 0.000_001;
+
+  for (const viewport of viewports) {
+    const { width, height, profile } = viewport;
+    assert.equal(classifySignalViewport(width, height), profile);
+    const layout = resolveSignalLayout(width, height);
+    assert.equal(layout.profile, profile);
+    assert.equal(layout.viewportWidth, width);
+    assert.equal(layout.viewportHeight, height);
+    assert.equal(layout.shortAxisCells, 48);
+    assert.equal(Math.min(layout.columns, layout.rows), 48);
+    for (const value of [
+      layout.cellSize,
+      layout.gridWidth,
+      layout.gridHeight,
+      layout.originX,
+      layout.originY,
+      layout.bounds.x,
+      layout.bounds.y,
+      layout.bounds.width,
+      layout.bounds.height,
+    ]) {
+      assert.ok(Number.isFinite(value), `${width}×${height} layout values must be finite`);
+    }
+    assert.ok(layout.cellSize > 0);
+    assert.ok(layout.columns >= 48 && layout.rows >= 48);
+    assert.ok(Math.abs(layout.gridWidth - layout.columns * layout.cellSize) <= epsilon);
+    assert.ok(Math.abs(layout.gridHeight - layout.rows * layout.cellSize) <= epsilon);
+    assert.ok(
+      Math.abs(Math.min(layout.gridWidth, layout.gridHeight) - Math.min(width, height)) <= epsilon,
+    );
+    assert.ok(Math.abs(layout.originX * 2 + layout.gridWidth - width) <= epsilon);
+    assert.ok(Math.abs(layout.originY * 2 + layout.gridHeight - height) <= epsilon);
+    assert.ok(layout.originX >= -epsilon && layout.originY >= -epsilon);
+    assert.ok(layout.originX + layout.gridWidth <= width + epsilon);
+    assert.ok(layout.originY + layout.gridHeight <= height + epsilon);
+    assert.ok(layout.bounds.width > 0 && layout.bounds.height > 0);
+    assert.ok(layout.bounds.x >= -epsilon && layout.bounds.y >= -epsilon);
+    assert.ok(layout.bounds.x + layout.bounds.width <= width + epsilon);
+    assert.ok(layout.bounds.y + layout.bounds.height <= height + epsilon);
+
+    for (const column of [0, Math.floor(layout.columns / 2), layout.columns]) {
+      const snappedX = layout.originX + column * layout.cellSize;
+      assert.ok(Number.isFinite(snappedX));
+      assert.ok(snappedX >= -epsilon && snappedX <= width + epsilon);
+    }
+    for (const row of [0, Math.floor(layout.rows / 2), layout.rows]) {
+      const snappedY = layout.originY + row * layout.cellSize;
+      assert.ok(Number.isFinite(snappedY));
+      assert.ok(snappedY >= -epsilon && snappedY <= height + epsilon);
+    }
+
+    for (const [columns, rows] of [[26, 42], [12, 8]]) {
+      const fitted = fitCellGrid(layout, columns, rows);
+      assert.equal(fitted.columns, columns);
+      assert.equal(fitted.rows, rows);
+      assert.ok(Number.isInteger(fitted.column) && Number.isInteger(fitted.row));
+      for (const value of [
+        fitted.x,
+        fitted.y,
+        fitted.width,
+        fitted.height,
+        fitted.cellSize,
+      ]) {
+        assert.ok(Number.isFinite(value), `${columns}×${rows} fitted values must be finite`);
+      }
+      assert.ok(fitted.cellSize > 0 && fitted.width > 0 && fitted.height > 0);
+      assert.ok(Math.abs(fitted.width / columns - fitted.cellSize) <= epsilon);
+      assert.ok(Math.abs(fitted.height / rows - fitted.cellSize) <= epsilon);
+      assert.ok(Math.abs(fitted.x - (layout.originX + fitted.column * layout.cellSize)) <= epsilon);
+      assert.ok(Math.abs(fitted.y - (layout.originY + fitted.row * layout.cellSize)) <= epsilon);
+      assert.ok(fitted.x >= layout.bounds.x - epsilon);
+      assert.ok(fitted.y >= layout.bounds.y - epsilon);
+      assert.ok(fitted.x + fitted.width <= layout.bounds.x + layout.bounds.width + epsilon);
+      assert.ok(fitted.y + fitted.height <= layout.bounds.y + layout.bounds.height + epsilon);
+      const horizontalSlack = layout.bounds.width - fitted.width;
+      const verticalSlack = layout.bounds.height - fitted.height;
+      assert.ok(
+        Math.abs((fitted.x - layout.bounds.x) * 2 - horizontalSlack) <= layout.cellSize + epsilon,
+        `${columns}×${rows} grid must remain horizontally centered on ${width}×${height}`,
+      );
+      assert.ok(
+        Math.abs((fitted.y - layout.bounds.y) * 2 - verticalSlack) <= layout.cellSize + epsilon,
+        `${columns}×${rows} grid must remain vertically centered on ${width}×${height}`,
+      );
+    }
+
+    const backing = resolveBackingStore(width, height, 2, 2_200_000);
+    assert.ok(Number.isInteger(backing.width) && backing.width > 0);
+    assert.ok(Number.isInteger(backing.height) && backing.height > 0);
+    assert.ok(Number.isFinite(backing.ratio) && backing.ratio > 0);
+    assert.equal(backing.pixelCount, backing.width * backing.height);
+    assert.ok(
+      backing.pixelCount <= 2_200_000,
+      `${width}×${height} backing store exceeds the strict pixel budget`,
+    );
+
+    const flipPlan = buildCellFlipPlan(width, height, 73, 240);
+    assert.deepEqual(flipPlan, buildCellFlipPlan(width, height, 73, 240));
+    assert.notDeepEqual(
+      flipPlan.map((cell) => cell.id),
+      buildCellFlipPlan(width, height, 74, 240).map((cell) => cell.id),
+    );
+    assert.ok(flipPlan.length > 1 && flipPlan.length <= 240);
+    assert.equal(new Set(flipPlan.map((cell) => cell.id)).size, flipPlan.length);
+    assert.equal(new Set(flipPlan.map((cell) => cell.order)).size, flipPlan.length);
+    for (const [index, cell] of flipPlan.entries()) {
+      assert.ok(Number.isInteger(cell.column) && Number.isInteger(cell.row));
+      for (const value of [cell.x, cell.y, cell.width, cell.height, cell.order, cell.threshold]) {
+        assert.ok(Number.isFinite(value), `${cell.id} transition geometry must be finite`);
+      }
+      assert.equal(cell.order, index);
+      assert.ok(cell.width > 0 && cell.height > 0);
+      assert.ok(Math.abs(cell.width - cell.height) <= epsilon);
+      const widthInMasterCells = cell.width / layout.cellSize;
+      const columnOnMasterGrid = (cell.x - layout.originX) / layout.cellSize;
+      const rowOnMasterGrid = (cell.y - layout.originY) / layout.cellSize;
+      assert.ok(
+        Math.abs(widthInMasterCells - Math.round(widthInMasterCells)) <= epsilon,
+        `${cell.id} width must remain an integer multiple of the shared grid`,
+      );
+      assert.ok(
+        Math.abs(columnOnMasterGrid - Math.round(columnOnMasterGrid)) <= epsilon,
+        `${cell.id} x coordinate must align to the shared grid`,
+      );
+      assert.ok(
+        Math.abs(rowOnMasterGrid - Math.round(rowOnMasterGrid)) <= epsilon,
+        `${cell.id} y coordinate must align to the shared grid`,
+      );
+      assert.ok(cell.x >= layout.originX - layout.cellSize - epsilon);
+      assert.ok(cell.y >= layout.originY - layout.cellSize - epsilon);
+      assert.ok(cell.x <= layout.originX + layout.gridWidth + layout.cellSize + epsilon);
+      assert.ok(cell.y <= layout.originY + layout.gridHeight + layout.cellSize + epsilon);
+      assert.ok(cell.x < width && cell.x + cell.width > 0);
+      assert.ok(cell.y < height && cell.y + cell.height > 0);
+      assert.ok(cell.threshold >= 0 && cell.threshold <= 1);
+      assert.equal(cellFlipProgress(0, cell), 0);
+      assert.equal(cellFlipProgress(1, cell), 1);
+      const early = cellFlipProgress(0.25, cell);
+      const middle = cellFlipProgress(0.5, cell);
+      const late = cellFlipProgress(0.75, cell);
+      assert.ok(early >= 0 && early <= middle && middle <= late && late <= 1);
+    }
+    assert.ok(Math.min(...flipPlan.map((cell) => cell.x)) <= 0);
+    assert.ok(Math.min(...flipPlan.map((cell) => cell.y)) <= 0);
+    assert.ok(Math.max(...flipPlan.map((cell) => cell.x + cell.width)) >= width);
+    assert.ok(Math.max(...flipPlan.map((cell) => cell.y + cell.height)) >= height);
+    const middleStates = flipPlan.map((cell) => cellFlipProgress(0.5, cell));
+    assert.deepEqual(new Set(middleStates), new Set([0, 1]));
+  }
+
+  assert.equal(quantizeSignalTime(0), 0);
+  assert.equal(quantizeSignalTime(1), 0);
+  assert.equal(quantizeSignalTime(159), 0);
+  assert.equal(quantizeSignalTime(160), 160);
+  assert.equal(quantizeSignalTime(319), 160);
+  assert.equal(quantizeSignalTime(320), 320);
+  assert.equal(quantizeSignalTime(Number.NaN), 0);
+  assert.equal(quantizeSignalTime(-1), 0);
+  let previousConfidence = 1;
+  for (const time of [0, 160, 320, 800, 1_600]) {
+    const confidence = signalConfidence(time, 1_600);
+    assert.ok(Number.isFinite(confidence) && confidence >= 0 && confidence <= 1);
+    assert.ok(confidence <= previousConfidence);
+    previousConfidence = confidence;
+    for (const role of ["primary", "secondary", "tertiary"]) {
+      const weight = signalWeight(confidence, role);
+      assert.ok(Number.isFinite(weight) && weight >= 100 && weight <= 900);
+    }
+  }
+  for (const role of ["primary", "secondary", "tertiary"]) {
+    assert.ok(signalWeight(0, role) < signalWeight(1, role));
+  }
+});
+
+test("keeps Signal Field on its discrete grid, typography and transition language", async () => {
+  const [signalField, signalLibrary, frame, styles] = await Promise.all([
+    readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  const variableFace = [...styles.matchAll(/@font-face\s*\{([^}]+)\}/g)]
+    .map((match) => match[1])
+    .find((face) => /font-weight:\s*100\s+900\s*;/.test(face));
+  assert.ok(variableFace, "Signal Field must declare a 100–900 variable font face");
+  const variableFontSource = variableFace.match(
+    /src:\s*url\(\s*["']?([^"')]+\.woff2(?:[?#][^"')]*)?)/i,
+  )?.[1];
+  assert.ok(variableFontSource, "the variable font face must load a local WOFF2 asset");
+  assert.doesNotMatch(variableFontSource, /^(?:https?:|data:)/i);
+  assert.doesNotMatch(variableFontSource, /(?:^|\/)\.\.(?:\/|$)/);
+  const variableFontPath = variableFontSource.split(/[?#]/, 1)[0];
+  const variableFontUrl = variableFontPath.startsWith("/")
+    ? new URL(`../public/${variableFontPath.slice(1)}`, import.meta.url)
+    : new URL(variableFontPath, new URL("../app/globals.css", import.meta.url));
+  await access(variableFontUrl);
+  const variableFontFamily = variableFace.match(/font-family:\s*["']([^"']+)["']\s*;/)?.[1];
+  assert.ok(variableFontFamily, "the variable face must have an explicit family name");
+  assert.match(signalLibrary, /\bSIGNAL_FONT_FAMILY\b/);
+  assert.ok(
+    signalLibrary.includes(variableFontFamily),
+    "canvas typography must select the locally declared variable family",
+  );
+  assert.match(signalField, /document\.fonts\.load\(/);
+  assert.match(signalField, /document\.fonts\.ready/);
+
+  assert.match(signalLibrary, /\bSIGNAL_STATE_INTERVAL\s*=\s*160\b/);
+  for (const helper of ["drawSignalCells", "drawDotMatrixValue", "drawCellStrip"]) {
+    assert.match(
+      signalLibrary,
+      new RegExp(`\\b(?:function\\s+|const\\s+)${helper}\\b`),
+      `${helper} must make state changes out of discrete cells`,
+    );
+  }
+  for (const marker of [
+    "ACQUISITION / LOCK",
+    "AMPLITUDE MATRIX / 43",
+    "GENERATION DELTA",
+    "ESCAPEMENT / COHERENCE",
+  ]) {
+    assert.ok(signalLibrary.includes(marker), `missing targeted Signal Field marker: ${marker}`);
+  }
+
+  assert.match(signalLibrary, /\bbuildCellFlipPlan\b/);
+  assert.match(signalLibrary, /\.drawImage\(/);
+  const sharedGridCalls = signalLibrary.match(/^\s*drawSharedGrid\(frame\b/gm) ?? [];
+  assert.ok(
+    sharedGridCalls.length >= 18,
+    `all 18 Signal Field scenes must draw the shared grid; found ${sharedGridCalls.length} calls`,
+  );
+  assert.match(signalLibrary, /\bTRANSITION_PIXEL_BUDGET\s*=\s*2_200_000\b/);
+  assert.match(
+    signalLibrary,
+    /const transitionBufferCache = new WeakMap<CanvasRenderingContext2D, TransitionBuffer>\(\);/,
+  );
+  assert.equal(
+    signalLibrary.match(/\bbuildCellFlipPlan\(/g)?.length,
+    1,
+    "the flip plan must be built once in the cached transition buffer",
+  );
+  assert.match(
+    signalLibrary,
+    /flipPlan:\s*buildCellFlipPlan\(width,\s*height,\s*seed\)[\s\S]*?transitionBufferCache\.set\(context,\s*result\)/,
+  );
+  assert.match(signalLibrary, /for \(const cell of buffer\.flipPlan\)/);
+  assert.match(
+    signalLibrary,
+    /const switchesOff = cellFlipProgress\([\s\S]*?const switchesOn = cellFlipProgress\(/,
+  );
+  assert.match(
+    signalLibrary,
+    /if \(switchesOff === 0\) continue;[\s\S]*?fillRect\([\s\S]*?if \(switchesOn === 0\) continue;[\s\S]*?drawImage\(/,
+  );
+  assert.match(
+    signalLibrary,
+    /resolveBackingStore\([\s\S]*?TRANSITION_PIXEL_BUDGET,[\s\S]*?\)\.ratio/,
+  );
+  assert.match(
+    signalLibrary,
+    /drawScene\([\s\S]*?context,[\s\S]*?width,[\s\S]*?height,[\s\S]*?info\.sceneIndex,[\s\S]*?localTime,[\s\S]*?duration,[\s\S]*?Boolean\(options\.reducedMotion\),[\s\S]*?\)/,
+  );
+  assert.match(
+    signalLibrary,
+    /drawScene\(bufferContext,\s*width,\s*height,\s*sceneIndex,\s*0,\s*duration,\s*true\)/,
+  );
+  assert.match(signalLibrary, /activeSignalStateProgress = completePropagation[\s\S]*?\? 1/);
+  assert.match(signalLibrary, /function propagatedStateTick\(/);
+  assert.match(signalLibrary, /signalConfidence\(safeTime,\s*sceneDurationMs\)/);
+  assert.doesNotMatch(signalLibrary, /\bsmoothStep\b/);
+  assert.doesNotMatch(signalLibrary, /\.clip\(/);
+  assert.doesNotMatch(signalLibrary, /\bdrawTransitionBoundary\b/);
+  assert.doesNotMatch(signalLibrary, /\browProgress\b/);
+
+  const sceneTableStart = signalLibrary.indexOf("const INTERNAL_SCENES");
+  const sceneTableEnd = signalLibrary.indexOf("export const SIGNAL_SCENES", sceneTableStart);
+  assert.ok(sceneTableStart >= 0 && sceneTableEnd > sceneTableStart, "signal scene table must remain explicit");
+  const sceneIds = [...signalLibrary
+    .slice(sceneTableStart, sceneTableEnd)
+    .matchAll(/\bid:\s*"([^"]+)"/g)]
+    .map((match) => match[1]);
+  assert.deepEqual(sceneIds, [
+    "orbital-telemetry",
+    "constellation-mesh",
+    "glyph-cascade",
+    "barcode-cathedral",
+    "cellular-atlas",
+    "packet-river",
+    "seismic-field",
+    "clockwork-rings",
+    "vector-scope",
+    "memory-map",
+    "waveform-stack",
+    "data-loom",
+    "hex-field",
+    "satellite-topology",
+    "archive-index",
+    "raster-portrait",
+    "checker-error",
+    "deep-scan",
+  ]);
+
+  const signalPreviewStar = styles.match(/\.signal-preview-star\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.doesNotMatch(signalPreviewStar, /\banimation\s*:/);
+  assert.doesNotMatch(styles, /@keyframes\s+rotor\b/);
+  assert.doesNotMatch(frame, /signal-preview-rotor/);
 });
 
 test("warms the complete local archive and labels the copy that actually rendered", async () => {

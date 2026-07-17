@@ -1,4 +1,20 @@
+import {
+  buildCellFlipPlan,
+  cellFlipProgress,
+  fitCellGrid,
+  quantizeSignalTime,
+  resolveBackingStore,
+  resolveSignalLayout,
+  signalConfidence,
+  signalWeight,
+  type SignalLayout,
+} from "./signal-grid";
+
 const TAU = Math.PI * 2;
+
+export const SIGNAL_STATE_INTERVAL = 160;
+export const SIGNAL_FONT_FAMILY =
+  '"Geist Signal", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
 
 export const SIGNAL_PALETTE = Object.freeze({
   oxblood: "#251015",
@@ -38,6 +54,9 @@ interface SceneFrame {
   height: number;
   time: number;
   phase: number;
+  stateTick: number;
+  confidence: number;
+  layout: SignalLayout;
 }
 
 interface InternalScene extends SignalSceneDescriptor {
@@ -46,7 +65,7 @@ interface InternalScene extends SignalSceneDescriptor {
 
 const DEFAULT_SCENE_DURATION = 11_500;
 const DEFAULT_TRANSITION_DURATION = 1_050;
-const MONO = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+const TRANSITION_PIXEL_BUDGET = 2_200_000;
 const {
   oxblood: OXBLOOD,
   night: NIGHT,
@@ -61,15 +80,6 @@ function clamp(value: number, minimum = 0, maximum = 1) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-function layoutUnit(width: number, height: number) {
-  return Math.max(1, Math.min(width, height));
-}
-
-function smoothStep(value: number) {
-  const amount = clamp(value);
-  return amount * amount * (3 - 2 * amount);
-}
-
 function positiveModulo(value: number, divisor: number) {
   return ((value % divisor) + divisor) % divisor;
 }
@@ -78,17 +88,6 @@ function hash(x: number, y = 0, seed = 0) {
   let value = (x * 374761393 + y * 668265263 + seed * 1442695041) | 0;
   value = Math.imul(value ^ (value >>> 13), 1274126177);
   return ((value ^ (value >>> 16)) >>> 0) / 4294967296;
-}
-
-function randomFrom(seed: number) {
-  let value = seed >>> 0;
-  return () => {
-    value += 0x6d2b79f5;
-    let result = value;
-    result = Math.imul(result ^ (result >>> 15), result | 1);
-    result ^= result + Math.imul(result ^ (result >>> 7), result | 61);
-    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 function fill(
@@ -118,26 +117,6 @@ function line(
   context.stroke();
 }
 
-function circle(
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  radius: number,
-  color: string = DIM,
-  lineWidth = 1,
-  fillColor?: string,
-) {
-  context.beginPath();
-  context.arc(x, y, Math.max(0.1, radius), 0, TAU);
-  if (fillColor) {
-    context.fillStyle = fillColor;
-    context.fill();
-  }
-  context.strokeStyle = color;
-  context.lineWidth = lineWidth;
-  context.stroke();
-}
-
 function type(
   context: CanvasRenderingContext2D,
   value: string,
@@ -148,35 +127,148 @@ function type(
   align: CanvasTextAlign = "left",
   weight = 400,
 ) {
+  const role = weight >= 620 ? "primary" : weight >= 390 ? "secondary" : "tertiary";
+  const resolvedWeight = signalWeight(activeSignalConfidence, role);
   context.fillStyle = color;
-  context.font = `${weight} ${Math.max(6, size)}px ${MONO}`;
+  context.font = `${resolvedWeight.toFixed(1)} ${Math.max(6, size)}px ${SIGNAL_FONT_FAMILY}`;
   context.textAlign = align;
   context.textBaseline = "alphabetic";
   context.fillText(value, x, y);
 }
 
-function grid(
+let activeSignalConfidence = 0.72;
+
+interface SignalCell {
+  x: number;
+  y: number;
+  size: number;
+  color?: string;
+  alpha?: number;
+}
+
+function drawSignalCells(
   context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  spacing: number,
-  color: string = FAINT,
-  xOffset = 0,
-  yOffset = 0,
+  cells: readonly SignalCell[],
+  defaultColor = IVORY,
 ) {
-  const step = Math.max(8, spacing);
-  context.beginPath();
-  for (let x = positiveModulo(xOffset, step); x <= width; x += step) {
-    context.moveTo(x, 0);
-    context.lineTo(x, height);
+  for (const cell of cells) {
+    context.globalAlpha = cell.alpha ?? 1;
+    context.fillStyle = cell.color ?? defaultColor;
+    context.fillRect(cell.x, cell.y, cell.size, cell.size);
   }
-  for (let y = positiveModulo(yOffset, step); y <= height; y += step) {
-    context.moveTo(0, y);
-    context.lineTo(width, y);
+  context.globalAlpha = 1;
+}
+
+function drawCellStrip(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  values: readonly number[],
+  cellSize: number,
+  activeIndex = -1,
+) {
+  const inset = Math.max(1, cellSize * 0.17);
+  values.forEach((value, index) => {
+    const amount = clamp(value);
+    context.fillStyle = index === activeIndex ? MAGENTA : amount > 0.48 ? IVORY : FAINT;
+    context.fillRect(
+      x + index * cellSize + inset,
+      y + inset + (1 - amount) * cellSize * 0.34,
+      Math.max(1, cellSize - inset * 2),
+      Math.max(1, cellSize * (0.32 + amount * 0.34)),
+    );
+  });
+}
+
+const DOT_MATRIX: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  "0": ["111", "101", "101", "101", "111"],
+  "1": ["010", "110", "010", "010", "111"],
+  "2": ["111", "001", "111", "100", "111"],
+  "3": ["111", "001", "111", "001", "111"],
+  "4": ["101", "101", "111", "001", "001"],
+  "5": ["111", "100", "111", "001", "111"],
+  "6": ["111", "100", "111", "101", "111"],
+  "7": ["111", "001", "010", "010", "010"],
+  "8": ["111", "101", "111", "101", "111"],
+  "9": ["111", "101", "111", "001", "111"],
+  ".": ["000", "000", "000", "000", "010"],
+  "%": ["101", "001", "010", "100", "101"],
+  "-": ["000", "000", "111", "000", "000"],
+  "+": ["000", "010", "111", "010", "000"],
+});
+
+function drawDotMatrixValue(
+  context: CanvasRenderingContext2D,
+  value: string,
+  x: number,
+  y: number,
+  cellSize: number,
+  color: string = IVORY,
+  previousValue?: string,
+) {
+  const dot = Math.max(1, cellSize * 0.58);
+  const characterWidth = cellSize * 4;
+  const previous = (previousValue ?? value).padStart(value.length, "0").slice(-value.length);
+  const propagationSpan = Math.max(1, value.length * 3 + 4);
+  for (let characterIndex = 0; characterIndex < value.length; characterIndex += 1) {
+    const currentPattern = DOT_MATRIX[value[characterIndex]] ?? DOT_MATRIX["-"];
+    const previousPattern = DOT_MATRIX[previous[characterIndex]] ?? DOT_MATRIX["-"];
+    for (let row = 0; row < currentPattern.length; row += 1) {
+      for (let column = 0; column < currentPattern[row].length; column += 1) {
+        const threshold = (characterIndex * 3 + column + row * 0.35) / propagationSpan;
+        const pattern = activeSignalStateProgress >= threshold
+          ? currentPattern
+          : previousPattern;
+        if (pattern[row][column] !== "1") continue;
+        context.fillStyle = color;
+        context.fillRect(
+          x + characterIndex * characterWidth + column * cellSize,
+          y + row * cellSize,
+          dot,
+          dot,
+        );
+      }
+    }
+  }
+}
+
+let activeSignalStateProgress = 1;
+
+function propagatedStateTick(
+  stateTick: number,
+  column: number,
+  row: number,
+  columns: number,
+  rows: number,
+) {
+  const span = Math.max(1, columns + rows * 0.4);
+  const threshold = clamp((column + row * 0.4) / span);
+  return activeSignalStateProgress >= threshold
+    ? stateTick
+    : Math.max(0, stateTick - 1);
+}
+
+function drawSharedGrid(frame: SceneFrame, color = "rgba(234, 223, 206, 0.055)") {
+  const { context, layout } = frame;
+  context.beginPath();
+  for (let column = 0; column <= layout.columns; column += 1) {
+    const x = layout.originX + column * layout.cellSize;
+    context.moveTo(x, layout.originY);
+    context.lineTo(x, layout.originY + layout.gridHeight);
+  }
+  for (let row = 0; row <= layout.rows; row += 1) {
+    const y = layout.originY + row * layout.cellSize;
+    context.moveTo(layout.originX, y);
+    context.lineTo(layout.originX + layout.gridWidth, y);
   }
   context.strokeStyle = color;
   context.lineWidth = 1;
   context.stroke();
+}
+
+function snapSignalCenter(layout: SignalLayout, value: number, axis: "x" | "y") {
+  const origin = axis === "x" ? layout.originX : layout.originY;
+  return origin + (Math.round((value - origin) / layout.cellSize - 0.5) + 0.5) * layout.cellSize;
 }
 
 function panel(
@@ -201,231 +293,276 @@ function chrome(
   code: string,
   inverse = false,
 ) {
-  const { context, width, height, time } = frame;
-  const unit = layoutUnit(width, height);
-  const pad = unit * 0.058;
-  const tiny = Math.max(7, unit * 0.022);
+  const { context, width, time, layout } = frame;
+  const padX = Math.max(layout.originX + layout.cellSize * 2, layout.cellSize * 2);
+  const top = layout.originY + layout.cellSize * 3;
+  const bottom = layout.originY + layout.gridHeight - layout.cellSize * 2;
+  const tiny = Math.max(7, layout.cellSize * 0.86);
   const ink = inverse ? OXBLOOD : IVORY;
   const dim = inverse ? DIM_DARK : DIM;
-  type(context, `BMS / ${code}`, pad, pad * 1.05, tiny, ink, "left", 600);
-  type(context, title.toUpperCase(), width - pad, pad * 1.05, tiny, inverse ? OXBLOOD : MAGENTA, "right", 600);
-  line(context, pad, pad * 1.45, width - pad, pad * 1.45, dim);
-  type(context, `FRAME ${String(Math.floor(time / 1000)).padStart(4, "0")}`, pad, height - pad * 0.72, tiny, dim);
-  type(context, "SIGNAL / NOMINAL", width - pad, height - pad * 0.72, tiny, ink, "right");
+  type(context, `BMS / ${code}`, padX, top, tiny, ink, "left", 600);
+  type(context, title.toUpperCase(), width - padX, top, tiny, inverse ? OXBLOOD : MAGENTA, "right", 600);
+  line(context, padX, top + layout.cellSize, width - padX, top + layout.cellSize, dim);
+  type(context, "STATE", padX, bottom, tiny, dim);
+  drawDotMatrixValue(
+    context,
+    String(Math.floor(time / SIGNAL_STATE_INTERVAL)).padStart(4, "0"),
+    padX + layout.cellSize * 4.4,
+    bottom - layout.cellSize * 0.86,
+    layout.cellSize * 0.2,
+    dim,
+    String(Math.max(0, Math.floor(time / SIGNAL_STATE_INTERVAL) - 1)).padStart(4, "0"),
+  );
+  type(context, "SIGNAL / NOMINAL", width - padX, bottom, tiny, ink, "right");
+}
+
+function signalContent(frame: SceneFrame) {
+  const { layout } = frame;
+  return {
+    x: layout.originX + layout.cellSize * 2,
+    y: layout.originY + layout.cellSize * 7,
+    width: layout.gridWidth - layout.cellSize * 4,
+    height: layout.gridHeight - layout.cellSize * 13,
+  };
 }
 
 function orbitalTelemetry(frame: SceneFrame) {
-  const { context, width, height, time, phase } = frame;
+  const { context, width, height, stateTick, layout, confidence } = frame;
   fill(context, width, height);
-  const unit = layoutUnit(width, height);
-  grid(context, width, height, Math.max(20, unit / 17));
+  drawSharedGrid(frame);
   chrome(frame, "Orbital telemetry", "ORBIT-07");
 
-  const cx = width * 0.5;
-  const cy = height * 0.29;
-  const radius = Math.min(width * 0.32, height * 0.16);
-  const rotation = time * 0.00008;
-  for (let ring = 0; ring < 4; ring += 1) {
-    context.save();
-    context.translate(cx, cy);
-    context.rotate(rotation * (ring % 2 ? -1.4 : 1) + ring * 0.38);
-    const ringRadius = radius * (0.33 + ring * 0.22);
-    context.beginPath();
-    context.arc(0, 0, ringRadius, ring * 0.67, ring * 0.67 + Math.PI * 1.42);
-    context.strokeStyle = ring === 2 ? MAGENTA : DIM;
-    context.lineWidth = ring === 2 ? 2 : 1;
-    context.stroke();
-    for (let tick = 0; tick < 18 + ring * 5; tick += 1) {
-      const angle = (tick / (18 + ring * 5)) * TAU;
-      const length = tick % 4 === 0 ? radius * 0.045 : radius * 0.02;
-      line(
-        context,
-        Math.cos(angle) * ringRadius,
-        Math.sin(angle) * ringRadius,
-        Math.cos(angle) * (ringRadius + length),
-        Math.sin(angle) * (ringRadius + length),
-        tick % 9 === 0 ? IVORY : DIM,
+  const content = signalContent(frame);
+  const stacked = layout.profile === "portrait";
+  const orbitWidth = Math.floor(
+    (stacked ? content.width : content.width * 0.58) / layout.cellSize,
+  ) * layout.cellSize;
+  const orbitHeight = Math.floor(
+    (stacked ? content.height * 0.54 : content.height) / layout.cellSize,
+  ) * layout.cellSize;
+  const cx = content.x + orbitWidth * 0.5;
+  const cy = content.y + orbitHeight * 0.5;
+  const radius = Math.max(layout.cellSize * 6, Math.min(orbitWidth, orbitHeight) * 0.44);
+  const ringRatios = [0.32, 0.52, 0.73, 0.95];
+  const activeSector = positiveModulo(stateTick, 36);
+  const cells: SignalCell[] = [];
+
+  const firstColumn = Math.floor((content.x - layout.originX) / layout.cellSize);
+  const lastColumn = Math.ceil((content.x + orbitWidth - layout.originX) / layout.cellSize);
+  const firstRow = Math.floor((content.y - layout.originY) / layout.cellSize);
+  const lastRow = Math.ceil((content.y + orbitHeight - layout.originY) / layout.cellSize);
+  for (let row = firstRow; row < lastRow; row += 1) {
+    for (let column = firstColumn; column < lastColumn; column += 1) {
+      const x = layout.originX + (column + 0.5) * layout.cellSize;
+      const y = layout.originY + (row + 0.5) * layout.cellSize;
+      const distance = Math.hypot(x - cx, y - cy);
+      const ringIndex = ringRatios.findIndex(
+        (ratio) => Math.abs(distance - radius * ratio) <= layout.cellSize * 0.48,
       );
+      if (ringIndex < 0) continue;
+      const angle = positiveModulo(Math.atan2(y - cy, x - cx), TAU);
+      const sector = Math.floor((angle / TAU) * 36);
+      const cellTick = propagatedStateTick(
+        stateTick,
+        column - firstColumn,
+        row - firstRow,
+        Math.max(1, lastColumn - firstColumn),
+        Math.max(1, lastRow - firstRow),
+      );
+      const event = ringIndex === 2 && sector === positiveModulo(cellTick, 36);
+      const cardinal = sector % 9 === 0;
+      cells.push({
+        x: x - layout.cellSize * 0.28,
+        y: y - layout.cellSize * 0.28,
+        size: layout.cellSize * 0.56,
+        color: event ? MAGENTA : cardinal ? IVORY : DIM,
+        alpha: event ? 1 : 0.55 + ringIndex * 0.1,
+      });
     }
-    context.restore();
   }
 
-  const random = randomFrom(7042);
-  context.save();
-  context.translate(cx, cy);
-  context.rotate(rotation);
-  for (let index = 0; index < 180; index += 1) {
-    const arm = index % 7;
-    const distance = radius * (0.12 + random() * 0.8);
-    const angle = (arm / 7) * TAU + (random() - 0.5) * 0.56;
-    const point = Math.max(1, unit * (0.002 + random() * 0.0025));
-    context.fillStyle = index % 23 === phase % 23 ? MAGENTA : IVORY;
-    context.globalAlpha = 0.45 + random() * 0.55;
-    context.fillRect(Math.cos(angle) * distance, Math.sin(angle) * distance, point, point);
+  for (let index = 0; index < 96; index += 1) {
+    const column = firstColumn + Math.floor(hash(index, 1, 7042) * Math.max(1, lastColumn - firstColumn));
+    const row = firstRow + Math.floor(hash(index, 2, 7042) * Math.max(1, lastRow - firstRow));
+    const x = layout.originX + (column + 0.5) * layout.cellSize;
+    const y = layout.originY + (row + 0.5) * layout.cellSize;
+    if (Math.hypot(x - cx, y - cy) > radius * 0.84 || hash(column, row, 9) < 0.38) continue;
+    cells.push({
+      x: x - layout.cellSize * 0.12,
+      y: y - layout.cellSize * 0.12,
+      size: layout.cellSize * 0.24,
+      color: IVORY,
+      alpha: 0.28 + hash(index, propagatedStateTick(stateTick, column - firstColumn, row - firstRow, Math.max(1, lastColumn - firstColumn), Math.max(1, lastRow - firstRow)) >> 3, 12) * 0.5,
+    });
   }
-  context.restore();
-  context.globalAlpha = 1;
+  drawSignalCells(context, cells);
 
-  const pad = width * 0.058;
-  const inner = width - pad * 2;
-  const top = height * 0.49;
-  const gap = width * 0.025;
-  const moduleWidth = (inner - gap) / 2;
-  const moduleHeight = height * 0.22;
-  panel(context, pad, top, moduleWidth, moduleHeight);
-  panel(context, pad + moduleWidth + gap, top, moduleWidth, moduleHeight);
-  const tiny = Math.max(6, Math.min(unit * 0.022, moduleHeight / 15));
-  const cell = Math.max(
-    1,
-    Math.min(moduleWidth * 0.085, (moduleHeight - tiny * 2.55) / 8.63),
+  const targetAngle = (activeSector / 36) * TAU;
+  const targetX = snapSignalCenter(layout, cx + Math.cos(targetAngle) * radius * ringRatios[2], "x");
+  const targetY = snapSignalCenter(layout, cy + Math.sin(targetAngle) * radius * ringRatios[2], "y");
+  const bracket = layout.cellSize * 1.2;
+  context.strokeStyle = MAGENTA;
+  context.lineWidth = Math.max(1, layout.cellSize * 0.1);
+  context.strokeRect(targetX - bracket / 2, targetY - bracket / 2, bracket, bracket);
+
+  const railX = stacked ? content.x : content.x + orbitWidth + layout.cellSize * 2;
+  const railY = stacked ? content.y + orbitHeight + layout.cellSize * 2 : content.y + layout.cellSize * 2;
+  const railWidth = stacked ? content.width : content.width - orbitWidth - layout.cellSize * 2;
+  const tiny = Math.max(7, layout.cellSize * 0.82);
+  type(context, "ACQUISITION / LOCK", railX, railY, tiny, MAGENTA, "left", 650);
+  const lockValue = `${Math.round(86 + confidence * 13)}.${stateTick % 10}`;
+  drawDotMatrixValue(
+    context,
+    lockValue,
+    railX,
+    railY + layout.cellSize * 2,
+    Math.max(2, layout.cellSize * 0.72),
+    IVORY,
+    `${Math.round(86 + confidence * 13)}.${positiveModulo(stateTick - 1, 10)}`,
   );
-  const cellXStep = moduleWidth * 0.085 * 1.35;
-  type(context, "ACT / DISTRIBUTION", pad + tiny, top + tiny * 1.6, tiny, DIM);
+  type(context, "CONFIDENCE", railX, railY + layout.cellSize * 7, tiny, DIM);
   for (let row = 0; row < 8; row += 1) {
-    for (let column = 0; column < 7; column += 1) {
-      const x = pad + tiny + column * cellXStep;
-      const y = top + tiny * 2.55 + row * cell * 1.13;
-      const active = hash(column, row, phase >> 1) > 0.58;
-      context.fillStyle = active ? ((row + column + phase) % 13 === 0 ? MAGENTA : IVORY) : FAINT;
-      context.fillRect(x, y, cell * 0.72, cell * 0.72);
-    }
-  }
-  type(context, "PHASE REGISTER", pad + moduleWidth + gap + tiny, top + tiny * 1.6, tiny, DIM);
-  for (let row = 0; row < 9; row += 1) {
-    const y = top + tiny * (2.9 + row * 1.32);
-    const value = String(Math.floor(hash(row, phase >> 2, 91) * 65535)).padStart(5, "0");
-    type(context, `${String(row + 1).padStart(2, "0")} / ${value}`, pad + moduleWidth + gap + tiny, y, tiny, row === phase % 9 ? IVORY : DIM);
-    context.fillStyle = row === phase % 9 ? MAGENTA : DIM;
-    context.fillRect(width - pad - tiny - moduleWidth * 0.3, y - tiny * 0.72, moduleWidth * 0.27 * hash(row, 7, phase >> 2), tiny * 0.34);
+    const values = Array.from({ length: Math.max(5, Math.floor(railWidth / layout.cellSize) - 2) }, (_, column) =>
+      hash(column, row, Math.floor(stateTick / 4)),
+    );
+    drawCellStrip(
+      context,
+      railX,
+      railY + layout.cellSize * (9 + row * 2),
+      values,
+      layout.cellSize,
+      row === stateTick % 8 ? stateTick % values.length : -1,
+    );
   }
 }
 
 function constellationMesh(frame: SceneFrame) {
-  const { context, width, height, time, phase } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height, NIGHT);
-  const unit = layoutUnit(width, height);
-  grid(context, width, height, Math.max(24, unit / 12), "rgba(234, 223, 206, 0.07)");
+  drawSharedGrid(frame);
   chrome(frame, "Constellation mesh", "NODE-42");
-  const pad = width * 0.07;
-  const top = height * 0.14;
-  const fieldHeight = height * 0.67;
-  const nodes: Array<{ x: number; y: number; r: number }> = [];
-  for (let index = 0; index < 38; index += 1) {
-    nodes.push({
-      x: pad + hash(index, 1, 73) * (width - pad * 2) + Math.sin(time * 0.00015 + index) * width * 0.008,
-      y: top + hash(index, 2, 19) * fieldHeight + Math.cos(time * 0.00011 + index * 1.7) * unit * 0.008,
-      r: Math.max(1.4, unit * (0.003 + hash(index, 3, 7) * 0.005)),
-    });
-  }
-  const connectionRadius = unit * 0.19;
+  const content = signalContent(frame);
+  const nodes = Array.from({ length: 38 }, (_, index) => {
+    const column = Math.floor(hash(index, 1, 73) * Math.max(2, content.width / layout.cellSize - 2)) + 1;
+    const row = Math.floor(hash(index, 2, 19) * Math.max(2, content.height / layout.cellSize - 4)) + 1;
+    return {
+      x: content.x + (column + 0.5) * layout.cellSize,
+      y: content.y + (row + 0.5) * layout.cellSize,
+      active: hash(
+        index,
+        Math.floor(
+          propagatedStateTick(stateTick, column, row, Math.max(1, Math.floor(content.width / layout.cellSize)), Math.max(1, Math.floor(content.height / layout.cellSize))) / 4,
+        ),
+        91,
+      ) > 0.15,
+    };
+  });
+  const route = [2, 8, 19, 31, 23, 35];
+  const connectionRadius = layout.cellSize * 10;
   for (let a = 0; a < nodes.length; a += 1) {
     for (let b = a + 1; b < nodes.length; b += 1) {
-      const dx = nodes[a].x - nodes[b].x;
-      const dy = nodes[a].y - nodes[b].y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance < connectionRadius && hash(a, b, 22) > 0.45) {
-        const alpha = 0.08 + (1 - distance / connectionRadius) * 0.3;
-        line(context, nodes[a].x, nodes[a].y, nodes[b].x, nodes[b].y, `rgba(234, 223, 206, ${alpha})`);
-      }
+      if (!nodes[a].active || !nodes[b].active) continue;
+      const distance = Math.hypot(nodes[a].x - nodes[b].x, nodes[a].y - nodes[b].y);
+      if (distance > connectionRadius || hash(a, b, 22) <= 0.54) continue;
+      line(context, nodes[a].x, nodes[a].y, nodes[b].x, nodes[b].y, FAINT);
     }
   }
-  const route = [2, 8, 19, 31, 23, 35];
-  context.beginPath();
-  route.forEach((nodeIndex, index) => {
-    const node = nodes[nodeIndex];
-    if (index === 0) context.moveTo(node.x, node.y);
-    else context.lineTo(node.x, node.y);
-  });
-  context.strokeStyle = MAGENTA;
-  context.lineWidth = Math.max(1.4, unit * 0.003);
-  context.stroke();
-  nodes.forEach((node, index) => {
-    circle(context, node.x, node.y, node.r, index % 11 === phase % 11 ? MAGENTA : IVORY, 1, NIGHT);
-    if (route.includes(index)) {
-      circle(context, node.x, node.y, node.r * 2.8, MAGENTA);
+  for (let index = 0; index < route.length - 1; index += 1) {
+    const from = nodes[route[index]];
+    const to = nodes[route[index + 1]];
+    if (index <= positiveModulo(Math.floor(stateTick / 3), route.length - 1)) {
+      line(context, from.x, from.y, to.x, to.y, index === stateTick % (route.length - 1) ? MAGENTA : IVORY, 2);
     }
+  }
+  nodes.forEach((node, index) => {
+    const size = route.includes(index) ? layout.cellSize * 0.82 : layout.cellSize * 0.5;
+    context.fillStyle = index === route[stateTick % route.length] ? MAGENTA : node.active ? IVORY : FAINT;
+    context.fillRect(node.x - size / 2, node.y - size / 2, size, size);
   });
-  const tiny = Math.max(7, unit * 0.021);
-  type(context, "ROUTE / 02-08-19-31-23-35", pad, height * 0.84, tiny, IVORY);
-  type(context, `${nodes.length} PEERS / ${String(phase % 999).padStart(3, "0")} ms`, width - pad, height * 0.84, tiny, DIM, "right");
+  const tiny = Math.max(7, layout.cellSize * 0.82);
+  type(context, "ROUTE / 02-08-19-31-23-35", content.x, content.y + content.height - layout.cellSize, tiny, IVORY);
+  type(context, "38 PEERS / DISCRETE HANDSHAKE", content.x + content.width, content.y + content.height - layout.cellSize, tiny, DIM, "right");
 }
 
 function glyphCascade(frame: SceneFrame) {
-  const { context, width, height, time, phase } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height);
-  const unit = layoutUnit(width, height);
-  const columns = 14;
-  const cellWidth = width / columns;
-  const cellHeight = Math.max(18, unit * 0.075);
-  const glyphSize = Math.min(cellWidth * 0.45, unit * 0.045);
-  const rows = Math.ceil(height / cellHeight) + 3;
+  drawSharedGrid(frame);
+  const content = signalContent(frame);
+  const columns = Math.min(18, Math.max(10, Math.floor(content.width / (layout.cellSize * 3))));
+  const rows = Math.max(8, Math.floor(content.height / (layout.cellSize * 2)));
   const alphabet = "AEFHKMNPRSTVX0123456789:/";
-  for (let column = 0; column < columns; column += 1) {
-    const speed = 0.008 + hash(column, 8, 13) * 0.013;
-    const offset = positiveModulo(time * speed + hash(column, 5, 44) * cellHeight * 4, cellHeight);
-    for (let row = -2; row < rows; row += 1) {
-      const y = row * cellHeight + offset;
-      const glyphIndex = Math.floor(hash(column, row + (phase >> 2), 61) * alphabet.length);
-      const head = positiveModulo(row + Math.floor(time / 180) + column * 3, 23) === 0;
-      const color = head ? MAGENTA : hash(column, row, 90) > 0.76 ? IVORY : DIM;
-      type(context, alphabet[glyphIndex], column * cellWidth + cellWidth * 0.5, y, glyphSize, color, "center", head ? 700 : 400);
-      if (hash(row, column, phase >> 3) > 0.88) {
-        context.fillStyle = color;
-        context.fillRect(column * cellWidth + cellWidth * 0.17, y + cellHeight * 0.18, cellWidth * 0.66, Math.max(1, unit * 0.0025));
+  const gridFit = fitCellGrid(layout, columns * 3, rows * 2, content);
+  const scanRow = positiveModulo(stateTick, rows);
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const x = gridFit.x + (column * 3 + 1.5) * layout.cellSize;
+      const y = gridFit.y + (row * 2 + 1.35) * layout.cellSize;
+      const cellTick = propagatedStateTick(stateTick, column, row, columns, rows);
+      const glyphEpoch = Math.floor(cellTick / (2 + (column % 4)));
+      const glyphIndex = Math.floor(hash(column, row, glyphEpoch) * alphabet.length);
+      const head = row === positiveModulo(positiveModulo(cellTick, rows) + column * 3, rows);
+      type(context, alphabet[glyphIndex], x, y, layout.cellSize * 1.35, head ? MAGENTA : hash(column, row, 90) > 0.7 ? IVORY : DIM, "center", head ? 700 : 400);
+      if (hash(row, column, glyphEpoch >> 2) > 0.87) {
+        context.fillStyle = head ? MAGENTA : IVORY;
+        context.fillRect(x - layout.cellSize, y + layout.cellSize * 0.28, layout.cellSize * 2, layout.cellSize * 0.18);
       }
     }
   }
-  const scanY = positiveModulo(time * 0.06, height * 1.15) - height * 0.1;
-  context.fillStyle = "rgba(227, 76, 130, 0.12)";
-  context.fillRect(0, scanY - cellHeight, width, cellHeight * 2);
-  line(context, 0, scanY, width, scanY, MAGENTA, 2);
-  context.fillStyle = "rgba(37, 16, 21, 0.88)";
-  const chromeBandHeight = unit * 0.13;
-  context.fillRect(0, 0, width, chromeBandHeight);
-  context.fillRect(0, height - chromeBandHeight, width, chromeBandHeight);
+  context.fillStyle = "rgba(227, 76, 130, 0.09)";
+  context.fillRect(content.x, gridFit.y + scanRow * layout.cellSize * 2, content.width, layout.cellSize * 2);
+  line(context, content.x, gridFit.y + scanRow * layout.cellSize * 2, content.x + content.width, gridFit.y + scanRow * layout.cellSize * 2, MAGENTA, 1.5);
   chrome(frame, "Glyph cascade", "RAIN-14");
 }
 
 function barcodeCathedral(frame: SceneFrame) {
-  const { context, width, height, time } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height, NIGHT);
-  const sceneUnit = layoutUnit(width, height);
-  const pad = width * 0.055;
-  const base = height * 0.8;
+  drawSharedGrid(frame);
+  chrome(frame, "Amplitude matrix", "NAVE-43");
+  const content = signalContent(frame);
   const count = 43;
-  const available = width - pad * 2;
-  const unit = available / count;
-  for (let index = 0; index < count; index += 1) {
-    const fromCenter = Math.abs(index - (count - 1) / 2) / (count / 2);
-    const noise = hash(index, 4, 81);
-    const arch = Math.pow(1 - fromCenter, 1.8);
-    const barHeight = height * (0.13 + arch * 0.49 + noise * 0.11);
-    const barWidth = unit * (0.28 + hash(index, 7, 12) * 0.52);
-    const x = pad + index * unit + (unit - barWidth) / 2;
-    context.fillStyle = index === Math.floor(positiveModulo(time * 0.007, count)) ? MAGENTA : index % 5 === 0 ? IVORY : DIM;
-    context.fillRect(x, base - barHeight, barWidth, barHeight);
-    if (index % 4 === 0) line(context, x, base + unit, x, height * 0.88, FAINT);
+  const matrixRows = Math.max(14, Math.floor(content.height / layout.cellSize) - 4);
+  const availableColumns = Math.floor(content.width / layout.cellSize);
+  const channelStride = Math.max(1, Math.floor(availableColumns / count));
+  const matrix = fitCellGrid(layout, count * channelStride, matrixRows, {
+    x: content.x,
+    y: content.y + layout.cellSize * 3,
+    width: content.width,
+    height: content.height - layout.cellSize * 4,
+  });
+  const write = positiveModulo(stateTick, count);
+  for (let column = 0; column < count; column += 1) {
+    const sampleEpoch = stateTick - positiveModulo(write - column, count);
+    const wave = Math.sin(sampleEpoch * 0.36 + column * 0.22) * 0.5 + 0.5;
+    const amplitude = clamp(wave * 0.64 + hash(column, sampleEpoch, 81) * 0.36);
+    const centerRow = Math.max(1, Math.min(matrix.rows - 2, Math.round((1 - amplitude) * (matrix.rows - 3)) + 1));
+    for (let row = 0; row < matrix.rows; row += 1) {
+      const distance = Math.abs(row - centerRow);
+      const active = distance <= 1;
+      const x = matrix.x + column * channelStride * layout.cellSize + layout.cellSize * 0.18;
+      const y = matrix.y + row * layout.cellSize + layout.cellSize * 0.18;
+      context.fillStyle = column === write && active ? MAGENTA : active ? (distance === 0 ? IVORY : DIM) : "rgba(234, 223, 206, 0.025)";
+      context.fillRect(
+        x,
+        y,
+        layout.cellSize * channelStride - layout.cellSize * 0.36,
+        layout.cellSize * 0.64,
+      );
+    }
   }
-  context.strokeStyle = DIM;
-  context.lineWidth = 1;
-  context.beginPath();
-  context.arc(width / 2, base, sceneUnit * 0.34, Math.PI, TAU);
-  context.arc(width / 2, base, sceneUnit * 0.24, Math.PI, TAU);
-  context.arc(width / 2, base, sceneUnit * 0.14, Math.PI, TAU);
-  context.stroke();
-  const vanishingX = width / 2;
-  const vanishingY = height * 0.48;
-  for (let index = -7; index <= 7; index += 1) {
-    line(context, vanishingX, vanishingY, width / 2 + index * width * 0.09, height, FAINT);
-  }
-  for (let row = 0; row < 8; row += 1) {
-    const amount = row / 8;
-    const y = vanishingY + Math.pow(amount, 1.75) * (height - vanishingY);
-    line(context, 0, y, width, y, FAINT);
-  }
-  type(context, "DATA / NAVE", width / 2, height * 0.19, sceneUnit * 0.055, IVORY, "center", 700);
-  type(context, "43 CHANNELS // HARMONIC LOCK", width / 2, height * 0.225, sceneUnit * 0.022, DIM, "center");
-  chrome(frame, "Barcode cathedral", "NAVE-43");
+  const tiny = Math.max(7, layout.cellSize * 0.82);
+  type(context, "AMPLITUDE MATRIX / 43", matrix.x, content.y + layout.cellSize, tiny, IVORY, "left", 650);
+  type(context, "WRITE / SAMPLE HOLD", matrix.x + matrix.width, content.y + layout.cellSize, tiny, MAGENTA, "right", 520);
+  drawDotMatrixValue(
+    context,
+    String(write).padStart(2, "0"),
+    matrix.x + matrix.width - layout.cellSize * 8,
+    content.y - layout.cellSize * 0.1,
+    layout.cellSize * 0.64,
+    MAGENTA,
+    String(positiveModulo(write - 1, count)).padStart(2, "0"),
+  );
 }
 
 function buildLifeStates(columns: number, rows: number, generations: number) {
@@ -463,209 +600,399 @@ const LIFE_COLUMNS = 26;
 const LIFE_ROWS = 42;
 const LIFE_STATES = buildLifeStates(LIFE_COLUMNS, LIFE_ROWS, 13);
 
-function cellularAtlas(frame: SceneFrame) {
-  const { context, width, height, time } = frame;
-  fill(context, width, height);
-  chrome(frame, "Cellular atlas", "LIFE-32");
-  const unit = layoutUnit(width, height);
-  const columns = LIFE_COLUMNS;
-  const rows = LIFE_ROWS;
-  const pad = width * 0.06;
-  const top = height * 0.13;
-  const fieldHeight = height * 0.72;
-  const gap = Math.max(1, unit * 0.0045);
-  const cell = Math.min((width - pad * 2 - gap * (columns - 1)) / columns, (fieldHeight - gap * (rows - 1)) / rows);
-  const state = LIFE_STATES[Math.floor(time / 700) % LIFE_STATES.length];
+function resolveLifeMetrics(stateTick: number) {
+  const tick = Math.max(0, Math.floor(stateTick));
+  const generation = Math.floor(tick / 5) % LIFE_STATES.length;
+  const nextGeneration = (generation + 1) % LIFE_STATES.length;
+  const propagationStage = tick % 5;
+  const current = LIFE_STATES[generation];
+  const next = LIFE_STATES[nextGeneration];
   let alive = 0;
-  for (let y = 0; y < rows; y += 1) {
-    for (let x = 0; x < columns; x += 1) {
-      const active = state[y * columns + x] === 1;
+  let births = 0;
+  let deaths = 0;
+  for (let row = 0; row < LIFE_ROWS; row += 1) {
+    for (let column = 0; column < LIFE_COLUMNS; column += 1) {
+      const index = row * LIFE_COLUMNS + column;
+      const changed = current[index] !== next[index];
+      const propagated = positiveModulo(column * 3 + row * 2, 5) <= propagationStage;
+      const active = changed && propagated ? next[index] === 1 : current[index] === 1;
       if (active) alive += 1;
-      context.fillStyle = active ? ((x * 3 + y * 7) % 29 === 0 ? MAGENTA : IVORY) : "rgba(234, 223, 206, 0.035)";
-      context.fillRect(pad + x * (cell + gap), top + y * (cell + gap), cell, cell);
+      if (current[index] === 0 && next[index] === 1) births += 1;
+      if (current[index] === 1 && next[index] === 0) deaths += 1;
     }
   }
-  const tiny = Math.max(7, unit * 0.022);
-  type(context, `POP ${String(alive).padStart(4, "0")}`, pad, height * 0.88, tiny, IVORY);
-  type(context, "RULE B3/S23 / TOROIDAL", width - pad, height * 0.88, tiny, DIM, "right");
+  return {
+    generation,
+    nextGeneration,
+    propagationStage,
+    current,
+    next,
+    alive,
+    births,
+    deaths,
+    density: Math.round((alive / (LIFE_COLUMNS * LIFE_ROWS)) * 100),
+    entropy: Math.round((births + deaths) * 0.71),
+    edge: positiveModulo(alive + births * 3, 997),
+    checksum: positiveModulo(alive * 17 + deaths * 31, 4096),
+  };
+}
+
+function cellularAtlas(frame: SceneFrame) {
+  const { context, width, height, stateTick, layout } = frame;
+  fill(context, width, height);
+  drawSharedGrid(frame);
+  const metrics = resolveLifeMetrics(stateTick);
+  const previousMetrics = resolveLifeMetrics(Math.max(0, stateTick - 1));
+  const {
+    generation,
+    alive,
+    births,
+    deaths,
+  } = metrics;
+  const availableColumns = layout.columns - 4;
+  const panelCount = availableColumns >= 96 ? 3 : availableColumns >= 66 ? 2 : 1;
+  const railColumns = 10;
+  const panelGap = 2;
+  const totalColumns = panelCount * LIFE_COLUMNS + (panelCount - 1) * panelGap + panelGap + railColumns;
+  const firstColumn = Math.max(2, Math.floor((layout.columns - totalColumns) / 2));
+  const firstRow = 3;
+  const panelModes = panelCount === 3
+    ? (["history", "live", "delta"] as const)
+    : panelCount === 2
+      ? (["live", "delta"] as const)
+      : (["live"] as const);
+  let fieldX = layout.originX + firstColumn * layout.cellSize;
+  panelModes.forEach((mode) => {
+    for (let row = 0; row < LIFE_ROWS; row += 1) {
+      for (let column = 0; column < LIFE_COLUMNS; column += 1) {
+        const index = row * LIFE_COLUMNS + column;
+        const cellTick = propagatedStateTick(
+          stateTick,
+          column,
+          row,
+          LIFE_COLUMNS,
+          LIFE_ROWS,
+        );
+        const source = cellTick === stateTick ? metrics : previousMetrics;
+        const sourceHistory = LIFE_STATES[
+          positiveModulo(source.generation - 1, LIFE_STATES.length)
+        ];
+        const changed = source.current[index] !== source.next[index];
+        const propagated = positiveModulo(column * 3 + row * 2, 5) <= source.propagationStage;
+        const live = changed && propagated
+          ? source.next[index] === 1
+          : source.current[index] === 1;
+        const active = mode === "history"
+          ? sourceHistory[index] === 1
+          : mode === "delta"
+            ? changed
+            : live;
+        const x = fieldX + column * layout.cellSize + layout.cellSize * 0.15;
+        const y = layout.originY + (firstRow + row) * layout.cellSize + layout.cellSize * 0.15;
+        const isPrimaryEvent = mode === "live" && changed && propagated;
+        context.fillStyle = active
+          ? isPrimaryEvent ? MAGENTA : mode === "history" ? DIM : IVORY
+          : "rgba(234, 223, 206, 0.025)";
+        context.fillRect(x, y, layout.cellSize * 0.7, layout.cellSize * 0.7);
+      }
+    }
+    type(
+      context,
+      mode === "history" ? "T-1" : mode === "delta" ? "DELTA" : "LIVE",
+      fieldX,
+      layout.originY + layout.cellSize * 2.4,
+      Math.max(7, layout.cellSize * 0.7),
+      mode === "live" ? MAGENTA : DIM,
+      "left",
+      mode === "live" ? 650 : 400,
+    );
+    fieldX += (LIFE_COLUMNS + panelGap) * layout.cellSize;
+  });
+  chrome(frame, "Cellular atlas", "LIFE-32");
+  const tiny = Math.max(7, layout.cellSize * 0.76);
+  const statsX = fieldX;
+  const statsY = layout.originY + layout.cellSize * 7;
+  type(context, "GENERATION DELTA", statsX, statsY, tiny, MAGENTA, "left", 650);
+  const stats = [
+    ["GEN", generation, previousMetrics.generation],
+    ["POP", alive, previousMetrics.alive],
+    ["BIRTH", births, previousMetrics.births],
+    ["DEATH", deaths, previousMetrics.deaths],
+    ["DENS", metrics.density, previousMetrics.density],
+    ["ENT", metrics.entropy, previousMetrics.entropy],
+    ["EDGE", metrics.edge, previousMetrics.edge],
+    ["SUM", metrics.checksum, previousMetrics.checksum],
+  ] as const;
+  stats.forEach(([label, value, previousValue], index) => {
+    const y = statsY + layout.cellSize * (2 + index * 2);
+    type(context, label, statsX, y, tiny, DIM);
+    drawDotMatrixValue(
+      context,
+      String(value).padStart(4, "0"),
+      statsX + layout.cellSize * 4.3,
+      y - layout.cellSize * 0.92,
+      layout.cellSize * 0.18,
+      IVORY,
+      String(previousValue).padStart(4, "0"),
+    );
+  });
+  for (let row = 0; row < 8; row += 1) {
+    const values = Array.from({ length: railColumns }, (_, column) =>
+      hash(column, row, Math.floor(stateTick / 5)),
+    );
+    drawCellStrip(
+      context,
+      statsX,
+      statsY + layout.cellSize * (20 + row * 2),
+      values,
+      layout.cellSize,
+      row === stateTick % 8 ? stateTick % railColumns : -1,
+    );
+  }
 }
 
 function packetRiver(frame: SceneFrame) {
-  const { context, width, height, time } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height, NIGHT);
-  const unit = layoutUnit(width, height);
-  grid(context, width, height, Math.max(22, unit / 15), "rgba(234, 223, 206, 0.055)", time * -0.004, 0);
+  drawSharedGrid(frame);
   chrome(frame, "Packet river", "FLOW-06");
-  const top = height * 0.15;
-  const bottom = height * 0.82;
+  const content = signalContent(frame);
   const lanes = 7;
+  const pathRows = Math.max(12, Math.floor(content.height / layout.cellSize) - 2);
+  const laneSpacing = content.width / lanes;
+  const tiny = Math.max(7, layout.cellSize * 0.78);
   for (let lane = 0; lane < lanes; lane += 1) {
-    const startX = width * (0.08 + lane * 0.14);
-    const amplitude = width * (0.035 + hash(lane, 3, 44) * 0.05);
-    context.beginPath();
-    for (let sample = 0; sample <= 50; sample += 1) {
-      const amount = sample / 50;
-      const y = top + amount * (bottom - top);
-      const x = startX + Math.sin(amount * TAU * (1.2 + lane * 0.08) + lane) * amplitude + Math.sin(time * 0.00018 + amount * 8) * width * 0.012;
-      if (sample === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
+    const centerColumn = Math.floor((content.x + laneSpacing * (lane + 0.5) - layout.originX) / layout.cellSize);
+    const path: Array<{ x: number; y: number }> = [];
+    for (let row = 0; row < pathRows; row += 1) {
+      const bend = Math.round(Math.sin(row * 0.58 + lane * 1.7) * (1 + lane % 3));
+      const x = layout.originX + (centerColumn + bend + 0.5) * layout.cellSize;
+      const y = content.y + (row + 0.5) * layout.cellSize;
+      path.push({ x, y });
+      context.fillStyle = row % 5 === 0 ? DIM : FAINT;
+      context.fillRect(x - layout.cellSize * 0.2, y - layout.cellSize * 0.2, layout.cellSize * 0.4, layout.cellSize * 0.4);
+      if (row > 0) line(context, path[row - 1].x, path[row - 1].y, x, y, lane === 3 ? DIM : FAINT);
     }
-    context.strokeStyle = lane === 3 ? MAGENTA : lane % 2 === 0 ? IVORY : DIM;
-    context.lineWidth = lane === 3 ? 2 : 1;
-    context.stroke();
-    for (let packet = 0; packet < 5; packet += 1) {
-      const amount = positiveModulo(time * (0.000055 + lane * 0.000004) + packet / 5 + hash(lane, packet, 4), 1);
-      const y = top + amount * (bottom - top);
-      const x = startX + Math.sin(amount * TAU * (1.2 + lane * 0.08) + lane) * amplitude + Math.sin(time * 0.00018 + amount * 8) * width * 0.012;
-      const size = Math.max(3, unit * (0.009 + hash(lane, packet, 33) * 0.01));
-      context.fillStyle = packet === 0 ? MAGENTA : IVORY;
-      context.fillRect(x - size / 2, y - size / 2, size, size);
+    for (let packet = 0; packet < 4; packet += 1) {
+      const packetTick = propagatedStateTick(stateTick, lane, packet, lanes, 4);
+      const hop = positiveModulo(packetTick + packet * 9 + lane * 5, path.length);
+      const node = path[hop];
+      const size = layout.cellSize * (packet === 0 ? 0.88 : 0.62);
+      context.fillStyle = lane === 3 && packet === 0 ? MAGENTA : IVORY;
+      context.fillRect(node.x - size / 2, node.y - size / 2, size, size);
     }
-  }
-  const tiny = Math.max(7, unit * 0.021);
-  for (let lane = 0; lane < lanes; lane += 1) {
-    type(context, String(lane + 1).padStart(2, "0"), width * (0.08 + lane * 0.14), height * 0.86, tiny, lane === 3 ? MAGENTA : DIM, "center");
+    type(
+      context,
+      String(lane + 1).padStart(2, "0"),
+      layout.originX + (centerColumn + 0.5) * layout.cellSize,
+      content.y + content.height,
+      tiny,
+      lane === 3 ? MAGENTA : DIM,
+      "center",
+    );
   }
 }
 
 function seismicField(frame: SceneFrame) {
-  const { context, width, height, time, phase } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height);
+  drawSharedGrid(frame);
   chrome(frame, "Seismic field", "QUAKE-12");
-  const unit = layoutUnit(width, height);
-  const pad = width * 0.06;
-  const top = height * 0.15;
-  const trackHeight = height * 0.052;
-  const epicenter = pad + positiveModulo(time * 0.024, width - pad * 2);
-  for (let track = 0; track < 12; track += 1) {
-    const baseline = top + track * trackHeight;
-    line(context, pad, baseline, width - pad, baseline, FAINT);
-    context.beginPath();
-    for (let sample = 0; sample <= 110; sample += 1) {
-      const x = pad + (sample / 110) * (width - pad * 2);
-      const distance = Math.abs(x - epicenter) / width;
-      const envelope = Math.exp(-distance * 19);
-      const noise = Math.sin(sample * (0.66 + track * 0.017) + track * 1.8 + time * 0.004) * envelope;
-      const drift = Math.sin(sample * 0.16 + track + time * 0.0005) * trackHeight * 0.08;
-      const y = baseline + noise * trackHeight * (0.54 + (track % 4) * 0.12) + drift;
-      if (sample === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
+  const content = signalContent(frame);
+  const tracks = 12;
+  const columns = Math.max(24, Math.floor(content.width / layout.cellSize) - 4);
+  const trackStep = Math.max(2, Math.floor(content.height / layout.cellSize / tracks));
+  const epicenterColumn = positiveModulo(stateTick, columns);
+  const firstColumn = Math.floor((content.x - layout.originX) / layout.cellSize) + 2;
+  const firstRow = Math.floor((content.y - layout.originY) / layout.cellSize) + 1;
+  for (let track = 0; track < tracks; track += 1) {
+    const baselineRow = firstRow + track * trackStep;
+    const baseline = layout.originY + (baselineRow + 0.5) * layout.cellSize;
+    line(context, layout.originX + firstColumn * layout.cellSize, baseline, layout.originX + (firstColumn + columns) * layout.cellSize, baseline, FAINT);
+    for (let sample = 0; sample < columns; sample += 1) {
+      const sampleTick = propagatedStateTick(stateTick, sample, track, columns, tracks);
+      const sampleEpicenter = positiveModulo(sampleTick, columns);
+      const envelope = Math.max(0, 1 - Math.abs(sample - sampleEpicenter) / 10);
+      const raw = Math.sin(sample * 0.73 + track * 1.81 + Math.floor(sampleTick / 2)) * envelope;
+      const amplitude = Math.round(raw * Math.min(2, Math.max(1, trackStep - 1)));
+      const x = layout.originX + (firstColumn + sample + 0.5) * layout.cellSize;
+      const y = baseline + amplitude * layout.cellSize;
+      const event = sample === sampleEpicenter && track === sampleTick % tracks;
+      context.fillStyle = event ? MAGENTA : Math.abs(amplitude) > 0 ? IVORY : DIM;
+      context.fillRect(x - layout.cellSize * 0.26, y - layout.cellSize * 0.26, layout.cellSize * 0.52, layout.cellSize * 0.52);
     }
-    context.strokeStyle = track === phase % 12 ? MAGENTA : IVORY;
-    context.lineWidth = track === phase % 12 ? 2 : 1;
-    context.stroke();
-    type(context, `S${String(track + 1).padStart(2, "0")}`, pad, baseline - 4, Math.max(7, unit * 0.017), DIM);
   }
-  const focalY = top + trackHeight * 5.5;
-  const ringStep = unit * 0.025;
-  for (let ring = 1; ring <= 4; ring += 1) {
-    circle(context, epicenter, focalY, ring * ringStep + positiveModulo(time * 0.012, ringStep), ring === 4 ? MAGENTA : DIM);
+  const focalX = layout.originX + (firstColumn + epicenterColumn + 0.5) * layout.cellSize;
+  const focalY = layout.originY + (firstRow + Math.floor(tracks * trackStep * 0.48)) * layout.cellSize;
+  for (let radius = 1; radius <= 5; radius += 1) {
+    const distance = radius + positiveModulo(Math.floor(stateTick / 2), 3);
+    const ringCells: SignalCell[] = [];
+    for (let dy = -distance; dy <= distance; dy += 1) {
+      for (let dx = -distance; dx <= distance; dx += 1) {
+        if (Math.abs(dx) + Math.abs(dy) !== distance) continue;
+        const size = layout.cellSize * 0.28;
+        const x = focalX + dx * layout.cellSize - size / 2;
+        const y = focalY + dy * layout.cellSize - size / 2;
+        if (x < 0 || y < 0 || x + size > width || y + size > height) continue;
+        ringCells.push({
+          x,
+          y,
+          size,
+          color: radius === 5 ? MAGENTA : DIM,
+        });
+      }
+    }
+    drawSignalCells(context, ringCells);
   }
-  type(context, `EPICENTER / ${String(Math.floor(epicenter)).padStart(4, "0")}`, pad, height * 0.84, unit * 0.022, IVORY);
+  const epicenterY = content.y + content.height;
+  type(context, "EPICENTER / COLUMN", content.x, epicenterY, Math.max(7, layout.cellSize * 0.8), IVORY);
+  drawDotMatrixValue(
+    context,
+    String(epicenterColumn).padStart(3, "0"),
+    content.x + layout.cellSize * 14,
+    epicenterY - layout.cellSize * 0.9,
+    layout.cellSize * 0.18,
+    MAGENTA,
+    String(positiveModulo(epicenterColumn - 1, columns)).padStart(3, "0"),
+  );
 }
 
 function clockworkRings(frame: SceneFrame) {
-  const { context, width, height, time } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height, NIGHT);
-  const unit = layoutUnit(width, height);
-  grid(context, width, height, Math.max(23, unit / 14), "rgba(234, 223, 206, 0.05)");
+  drawSharedGrid(frame);
   chrome(frame, "Clockwork rings", "GEAR-05");
-  const cx = width / 2;
-  const cy = height * 0.45;
-  const maximum = Math.min(width * 0.43, height * 0.27);
-  for (let ring = 0; ring < 5; ring += 1) {
-    const radius = maximum * (0.24 + ring * 0.18);
-    const ticks = 16 + ring * 9;
-    const rotation = time * 0.00012 * (ring % 2 === 0 ? 1 : -0.72) + ring;
-    circle(context, cx, cy, radius, ring === 2 ? MAGENTA : DIM, ring === 2 ? 2 : 1);
-    for (let tick = 0; tick < ticks; tick += 1) {
-      const angle = rotation + (tick / ticks) * TAU;
-      const tooth = tick % 3 === 0 ? unit * 0.018 : unit * 0.008;
-      const inner = radius - tooth * 0.25;
-      const outer = radius + tooth;
-      line(context, cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner, cx + Math.cos(angle) * outer, cy + Math.sin(angle) * outer, tick % 11 === 0 ? IVORY : DIM, tick % 11 === 0 ? 2 : 1);
+  const content = signalContent(frame);
+  const stacked = layout.profile === "portrait";
+  const mechanismWidth = stacked ? content.width : content.width * 0.64;
+  const cx = snapSignalCenter(layout, content.x + mechanismWidth * 0.5, "x");
+  const cy = snapSignalCenter(layout, content.y + content.height * (stacked ? 0.38 : 0.5), "y");
+  const maximum = Math.floor(
+    Math.min(mechanismWidth, content.height * (stacked ? 0.62 : 0.9)) * 0.48 / layout.cellSize,
+  ) * layout.cellSize;
+  const ratios = [1, -2, 3, -5, 8];
+  for (let ring = 0; ring < ratios.length; ring += 1) {
+    const radius = maximum * (0.25 + ring * 0.17);
+    const teeth = 18 + ring * 8;
+    for (let tooth = 0; tooth < teeth; tooth += 1) {
+      const toothTick = propagatedStateTick(stateTick, tooth, ring, teeth, ratios.length);
+      const activeTooth = positiveModulo(toothTick * ratios[ring], teeth);
+      const angle = (tooth / teeth) * TAU + ring * 0.11;
+      const x = snapSignalCenter(layout, cx + Math.cos(angle) * radius, "x");
+      const y = snapSignalCenter(layout, cy + Math.sin(angle) * radius, "y");
+      const cardinal = tooth % Math.max(1, Math.floor(teeth / 4)) === 0;
+      const size = layout.cellSize * (cardinal ? 0.72 : 0.46);
+      context.fillStyle = tooth === activeTooth ? MAGENTA : cardinal ? IVORY : DIM;
+      context.fillRect(x - size / 2, y - size / 2, size, size);
     }
   }
-  for (let blade = 0; blade < 6; blade += 1) {
-    const angle = time * -0.0002 + (blade / 6) * TAU;
-    context.beginPath();
-    context.moveTo(cx, cy);
-    context.lineTo(cx + Math.cos(angle - 0.13) * maximum * 0.23, cy + Math.sin(angle - 0.13) * maximum * 0.23);
-    context.lineTo(cx + Math.cos(angle + 0.13) * maximum * 0.23, cy + Math.sin(angle + 0.13) * maximum * 0.23);
-    context.closePath();
-    context.fillStyle = blade === 0 ? MAGENTA : IVORY;
-    context.fill();
-  }
-  circle(context, cx, cy, unit * 0.028, IVORY, 2, OXBLOOD);
-  const tiny = Math.max(7, unit * 0.022);
-  type(context, "ESCAPEMENT / 0.972", width * 0.06, height * 0.79, tiny, DIM);
-  type(context, "PHASE LOCKED", width * 0.94, height * 0.79, tiny, MAGENTA, "right");
+  context.fillStyle = IVORY;
+  context.fillRect(cx - layout.cellSize * 0.65, cy - layout.cellSize * 0.65, layout.cellSize * 1.3, layout.cellSize * 1.3);
+  const railX = snapSignalCenter(layout, stacked ? content.x : content.x + mechanismWidth + layout.cellSize * 2, "x") - layout.cellSize * 0.5;
+  const railY = snapSignalCenter(layout, stacked ? content.y + content.height * 0.72 : content.y + layout.cellSize * 4, "y") + layout.cellSize * 0.5;
+  const tiny = Math.max(7, layout.cellSize * 0.78);
+  type(context, "ESCAPEMENT / COHERENCE", railX, railY, tiny, MAGENTA, "left", 650);
+  ratios.forEach((ratio, index) => {
+    const y = railY + layout.cellSize * (2 + index * 2);
+    type(context, `R${index + 1} / ${ratio > 0 ? "+" : ""}${ratio}`, railX, y, tiny, DIM);
+    const values = Array.from({ length: 9 }, (_, column) =>
+      positiveModulo(stateTick * Math.abs(ratio) - column, 9) === 0 ? 1 : hash(index, column, 5) * 0.32,
+    );
+    drawCellStrip(context, railX + layout.cellSize * 5, y - layout.cellSize, values, layout.cellSize, positiveModulo(stateTick * ratio, values.length));
+  });
+  type(context, "PHASE LOCKED / ERROR 00.03", railX, railY + layout.cellSize * 14, tiny, IVORY);
 }
 
 function vectorScope(frame: SceneFrame) {
-  const { context, width, height, time } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height);
+  drawSharedGrid(frame);
   chrome(frame, "Vector scope", "XY-09");
-  const unit = layoutUnit(width, height);
-  const cx = width / 2;
-  const cy = height * 0.43;
-  const radius = Math.min(width * 0.39, height * 0.25);
-  circle(context, cx, cy, radius, DIM);
-  circle(context, cx, cy, radius * 0.66, FAINT);
-  circle(context, cx, cy, radius * 0.33, FAINT);
-  line(context, cx - radius, cy, cx + radius, cy, FAINT);
-  line(context, cx, cy - radius, cx, cy + radius, FAINT);
-  for (let tick = 0; tick < 36; tick += 1) {
-    const angle = (tick / 36) * TAU;
-    line(context, cx + Math.cos(angle) * radius * 0.95, cy + Math.sin(angle) * radius * 0.95, cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius, tick % 9 === 0 ? IVORY : DIM);
+  const content = signalContent(frame);
+  const diameterCells = Math.max(18, Math.min(38, Math.floor(Math.min(content.width, content.height) / layout.cellSize) - 2));
+  const field = fitCellGrid(layout, diameterCells, diameterCells, content);
+  const centerColumn = (field.columns - 1) / 2;
+  const centerRow = (field.rows - 1) / 2;
+  const radiusCells = Math.min(field.columns, field.rows) * 0.47;
+  const lit = new Map<string, string>();
+  for (let row = 0; row < field.rows; row += 1) {
+    for (let column = 0; column < field.columns; column += 1) {
+      const distance = Math.hypot(column - centerColumn, row - centerRow);
+      if ([0.33, 0.66, 1].some((ratio) => Math.abs(distance - radiusCells * ratio) < 0.42)) {
+        lit.set(`${column}:${row}`, distance > radiusCells * 0.9 ? DIM : FAINT);
+      }
+    }
   }
-  context.beginPath();
-  for (let sample = 0; sample <= 300; sample += 1) {
-    const amount = (sample / 300) * TAU;
-    const x = cx + Math.sin(amount * 3 + time * 0.00037) * radius * 0.82;
-    const y = cy + Math.sin(amount * 4 + time * 0.00023 + 1.17) * radius * 0.82;
-    if (sample === 0) context.moveTo(x, y);
-    else context.lineTo(x, y);
+  const buildTrace = (tick: number) => {
+    const trace = new Map<string, string>();
+    const phase = tick * 0.11;
+    for (let sample = 0; sample < 220; sample += 1) {
+      const amount = (sample / 220) * TAU;
+      const column = Math.round(centerColumn + Math.sin(amount * 3 + phase) * radiusCells * 0.82);
+      const row = Math.round(centerRow + Math.sin(amount * 4 + phase * 0.63 + 1.17) * radiusCells * 0.82);
+      trace.set(`${column}:${row}`, IVORY);
+    }
+    for (let sample = 0; sample < 140; sample += 1) {
+      const amount = (sample / 140) * TAU;
+      const column = Math.round(centerColumn + Math.sin(amount * 2 + phase * 0.71) * radiusCells * 0.54);
+      const row = Math.round(centerRow + Math.sin(amount * 5 + phase * 0.39 + 0.7) * radiusCells * 0.54);
+      trace.set(`${column}:${row}`, MAGENTA);
+    }
+    return trace;
+  };
+  const currentTrace = buildTrace(stateTick);
+  const previousTrace = buildTrace(Math.max(0, stateTick - 1));
+  const traceKeys = new Set([...currentTrace.keys(), ...previousTrace.keys()]);
+  for (const key of traceKeys) {
+    const [column, row] = key.split(":").map(Number);
+    const cellTick = propagatedStateTick(
+      stateTick,
+      column,
+      row,
+      field.columns,
+      field.rows,
+    );
+    const color = cellTick === stateTick ? currentTrace.get(key) : previousTrace.get(key);
+    if (color) lit.set(key, color);
   }
-  context.strokeStyle = IVORY;
-  context.lineWidth = Math.max(1.2, unit * 0.003);
-  context.stroke();
-  context.beginPath();
-  for (let sample = 0; sample <= 160; sample += 1) {
-    const amount = (sample / 160) * TAU;
-    const x = cx + Math.sin(amount * 2 + time * 0.00029) * radius * 0.55;
-    const y = cy + Math.sin(amount * 5 + time * 0.00019 + 0.7) * radius * 0.55;
-    if (sample === 0) context.moveTo(x, y);
-    else context.lineTo(x, y);
+  for (const [key, color] of lit) {
+    const [column, row] = key.split(":").map(Number);
+    context.fillStyle = color;
+    context.fillRect(
+      field.x + column * layout.cellSize + layout.cellSize * 0.2,
+      field.y + row * layout.cellSize + layout.cellSize * 0.2,
+      layout.cellSize * 0.6,
+      layout.cellSize * 0.6,
+    );
   }
-  context.strokeStyle = MAGENTA;
-  context.lineWidth = 2;
-  context.stroke();
-  const tiny = Math.max(7, unit * 0.022);
-  type(context, "X 03.000 Hz", width * 0.08, height * 0.77, tiny, DIM);
-  type(context, "Y 04.000 Hz", width * 0.92, height * 0.77, tiny, DIM, "right");
-  type(context, "PHASE +067 DEG", width / 2, height * 0.82, tiny, MAGENTA, "center");
+  const tiny = Math.max(7, layout.cellSize * 0.8);
+  type(context, "X 03.000 HZ", content.x, content.y + content.height, tiny, DIM);
+  type(context, "Y 04.000 HZ", content.x + content.width, content.y + content.height, tiny, DIM, "right");
+  type(context, "PHASE / CELL LOCK", content.x + content.width / 2, content.y + content.height, tiny, MAGENTA, "center");
 }
 
 function memoryMap(frame: SceneFrame) {
-  const { context, width, height, phase } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height, NIGHT);
+  drawSharedGrid(frame);
   chrome(frame, "Memory map", "RAM-64");
-  const unit = layoutUnit(width, height);
-  const pad = width * 0.06;
-  const top = height * 0.14;
-  const mapHeight = height * 0.66;
+  const content = signalContent(frame);
   const columns = 8;
   const rows = 14;
-  const gap = unit * 0.009;
-  const cellWidth = (width - pad * 2 - gap * (columns - 1)) / columns;
-  const cellHeight = (mapHeight - gap * (rows - 1)) / rows;
+  const availableColumns = Math.floor(content.width / layout.cellSize);
+  const availableRows = Math.floor(content.height / layout.cellSize) - 3;
+  const moduleColumns = Math.max(1, Math.floor(availableColumns / columns));
+  const moduleRows = Math.max(1, Math.floor(availableRows / rows));
+  const map = fitCellGrid(layout, moduleColumns * columns, moduleRows * rows, content);
   for (let row = 0; row < rows; row += 1) {
     for (let column = 0; column < columns; column += 1) {
-      const x = pad + column * (cellWidth + gap);
-      const y = top + row * (cellHeight + gap);
+      const x = map.x + column * moduleColumns * layout.cellSize + layout.cellSize * 0.15;
+      const y = map.y + row * moduleRows * layout.cellSize + layout.cellSize * 0.15;
+      const cellWidth = moduleColumns * layout.cellSize - layout.cellSize * 0.3;
+      const cellHeight = moduleRows * layout.cellSize - layout.cellSize * 0.3;
       const value = hash(column, row, 304);
-      const active = positiveModulo(row * columns + column + (phase >> 2), 31) < 3;
+      const cellTick = propagatedStateTick(stateTick, column, row, columns, rows);
+      const active = positiveModulo(row * columns + column + Math.floor(cellTick / 3), 31) < 3;
       context.fillStyle = active ? MAGENTA : value > 0.72 ? "rgba(234, 223, 206, 0.82)" : value > 0.35 ? "rgba(234, 223, 206, 0.24)" : "rgba(234, 223, 206, 0.06)";
       context.fillRect(x, y, cellWidth, cellHeight);
       if (value > 0.84) {
@@ -674,235 +1001,250 @@ function memoryMap(frame: SceneFrame) {
       }
     }
   }
-  const tiny = Math.max(7, unit * 0.02);
-  type(context, "0000", pad, height * 0.84, tiny, IVORY);
-  type(context, "FFFF", width - pad, height * 0.84, tiny, IVORY, "right");
-  line(context, pad + width * 0.09, height * 0.835, width - pad - width * 0.09, height * 0.835, DIM);
-  type(context, "64 KB / 87.2% ALLOCATED", width / 2, height * 0.885, tiny, MAGENTA, "center");
+  const tiny = Math.max(7, layout.cellSize * 0.78);
+  const footerY = content.y + content.height;
+  type(context, "0000", content.x, footerY, tiny, IVORY);
+  type(context, "FFFF", content.x + content.width, footerY, tiny, IVORY, "right");
+  type(context, "64 KB / CELL ALLOCATION 87.2", content.x + content.width / 2, footerY, tiny, MAGENTA, "center");
 }
 
 function waveformStack(frame: SceneFrame) {
-  const { context, width, height, time, phase } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height);
+  drawSharedGrid(frame);
   chrome(frame, "Waveform stack", "WAVE-16");
-  const unit = layoutUnit(width, height);
-  const pad = width * 0.06;
-  const top = height * 0.14;
+  const content = signalContent(frame);
   const tracks = 16;
-  const trackHeight = height * 0.043;
+  const trackStep = Math.max(2, Math.floor(content.height / layout.cellSize / tracks));
+  const firstColumn = Math.floor((content.x - layout.originX) / layout.cellSize) + 5;
+  const columns = Math.max(16, Math.floor(content.width / layout.cellSize) - 6);
+  const firstRow = Math.floor((content.y - layout.originY) / layout.cellSize);
+  const tiny = Math.max(7, layout.cellSize * 0.7);
   for (let track = 0; track < tracks; track += 1) {
-    const baseline = top + track * trackHeight;
-    type(context, String(track + 1).padStart(2, "0"), pad, baseline + 3, Math.max(7, unit * 0.017), DIM);
-    line(context, pad + width * 0.06, baseline, width - pad, baseline, FAINT);
-    context.beginPath();
-    for (let sample = 0; sample <= 90; sample += 1) {
-      const amount = sample / 90;
-      const x = pad + width * 0.06 + amount * (width - pad * 2 - width * 0.06);
-      const carrier = Math.sin(amount * TAU * (2 + track * 0.18) + time * (0.0005 + track * 0.000013));
-      const modulator = Math.sin(amount * TAU * 7 + track * 0.81 + time * 0.0002);
+    const baselineRow = firstRow + track * trackStep + Math.floor(trackStep / 2);
+    const baseline = layout.originY + (baselineRow + 0.5) * layout.cellSize;
+    type(context, String(track + 1).padStart(2, "0"), content.x, baseline + layout.cellSize * 0.25, tiny, DIM);
+    for (let sample = 0; sample < columns; sample += 1) {
+      const sampleTick = propagatedStateTick(
+        stateTick,
+        sample,
+        track,
+        columns,
+        tracks,
+      );
+      const amount = sample / Math.max(1, columns - 1);
+      const carrier = Math.sin(amount * TAU * (2 + track * 0.18) + sampleTick * (0.12 + track * 0.004));
+      const modulator = Math.sin(amount * TAU * 7 + track * 0.81 + sampleTick * 0.08);
       const gate = Math.sin(amount * Math.PI * (3 + track % 3)) > -0.45 ? 1 : 0.15;
-      const y = baseline + carrier * modulator * gate * trackHeight * 0.33;
-      if (sample === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
+      const amplitude = Math.round(carrier * modulator * gate * Math.max(1, trackStep * 0.42));
+      const x = layout.originX + (firstColumn + sample + 0.5) * layout.cellSize;
+      const y = baseline + amplitude * layout.cellSize;
+      context.fillStyle = track === sampleTick % tracks && sample === sampleTick % columns
+        ? MAGENTA
+        : Math.abs(amplitude) > 0 ? (track % 5 === 0 ? IVORY : DIM) : FAINT;
+      context.fillRect(x - layout.cellSize * 0.23, y - layout.cellSize * 0.23, layout.cellSize * 0.46, layout.cellSize * 0.46);
     }
-    context.strokeStyle = track === phase % tracks ? MAGENTA : track % 5 === 0 ? IVORY : DIM;
-    context.lineWidth = track === phase % tracks ? 2 : 1;
-    context.stroke();
   }
-  type(context, "16 BUS / COHERENCE 0.9984", pad, height * 0.86, unit * 0.021, IVORY);
+  type(context, "16 BUS / COHERENCE 0.9984", content.x, content.y + content.height, tiny, IVORY);
 }
 
 function dataLoom(frame: SceneFrame) {
-  const { context, width, height, time, phase } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height, NIGHT);
+  drawSharedGrid(frame);
   chrome(frame, "Data loom", "WARP-18");
-  const unit = layoutUnit(width, height);
-  const pad = width * 0.055;
-  const top = height * 0.14;
-  const bottom = height * 0.82;
+  const content = signalContent(frame);
   const warps = 18;
-  const wefts = 24;
+  const wefts = Math.max(16, Math.min(24, Math.floor(content.height / layout.cellSize) - 3));
+  const firstColumn = Math.floor((content.x - layout.originX) / layout.cellSize) + 1;
+  const firstRow = Math.floor((content.y - layout.originY) / layout.cellSize) + 1;
+  const columnSpan = Math.max(warps, Math.floor(content.width / layout.cellSize) - 2);
+  const rowSpan = Math.max(wefts, Math.floor(content.height / layout.cellSize) - 3);
+  const warpColumns = Array.from({ length: warps }, (_, index) =>
+    firstColumn + Math.round((index / (warps - 1)) * (columnSpan - 1)),
+  );
+  const weftRows = Array.from({ length: wefts }, (_, index) =>
+    firstRow + Math.round((index / Math.max(1, wefts - 1)) * (rowSpan - 1)),
+  );
   for (let warp = 0; warp < warps; warp += 1) {
-    const baseX = pad + (warp / (warps - 1)) * (width - pad * 2);
-    context.beginPath();
-    for (let sample = 0; sample <= 40; sample += 1) {
-      const amount = sample / 40;
-      const x = baseX + Math.sin(amount * TAU * 1.5 + warp * 0.42 + time * 0.00022) * width * 0.014;
-      const y = top + amount * (bottom - top);
-      if (sample === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    }
-    context.strokeStyle = warp === phase % warps ? MAGENTA : warp % 3 === 0 ? IVORY : DIM;
-    context.lineWidth = warp === phase % warps ? 2 : 1;
-    context.stroke();
+    const x = layout.originX + (warpColumns[warp] + 0.5) * layout.cellSize;
+    line(
+      context,
+      x,
+      layout.originY + (firstRow + 0.5) * layout.cellSize,
+      x,
+      layout.originY + (firstRow + rowSpan - 0.5) * layout.cellSize,
+      warp === stateTick % warps ? DIM : FAINT,
+    );
   }
   for (let weft = 0; weft < wefts; weft += 1) {
-    const y = top + (weft / (wefts - 1)) * (bottom - top);
-    const direction = weft % 2 === 0 ? 1 : -1;
-    const travel = positiveModulo(time * 0.018 * direction + weft * width * 0.13, width * 0.22) - width * 0.11;
-    context.beginPath();
-    for (let sample = 0; sample <= 36; sample += 1) {
-      const amount = sample / 36;
-      const x = pad + amount * (width - pad * 2);
-      const localY = y + Math.sin(amount * TAU * 2 + weft + time * 0.00015) * unit * 0.008;
-      if (sample === 0) context.moveTo(x, localY);
-      else context.lineTo(x, localY);
+    const y = layout.originY + (weftRows[weft] + 0.5) * layout.cellSize;
+    for (let warp = 0; warp < warps; warp += 1) {
+      const x = layout.originX + (warpColumns[warp] + 0.5) * layout.cellSize;
+      const cellTick = propagatedStateTick(stateTick, warp, weft, warps, wefts);
+      const shuttle = positiveModulo(cellTick * (weft % 2 === 0 ? 1 : -1) + weft * 3, warps);
+      const active = warp === shuttle;
+      const woven = positiveModulo(warp * 3 + weft * 5 + Math.floor(cellTick / 6), 11) < 4;
+      const size = layout.cellSize * (active ? 0.78 : woven ? 0.48 : 0.24);
+      context.fillStyle = active && weft === stateTick % wefts ? MAGENTA : active ? IVORY : woven ? DIM : FAINT;
+      context.fillRect(x - size / 2, y - size / 2, size, size);
     }
-    context.strokeStyle = weft % 6 === 0 ? IVORY : FAINT;
-    context.lineWidth = 1;
-    context.stroke();
-    context.fillStyle = weft % 7 === 0 ? MAGENTA : IVORY;
-    context.fillRect(width / 2 + travel - width * 0.025, y - 1, width * 0.05, 3);
   }
-  type(context, "WARP 18 / WEFT 24", pad, height * 0.86, unit * 0.021, DIM);
-}
-
-function hexPath(
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  radius: number,
-) {
-  context.beginPath();
-  for (let side = 0; side < 6; side += 1) {
-    const angle = (side / 6) * TAU - Math.PI / 2;
-    const px = x + Math.cos(angle) * radius;
-    const py = y + Math.sin(angle) * radius;
-    if (side === 0) context.moveTo(px, py);
-    else context.lineTo(px, py);
-  }
-  context.closePath();
+  type(context, `WARP 18 / WEFT ${String(wefts).padStart(2, "0")} / SHUTTLE CELL`, content.x, content.y + content.height, Math.max(7, layout.cellSize * 0.78), DIM);
 }
 
 function hexField(frame: SceneFrame) {
-  const { context, width, height, time } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height);
+  drawSharedGrid(frame);
   chrome(frame, "Hex field", "HEX-19");
-  const unit = layoutUnit(width, height);
-  const radius = Math.max(8, unit * 0.037);
-  const xStep = radius * Math.sqrt(3);
-  const yStep = radius * 1.5;
-  const centerX = width / 2;
-  const centerY = height * 0.46;
-  const pulse = positiveModulo(time * 0.045, width * 0.72);
-  let row = 0;
-  for (let y = height * 0.13; y < height * 0.82; y += yStep) {
-    let column = 0;
-    for (let x = -radius + (row % 2) * xStep * 0.5; x < width + radius; x += xStep) {
-      const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
-      const active = Math.abs(distance - pulse) < radius * 0.8;
-      hexPath(context, x, y, radius * 0.9);
-      context.strokeStyle = active ? MAGENTA : hash(column, row, 55) > 0.72 ? IVORY : FAINT;
+  const content = signalContent(frame);
+  const firstColumn = Math.floor((content.x - layout.originX) / layout.cellSize) + 1;
+  const firstRow = Math.floor((content.y - layout.originY) / layout.cellSize) + 1;
+  const columns = Math.max(12, Math.floor(content.width / layout.cellSize) - 2);
+  const rows = Math.max(12, Math.floor(content.height / layout.cellSize) - 3);
+  const centerColumn = Math.floor(columns / 2);
+  const centerRow = Math.floor(rows / 2);
+  const maximumRadius = Math.max(3, Math.floor(Math.min(columns, rows) / 2));
+  const pulse = positiveModulo(Math.floor(stateTick / 2), maximumRadius + 1);
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      if (positiveModulo(column + row * 2, 3) !== 0) continue;
+      const q = column - centerColumn;
+      const r = row - centerRow;
+      const hexDistance = Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+      const cellTick = propagatedStateTick(stateTick, column, row, columns, rows);
+      const cellPulse = positiveModulo(Math.floor(cellTick / 2), maximumRadius + 1);
+      const active = Math.abs(hexDistance - cellPulse) <= 1;
+      const x = layout.originX + (firstColumn + column + 0.5) * layout.cellSize;
+      const y = layout.originY + (firstRow + row + 0.5) * layout.cellSize;
+      context.strokeStyle = active ? MAGENTA : hash(column, row, 55) > 0.72 ? IVORY : DIM;
       context.lineWidth = active ? 2 : 1;
-      context.stroke();
-      if (hash(column, row, Math.floor(time / 900)) > 0.91) {
-        hexPath(context, x, y, radius * 0.54);
-        context.fillStyle = active ? MAGENTA : "rgba(234, 223, 206, 0.18)";
-        context.fill();
+      context.strokeRect(
+        x - layout.cellSize * 0.34,
+        y - layout.cellSize * 0.34,
+        layout.cellSize * 0.68,
+        layout.cellSize * 0.68,
+      );
+      if (active || hash(column, row, Math.floor(cellTick / 6)) > 0.9) {
+        const size = layout.cellSize * (active ? 0.42 : 0.24);
+        context.fillStyle = active ? MAGENTA : IVORY;
+        context.fillRect(x - size / 2, y - size / 2, size, size);
       }
-      column += 1;
     }
-    row += 1;
   }
-  type(context, `RADIUS ${String(Math.floor(pulse)).padStart(3, "0")}`, width * 0.06, height * 0.86, unit * 0.021, IVORY);
-  type(context, "CELL LINK / ACTIVE", width * 0.94, height * 0.86, unit * 0.021, MAGENTA, "right");
+  const tiny = Math.max(7, layout.cellSize * 0.78);
+  type(context, "RADIUS CELL", content.x, content.y + content.height, tiny, IVORY);
+  drawDotMatrixValue(
+    context,
+    String(pulse).padStart(3, "0"),
+    content.x + layout.cellSize * 9,
+    content.y + content.height - layout.cellSize * 0.9,
+    layout.cellSize * 0.18,
+    IVORY,
+    String(positiveModulo(Math.floor(Math.max(0, stateTick - 1) / 2), maximumRadius + 1)).padStart(3, "0"),
+  );
+  type(context, "SIX-LINK / ACTIVE", content.x + content.width, content.y + content.height, tiny, MAGENTA, "right");
 }
 
 function satelliteTopology(frame: SceneFrame) {
-  const { context, width, height, time, phase } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height, NIGHT);
-  const unit = layoutUnit(width, height);
-  grid(context, width, height, Math.max(23, unit / 14), "rgba(234, 223, 206, 0.05)");
+  drawSharedGrid(frame);
   chrome(frame, "Satellite topology", "SAT-08");
-  const cx = width / 2;
-  const cy = height * 0.42;
-  const base = Math.min(width * 0.35, height * 0.23);
-  circle(context, cx, cy, base * 0.28, IVORY, 1.5, OXBLOOD);
-  for (let longitude = -2; longitude <= 2; longitude += 1) {
-    context.beginPath();
-    context.ellipse(cx, cy, base * 0.28 * Math.cos(longitude * 0.25), base * 0.28, 0, 0, TAU);
-    context.strokeStyle = FAINT;
-    context.stroke();
+  const content = signalContent(frame);
+  const cx = snapSignalCenter(layout, content.x + content.width / 2, "x");
+  const cy = snapSignalCenter(layout, content.y + content.height * 0.47, "y");
+  const baseCells = Math.max(8, Math.floor(Math.min(content.width, content.height) / layout.cellSize * 0.42));
+  const planetRadius = Math.max(3, Math.floor(baseCells * 0.28));
+  for (let row = -planetRadius; row <= planetRadius; row += 1) {
+    for (let column = -planetRadius; column <= planetRadius; column += 1) {
+      const distance = Math.hypot(column, row);
+      if (Math.abs(distance - planetRadius) > 0.65 && distance > planetRadius * 0.18) continue;
+      const size = layout.cellSize * (distance < planetRadius * 0.18 ? 0.54 : 0.3);
+      context.fillStyle = distance < planetRadius * 0.18 ? IVORY : DIM;
+      context.fillRect(
+        cx + column * layout.cellSize - size / 2,
+        cy + row * layout.cellSize - size / 2,
+        size,
+        size,
+      );
+    }
   }
-  line(context, cx - base * 0.28, cy, cx + base * 0.28, cy, FAINT);
-  const satellites: Array<{ x: number; y: number }> = [];
+  const satelliteStates: boolean[] = [];
   for (let orbit = 0; orbit < 4; orbit += 1) {
-    const rx = base * (0.56 + orbit * 0.18);
-    const ry = base * (0.24 + orbit * 0.07);
+    const steps = 36 + orbit * 8;
+    const rx = baseCells * (0.56 + orbit * 0.18);
+    const ry = baseCells * (0.24 + orbit * 0.07);
     const tilt = -0.5 + orbit * 0.34;
-    context.save();
-    context.translate(cx, cy);
-    context.rotate(tilt);
-    context.beginPath();
-    context.ellipse(0, 0, rx, ry, 0, 0, TAU);
-    context.strokeStyle = orbit === 2 ? MAGENTA : DIM;
-    context.stroke();
-    const angle = time * (0.00014 + orbit * 0.000025) * (orbit % 2 ? -1 : 1) + orbit * 1.5;
-    const localX = Math.cos(angle) * rx;
-    const localY = Math.sin(angle) * ry;
-    const cos = Math.cos(tilt);
-    const sin = Math.sin(tilt);
-    satellites.push({ x: cx + localX * cos - localY * sin, y: cy + localX * sin + localY * cos });
-    context.restore();
+    for (let step = 0; step < steps; step += 1) {
+      const cellTick = propagatedStateTick(stateTick, step, orbit, steps, 4);
+      const activeStep = positiveModulo(cellTick * (orbit % 2 ? -1 : 1) * (orbit + 1) + orbit * 7, steps);
+      const angle = (step / steps) * TAU;
+      const localX = Math.cos(angle) * rx;
+      const localY = Math.sin(angle) * ry;
+      const column = Math.round(localX * Math.cos(tilt) - localY * Math.sin(tilt));
+      const row = Math.round(localX * Math.sin(tilt) + localY * Math.cos(tilt));
+      const x = cx + column * layout.cellSize;
+      const y = cy + row * layout.cellSize;
+      const active = step === activeStep;
+      const size = layout.cellSize * (active ? 0.82 : 0.22);
+      context.fillStyle = active ? (orbit === stateTick % 4 ? MAGENTA : IVORY) : FAINT;
+      context.fillRect(x - size / 2, y - size / 2, size, size);
+    }
+    satelliteStates.push(orbit === stateTick % 4);
   }
-  satellites.forEach((satellite, index) => {
-    line(context, cx, cy, satellite.x, satellite.y, index === phase % 4 ? MAGENTA : FAINT);
-    const size = unit * 0.018;
-    context.fillStyle = index === phase % 4 ? MAGENTA : IVORY;
-    context.fillRect(satellite.x - size / 2, satellite.y - size / 2, size, size);
-    line(context, satellite.x - size * 1.2, satellite.y, satellite.x + size * 1.2, satellite.y, context.fillStyle as string);
-  });
-  const tiny = Math.max(7, unit * 0.021);
-  satellites.forEach((_, index) => {
-    type(context, `SAT-${index + 1} / ${index === phase % 4 ? "TX" : "IDLE"}`, width * 0.08, height * (0.72 + index * 0.035), tiny, index === phase % 4 ? MAGENTA : DIM);
+  const tiny = Math.max(7, layout.cellSize * 0.78);
+  satelliteStates.forEach((active, index) => {
+    type(context, `SAT-${index + 1} / ${active ? "TX" : "IDLE"}`, content.x, content.y + content.height - layout.cellSize * (4 - index), tiny, active ? MAGENTA : DIM);
   });
 }
 
 function archiveIndex(frame: SceneFrame) {
-  const { context, width, height, phase } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height);
+  drawSharedGrid(frame);
   chrome(frame, "Archive index", "ARC-96");
-  const unit = layoutUnit(width, height);
-  const pad = unit * 0.06;
-  const top = height * 0.14;
-  const columnGap = unit * 0.035;
-  const columnWidth = (width - pad * 2 - columnGap) / 2;
-  const rowHeight = height * 0.031;
-  const rowTypeSize = unit * 0.019;
+  const content = signalContent(frame);
+  const contentColumns = Math.floor(content.width / layout.cellSize);
+  const columnGap = layout.cellSize * 2;
+  const columnCells = Math.max(8, Math.floor((contentColumns - 2) / 2));
+  const columnWidth = columnCells * layout.cellSize;
+  const rowHeight = layout.cellSize * Math.max(1, Math.floor((content.height / layout.cellSize - 7) / 19));
+  const rowTypeSize = Math.max(7, layout.cellSize * 0.72);
   const labels = ["FIELD", "ORBIT", "GLYPH", "MEMORY", "VECTOR", "PACKET", "SIGNAL", "FRAME"];
   for (let column = 0; column < 2; column += 1) {
-    const x = pad + column * (columnWidth + columnGap);
-    panel(context, x, top, columnWidth, height * 0.59);
+    const x = content.x + column * (columnWidth + columnGap);
+    panel(context, x, content.y, columnWidth, rowHeight * 20);
     for (let row = 0; row < 19; row += 1) {
-      const y = top + rowHeight * (row + 1.45);
+      const y = content.y + rowHeight * (row + 1.35);
       const index = column * 19 + row;
-      const selected = index === (phase >> 1) % 38;
+      const cellTick = propagatedStateTick(stateTick, column, row, 2, 19);
+      const selected = index === Math.floor(cellTick / 2) % 38;
       if (selected) {
         context.fillStyle = MAGENTA;
-        context.fillRect(x + unit * 0.01, y - rowHeight * 0.72, columnWidth - unit * 0.02, rowHeight * 0.9);
+        context.fillRect(x + layout.cellSize * 0.15, y - rowHeight * 0.78, columnWidth - layout.cellSize * 0.3, rowHeight * 0.9);
       }
-      type(context, String(index + 1).padStart(3, "0"), x + unit * 0.018, y, rowTypeSize, selected ? OXBLOOD : IVORY);
-      type(context, labels[index % labels.length], x + unit * 0.095, y, rowTypeSize, selected ? OXBLOOD : DIM);
-      type(context, String(Math.floor(hash(index, 2, 88) * 9999)).padStart(4, "0"), x + columnWidth - unit * 0.018, y, rowTypeSize, selected ? OXBLOOD : DIM, "right");
+      type(context, String(index + 1).padStart(3, "0"), x + layout.cellSize, y, rowTypeSize, selected ? OXBLOOD : IVORY);
+      type(context, labels[index % labels.length], x + layout.cellSize * 6, y, rowTypeSize, selected ? OXBLOOD : DIM);
+      type(context, String(Math.floor(hash(index, 2, 88) * 9999)).padStart(4, "0"), x + columnWidth - layout.cellSize, y, rowTypeSize, selected ? OXBLOOD : DIM, "right");
     }
   }
-  type(context, "A", pad, height * 0.82, unit * 0.095, IVORY, "left", 700);
-  type(context, "96", width / 2, height * 0.82, unit * 0.095, MAGENTA, "center", 700);
-  type(context, "Z", width - pad, height * 0.82, unit * 0.095, IVORY, "right", 700);
+  const footerY = content.y + content.height;
+  type(context, "A", content.x, footerY, layout.cellSize * 3.2, IVORY, "left", 700);
+  type(context, "96", content.x + content.width / 2, footerY, layout.cellSize * 3.2, MAGENTA, "center", 700);
+  type(context, "Z", content.x + content.width, footerY, layout.cellSize * 3.2, IVORY, "right", 700);
 }
 
 function rasterPortrait(frame: SceneFrame) {
-  const { context, width, height, time } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height, NIGHT);
+  drawSharedGrid(frame);
   chrome(frame, "Raster portrait", "FACE-01");
-  const unit = layoutUnit(width, height);
+  const content = signalContent(frame);
   const columns = 25;
   const rows = 35;
-  const cell = Math.min(width * 0.032, height * 0.018);
-  const gap = cell * 0.22;
-  const gridWidth = columns * cell + (columns - 1) * gap;
-  const startX = (width - gridWidth) / 2;
-  const startY = height * 0.13;
+  const portrait = fitCellGrid(layout, columns, rows, content);
   for (let row = 0; row < rows; row += 1) {
     for (let column = 0; column < columns; column += 1) {
       const nx = (column - (columns - 1) / 2) / (columns * 0.42);
@@ -912,10 +1254,12 @@ function rasterPortrait(frame: SceneFrame) {
       const nose = Math.abs(nx) < 0.09 && ny > -0.1 && ny < 0.36;
       const mouth = Math.abs(ny - 0.48) < 0.055 && Math.abs(nx) < 0.42;
       const edge = face && nx * nx + Math.pow(ny * 0.88, 2) > 0.77;
-      const dropout = hash(column, row, Math.floor(time / 850)) > 0.94;
+      const cellTick = propagatedStateTick(stateTick, column, row, columns, rows);
+      const dropout = hash(column, row, Math.floor(cellTick / 5)) > 0.94;
       if (!face || dropout) continue;
-      const x = startX + column * (cell + gap);
-      const y = startY + row * (cell + gap);
+      const x = portrait.x + column * layout.cellSize + layout.cellSize * 0.12;
+      const y = portrait.y + row * layout.cellSize + layout.cellSize * 0.12;
+      const cell = layout.cellSize * 0.76;
       context.fillStyle = eye ? MAGENTA : nose || mouth ? IVORY : edge ? DIM : `rgba(234, 223, 206, ${0.24 + hash(column, row, 4) * 0.6})`;
       if (edge || hash(column, row, 7) > 0.72) {
         context.strokeStyle = context.fillStyle as string;
@@ -925,78 +1269,128 @@ function rasterPortrait(frame: SceneFrame) {
       }
     }
   }
-  const tiny = Math.max(7, unit * 0.021);
-  line(context, width * 0.08, height * 0.79, width * 0.92, height * 0.79, DIM);
-  type(context, "SUBJECT / UNKNOWN", width * 0.08, height * 0.83, tiny, IVORY);
-  type(context, "MATCH 00.13%", width * 0.92, height * 0.83, tiny, MAGENTA, "right");
-  type(context, "FEATURE VECTOR 025 x 035 / LOCAL ONLY", width * 0.08, height * 0.87, tiny, DIM);
+  const tiny = Math.max(7, layout.cellSize * 0.78);
+  const footerY = content.y + content.height;
+  type(context, "SUBJECT / UNKNOWN", content.x, footerY - layout.cellSize * 2, tiny, IVORY);
+  type(context, "MATCH 00.13%", content.x + content.width, footerY - layout.cellSize * 2, tiny, MAGENTA, "right");
+  type(context, "FEATURE VECTOR 025 x 035 / LOCAL ONLY", content.x, footerY, tiny, DIM);
 }
 
 function checkerError(frame: SceneFrame) {
-  const { context, width, height, time, phase } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height, IVORY);
-  const unit = layoutUnit(width, height);
-  grid(context, width, height, Math.max(18, unit / 17), "rgba(37, 16, 21, 0.14)");
+  drawSharedGrid(frame, "rgba(37, 16, 21, 0.14)");
   chrome(frame, "Checker error", "ERR-77", true);
-  const size = Math.max(11, unit * 0.046);
-  const bandTop = height * 0.2;
+  const content = signalContent(frame);
+  const blockCells = layout.profile === "wide" || layout.profile === "short" ? 3 : 2;
+  const size = layout.cellSize * blockCells;
+  const bandTop = content.y + layout.cellSize * 2;
   const bandRows = 7;
-  const columns = Math.ceil(width / size) + 2;
+  const columns = Math.ceil(content.width / size);
   for (let row = 0; row < bandRows; row += 1) {
-    const shift = Math.floor(time * (row % 2 ? -0.008 : 0.012) / size);
-    for (let column = -1; column < columns; column += 1) {
-      if ((column + row + shift) % 2 !== 0) continue;
-      context.fillStyle = (column + phase) % 17 === 0 ? MAGENTA : OXBLOOD;
-      context.fillRect(column * size + positiveModulo(time * (row % 2 ? -0.008 : 0.012), size), bandTop + row * size, size, size);
+    for (let column = 0; column < columns; column += 1) {
+      const cellTick = propagatedStateTick(stateTick, column, row, columns, bandRows);
+      const active = positiveModulo(column + row + Math.floor(cellTick / 3), 2) === 0;
+      const error = positiveModulo(column * 5 + row * 7 + cellTick, 29) === 0;
+      context.fillStyle = error ? MAGENTA : active ? OXBLOOD : "rgba(37, 16, 21, 0.08)";
+      context.fillRect(content.x + column * size, bandTop + row * size, size - layout.cellSize * 0.12, size - layout.cellSize * 0.12);
     }
   }
-  type(context, "SYNC", width * 0.06, height * 0.59, unit * 0.15, OXBLOOD, "left", 700);
-  type(context, "LOST", width * 0.94, height * 0.68, unit * 0.15, MAGENTA, "right", 700);
-  const random = randomFrom(920 + (phase >> 1));
-  for (let row = 0; row < 10; row += 1) {
-    const y = height * 0.72 + row * unit * 0.025;
-    const barWidth = width * (0.12 + random() * 0.68);
-    context.fillStyle = row % 4 === 0 ? MAGENTA : OXBLOOD;
-    context.fillRect(width * 0.06, y, barWidth, Math.max(2, unit * 0.008));
-    type(context, String(Math.floor(random() * 65535)).padStart(5, "0"), width * 0.94, y + unit * 0.009, unit * 0.018, OXBLOOD, "right");
+  type(context, "SYNC", content.x, content.y + content.height * 0.62, layout.cellSize * 5, OXBLOOD, "left", 700);
+  type(context, "LOST", content.x + content.width, content.y + content.height * 0.75, layout.cellSize * 5, MAGENTA, "right", 700);
+  for (let row = 0; row < 8; row += 1) {
+    const y = content.y + content.height - layout.cellSize * (9 - row);
+    const values = Array.from({ length: Math.max(12, Math.floor(content.width / layout.cellSize) - 8) }, (_, column) =>
+      hash(column, row, Math.floor(stateTick / 4)),
+    );
+    drawCellStrip(context, content.x, y, values, layout.cellSize, row === stateTick % 8 ? stateTick % values.length : -1);
   }
 }
 
 function deepScan(frame: SceneFrame) {
-  const { context, width, height, time, phase } = frame;
+  const { context, width, height, stateTick, layout } = frame;
   fill(context, width, height, NIGHT);
+  drawSharedGrid(frame);
   chrome(frame, "Deep scan", "DEPTH-∞");
-  const unit = layoutUnit(width, height);
-  const vx = width * (0.5 + Math.sin(time * 0.00013) * 0.04);
-  const vy = height * 0.42;
-  const horizon = height * 0.43;
-  line(context, 0, horizon, width, horizon, MAGENTA, 1.5);
+  const content = signalContent(frame);
+  const vx = snapSignalCenter(layout, content.x + content.width * 0.5, "x");
+  const vy = snapSignalCenter(layout, content.y + content.height * 0.38, "y");
+  const horizon = vy + layout.cellSize;
+  line(context, content.x, horizon, content.x + content.width, horizon, MAGENTA, 1.5);
   for (let ray = -9; ray <= 9; ray += 1) {
-    line(context, vx, vy, width / 2 + ray * width * 0.09, height, ray % 4 === 0 ? DIM : FAINT);
+    const targetX = clamp(
+      snapSignalCenter(layout, vx + ray * layout.cellSize * 5, "x"),
+      content.x,
+      content.x + content.width,
+    );
+    line(context, vx, vy, targetX, content.y + content.height, ray % 4 === 0 ? DIM : FAINT);
   }
   for (let depth = 1; depth <= 16; depth += 1) {
     const amount = depth / 16;
-    const y = horizon + Math.pow(amount, 2.25) * (height - horizon);
-    line(context, 0, y, width, y, depth === (phase >> 1) % 16 ? MAGENTA : FAINT);
+    const y = snapSignalCenter(layout, horizon + Math.pow(amount, 2.25) * (content.y + content.height - horizon), "y");
+    line(context, content.x, y, content.x + content.width, y, depth === Math.floor(stateTick / 2) % 16 ? MAGENTA : FAINT);
   }
   for (let portal = 0; portal < 9; portal += 1) {
-    const travel = positiveModulo(time * 0.00009 + portal / 9, 1);
-    const scale = Math.pow(travel, 2.25);
-    const portalWidth = width * (0.04 + scale * 0.78);
-    const portalHeight = height * (0.035 + scale * 0.48);
-    const x = vx - portalWidth / 2;
-    const y = vy - portalHeight * 0.38;
-    context.strokeStyle = portal === phase % 9 ? MAGENTA : portal % 3 === 0 ? IVORY : DIM;
-    context.lineWidth = portal === phase % 9 ? 2 : 1;
-    context.strokeRect(x, y, portalWidth, portalHeight);
+    const scale = Math.pow((portal + 1) / 9, 2.1);
+    const widthCells = Math.max(3, Math.round(3 + scale * Math.floor(content.width / layout.cellSize) * 0.74));
+    const heightCells = Math.max(2, Math.round(2 + scale * Math.floor(content.height / layout.cellSize) * 0.46));
+    const firstColumn = Math.round((vx - layout.originX) / layout.cellSize - widthCells / 2);
+    const firstRow = Math.round((vy - layout.originY) / layout.cellSize - heightCells * 0.38);
+    for (let column = 0; column <= widthCells; column += 1) {
+      for (const row of [0, heightCells]) {
+        const cellTick = propagatedStateTick(
+          stateTick,
+          column,
+          row,
+          widthCells + 1,
+          heightCells + 1,
+        );
+        const active = portal === cellTick % 9;
+        const size = layout.cellSize * (active ? 0.5 : 0.28);
+        context.fillStyle = active ? MAGENTA : portal % 3 === 0 ? IVORY : DIM;
+        context.fillRect(
+          layout.originX + (firstColumn + column + 0.5) * layout.cellSize - size / 2,
+          layout.originY + (firstRow + row + 0.5) * layout.cellSize - size / 2,
+          size,
+          size,
+        );
+      }
+    }
+    for (let row = 1; row < heightCells; row += 1) {
+      for (const column of [0, widthCells]) {
+        const cellTick = propagatedStateTick(
+          stateTick,
+          column,
+          row,
+          widthCells + 1,
+          heightCells + 1,
+        );
+        const active = portal === cellTick % 9;
+        const size = layout.cellSize * (active ? 0.5 : 0.28);
+        context.fillStyle = active ? MAGENTA : portal % 3 === 0 ? IVORY : DIM;
+        context.fillRect(
+          layout.originX + (firstColumn + column + 0.5) * layout.cellSize - size / 2,
+          layout.originY + (firstRow + row + 0.5) * layout.cellSize - size / 2,
+          size,
+          size,
+        );
+      }
+    }
   }
-  const tiny = Math.max(7, unit * 0.021);
-  panel(context, width * 0.07, height * 0.16, width * 0.28, height * 0.14, DIM);
-  type(context, "RANGE", width * 0.09, height * 0.205, tiny, DIM);
-  type(context, `${String(Math.floor(positiveModulo(time * 0.043, 9999))).padStart(4, "0")} M`, width * 0.09, height * 0.26, unit * 0.045, IVORY, "left", 700);
-  panel(context, width * 0.65, height * 0.67, width * 0.28, height * 0.12, DIM);
-  type(context, "RETURN / CLEAN", width * 0.91, height * 0.72, tiny, MAGENTA, "right");
-  type(context, "VOID CONFIDENCE 99.8", width * 0.91, height * 0.755, tiny, DIM, "right");
+  const tiny = Math.max(7, layout.cellSize * 0.78);
+  type(context, "RANGE / METERS", content.x, content.y + layout.cellSize, tiny, DIM);
+  const range = positiveModulo(stateTick * 43, 9999);
+  drawDotMatrixValue(
+    context,
+    String(range).padStart(4, "0"),
+    content.x,
+    content.y + layout.cellSize * 2,
+    layout.cellSize * 0.55,
+    IVORY,
+    String(positiveModulo((stateTick - 1) * 43, 9999)).padStart(4, "0"),
+  );
+  type(context, "RETURN / CLEAN", content.x + content.width, content.y + content.height - layout.cellSize * 2, tiny, MAGENTA, "right");
+  type(context, "VOID CONFIDENCE 99.8", content.x + content.width, content.y + content.height, tiny, DIM, "right");
 }
 
 const INTERNAL_SCENES: readonly InternalScene[] = [
@@ -1026,24 +1420,60 @@ export const SIGNAL_SCENES: readonly SignalSceneDescriptor[] = Object.freeze(
 
 export const SIGNAL_SCENE_COUNT = SIGNAL_SCENES.length;
 
-function drawTransitionBoundary(
+interface TransitionBuffer {
+  canvas: HTMLCanvasElement;
+  flipPlan: ReturnType<typeof buildCellFlipPlan>;
+  seed: string;
+  sceneIndex: number;
+  width: number;
+  height: number;
+  ratio: number;
+  duration: number;
+}
+
+const transitionBufferCache = new WeakMap<CanvasRenderingContext2D, TransitionBuffer>();
+
+function resolveTransitionBuffer(
   context: CanvasRenderingContext2D,
   width: number,
   height: number,
-  progress: number,
+  sceneIndex: number,
+  ratio: number,
+  seed: string,
+  duration: number,
 ) {
-  const rows = 18;
-  const rowHeight = height / rows;
-  const block = Math.max(6, width * 0.026);
-  for (let row = 0; row < rows; row += 1) {
-    const jitter = (hash(row, 3, 71) - 0.5) * width * 0.12;
-    const edge = width * (1 - progress) + jitter;
-    for (let column = -1; column <= 1; column += 1) {
-      if ((row + column) % 2 !== 0) continue;
-      context.fillStyle = column === 0 ? MAGENTA : row % 3 === 0 ? IVORY : OXBLOOD;
-      context.fillRect(edge + column * block, row * rowHeight, block, rowHeight + 1);
-    }
+  const cached = transitionBufferCache.get(context);
+  if (
+    cached &&
+    cached.sceneIndex === sceneIndex &&
+    cached.seed === seed &&
+    cached.width === width &&
+    cached.height === height &&
+    cached.ratio === ratio &&
+    cached.duration === duration
+  ) {
+    return cached;
   }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.ceil(width * ratio));
+  canvas.height = Math.max(1, Math.ceil(height * ratio));
+  const bufferContext = canvas.getContext("2d", { alpha: false });
+  if (!bufferContext) return null;
+  bufferContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+  drawScene(bufferContext, width, height, sceneIndex, 0, duration, true);
+  const result = {
+    canvas,
+    flipPlan: buildCellFlipPlan(width, height, seed),
+    seed,
+    sceneIndex,
+    width,
+    height,
+    ratio,
+    duration,
+  };
+  transitionBufferCache.set(context, result);
+  return result;
 }
 
 function drawScene(
@@ -1052,16 +1482,27 @@ function drawScene(
   height: number,
   sceneIndex: number,
   time: number,
+  sceneDurationMs = DEFAULT_SCENE_DURATION,
+  completePropagation = false,
 ) {
   const safeIndex = positiveModulo(Math.floor(sceneIndex), INTERNAL_SCENES.length);
   const safeTime = Number.isFinite(time) ? Math.max(0, time) : 0;
+  const stateTime = quantizeSignalTime(safeTime, SIGNAL_STATE_INTERVAL);
+  const confidence = signalConfidence(safeTime, sceneDurationMs);
   const frame: SceneFrame = {
     context,
     width: Math.max(1, width),
     height: Math.max(1, height),
-    time: safeTime,
-    phase: Math.floor(safeTime / 240),
+    time: stateTime,
+    phase: Math.floor(stateTime / SIGNAL_STATE_INTERVAL),
+    stateTick: Math.floor(stateTime / SIGNAL_STATE_INTERVAL),
+    confidence,
+    layout: resolveSignalLayout(width, height),
   };
+  activeSignalConfidence = confidence;
+  activeSignalStateProgress = completePropagation
+    ? 1
+    : clamp((safeTime - stateTime) / SIGNAL_STATE_INTERVAL);
   context.save();
   context.globalAlpha = 1;
   context.globalCompositeOperation = "source-over";
@@ -1095,7 +1536,7 @@ export function getSignalFrameInfo(
   const transitionStart = duration - transition;
   const transitionProgress = options.reducedMotion || transition === 0
     ? 0
-    : smoothStep((localTime - transitionStart) / transition);
+    : clamp((localTime - transitionStart) / transition);
   return {
     sceneIndex,
     nextSceneIndex,
@@ -1116,25 +1557,77 @@ export function renderSignalLibraryFrame(
   const info = getSignalFrameInfo(elapsedMs, options);
   const duration = Math.max(4_000, options.sceneDurationMs ?? DEFAULT_SCENE_DURATION);
   const localTime = positiveModulo(Math.max(0, elapsedMs), duration);
-  drawScene(context, width, height, info.sceneIndex, localTime);
+  drawScene(
+    context,
+    width,
+    height,
+    info.sceneIndex,
+    localTime,
+    duration,
+    Boolean(options.reducedMotion),
+  );
 
-  if (info.transitionProgress > 0) {
-    const rows = 18;
-    const rowHeight = height / rows;
-    context.save();
-    context.beginPath();
-    for (let row = 0; row < rows; row += 1) {
-      const stagger = (hash(row, 6, 912) - 0.5) * 0.2;
-      const rowProgress = clamp(info.transitionProgress * 1.18 + stagger);
-      const edge = width * (1 - rowProgress);
-      context.rect(edge, row * rowHeight, width - edge, rowHeight + 1);
+  if (
+    info.transitionProgress > 0 &&
+    typeof document !== "undefined" &&
+    typeof context.drawImage === "function"
+  ) {
+    const requestedRatio = Math.max(
+      0.1,
+      Number.isFinite(context.canvas?.width / Math.max(1, width))
+        ? context.canvas.width / Math.max(1, width)
+        : 1,
+    );
+    const sourceRatio = resolveBackingStore(
+      width,
+      height,
+      requestedRatio,
+      TRANSITION_PIXEL_BUDGET,
+    ).ratio;
+    const transitionSeed = `${info.sceneIndex}:${info.nextSceneIndex}`;
+    const buffer = resolveTransitionBuffer(
+      context,
+      width,
+      height,
+      info.nextSceneIndex,
+      sourceRatio,
+      transitionSeed,
+      duration,
+    );
+    if (buffer) {
+      for (const cell of buffer.flipPlan) {
+        const switchesOff = cellFlipProgress(
+          clamp(info.transitionProgress / 0.82),
+          cell,
+        );
+        const switchesOn = cellFlipProgress(
+          clamp((info.transitionProgress - 0.12) / 0.88),
+          cell,
+        );
+        if (switchesOff === 0) continue;
+        const x = Math.max(0, cell.x);
+        const y = Math.max(0, cell.y);
+        const right = Math.min(width, cell.x + cell.width);
+        const bottom = Math.min(height, cell.y + cell.height);
+        const cellWidth = right - x;
+        const cellHeight = bottom - y;
+        if (cellWidth <= 0 || cellHeight <= 0) continue;
+        context.fillStyle = NIGHT;
+        context.fillRect(x, y, cellWidth, cellHeight);
+        if (switchesOn === 0) continue;
+        context.drawImage(
+          buffer.canvas,
+          x * sourceRatio,
+          y * sourceRatio,
+          cellWidth * sourceRatio,
+          cellHeight * sourceRatio,
+          x,
+          y,
+          cellWidth,
+          cellHeight,
+        );
+      }
     }
-    context.clip();
-    drawScene(context, width, height, info.nextSceneIndex, 0);
-    context.restore();
-    context.save();
-    drawTransitionBoundary(context, width, height, info.transitionProgress);
-    context.restore();
   }
 
   return info;

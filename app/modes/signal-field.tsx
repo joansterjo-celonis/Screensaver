@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { resolveBackingStore } from "./signal-grid";
 import {
   SIGNAL_SCENE_COUNT,
   renderSignalLibraryFrame,
@@ -22,6 +23,7 @@ export function SignalField({ paused = false }: { paused?: boolean }) {
     if (!context) return;
 
     let frame = 0;
+    let disposed = false;
     let lastDraw = Number.NEGATIVE_INFINITY;
     let width = 1;
     let height = 1;
@@ -44,40 +46,50 @@ export function SignalField({ paused = false }: { paused?: boolean }) {
       const bounds = canvas.getBoundingClientRect();
       const nextWidth = Math.max(1, bounds.width);
       const nextHeight = Math.max(1, bounds.height);
-      const pixelBudgetRatio = Math.sqrt(MAX_CANVAS_PIXELS / (nextWidth * nextHeight));
-      const ratio = Math.max(
-        0.25,
-        Math.min(window.devicePixelRatio || 1, 2, pixelBudgetRatio),
+      const backingStore = resolveBackingStore(
+        nextWidth,
+        nextHeight,
+        window.devicePixelRatio || 1,
+        MAX_CANVAS_PIXELS,
       );
-      const backingWidth = Math.max(1, Math.round(nextWidth * ratio));
-      const backingHeight = Math.max(1, Math.round(nextHeight * ratio));
       const changed =
         Math.abs(nextWidth - width) > 0.5 ||
         Math.abs(nextHeight - height) > 0.5 ||
-        canvas.width !== backingWidth ||
-        canvas.height !== backingHeight;
+        canvas.width !== backingStore.width ||
+        canvas.height !== backingStore.height;
       if (!changed) return;
 
       width = nextWidth;
       height = nextHeight;
-      canvas.width = backingWidth;
-      canvas.height = backingHeight;
-      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      canvas.width = backingStore.width;
+      canvas.height = backingStore.height;
+      context.setTransform(backingStore.ratio, 0, 0, backingStore.ratio, 0, 0);
       context.imageSmoothingEnabled = true;
+      if (document.hidden) {
+        lastDraw = Number.NEGATIVE_INFINITY;
+        return;
+      }
       const now = performance.now();
       draw(now);
       lastDraw = now;
     };
 
+    const scheduleFrame = () => {
+      if (disposed || document.hidden || frame !== 0) return;
+      frame = requestAnimationFrame(loop);
+    };
+
     const loop = (now: number) => {
+      frame = 0;
+      if (disposed || document.hidden) return;
       const frameGap = motionPreference.matches
         ? REDUCED_MOTION_FRAME_GAP
         : MOTION_FRAME_GAP;
-      if (!document.hidden && now - lastDraw >= frameGap) {
+      if (now - lastDraw >= frameGap) {
         draw(now);
         lastDraw = now;
       }
-      frame = requestAnimationFrame(loop);
+      scheduleFrame();
     };
 
     const redraw = () => {
@@ -88,6 +100,27 @@ export function SignalField({ paused = false }: { paused?: boolean }) {
       const now = performance.now();
       draw(now);
       lastDraw = now;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (frame !== 0) cancelAnimationFrame(frame);
+        frame = 0;
+        lastDraw = Number.NEGATIVE_INFINITY;
+        return;
+      }
+      redraw();
+      scheduleFrame();
+    };
+
+    const loadSignalFont = async () => {
+      try {
+        await document.fonts.load('400 12px "Geist Signal"');
+        await document.fonts.ready;
+      } catch {
+        // The system mono fallback keeps Signal Field usable if font loading is blocked.
+      }
+      if (!disposed) redraw();
     };
 
     const addMotionListener = () => {
@@ -111,16 +144,19 @@ export function SignalField({ paused = false }: { paused?: boolean }) {
     observer?.observe(canvas);
     window.addEventListener("resize", resize);
     window.addEventListener("orientationchange", resize);
-    document.addEventListener("visibilitychange", redraw);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     addMotionListener();
-    frame = requestAnimationFrame(loop);
+    void loadSignalFont();
+    scheduleFrame();
 
     return () => {
-      cancelAnimationFrame(frame);
+      disposed = true;
+      if (frame !== 0) cancelAnimationFrame(frame);
+      frame = 0;
       observer?.disconnect();
       window.removeEventListener("resize", resize);
       window.removeEventListener("orientationchange", resize);
-      document.removeEventListener("visibilitychange", redraw);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       removeMotionListener();
     };
   }, [paused]);
