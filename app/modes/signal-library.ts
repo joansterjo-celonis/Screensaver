@@ -61,6 +61,10 @@ function clamp(value: number, minimum = 0, maximum = 1) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
+function layoutUnit(width: number, height: number) {
+  return Math.max(1, Math.min(width, height));
+}
+
 function smoothStep(value: number) {
   const amount = clamp(value);
   return amount * amount * (3 - 2 * amount);
@@ -198,8 +202,9 @@ function chrome(
   inverse = false,
 ) {
   const { context, width, height, time } = frame;
-  const pad = width * 0.058;
-  const tiny = Math.max(7, width * 0.022);
+  const unit = layoutUnit(width, height);
+  const pad = unit * 0.058;
+  const tiny = Math.max(7, unit * 0.022);
   const ink = inverse ? OXBLOOD : IVORY;
   const dim = inverse ? DIM_DARK : DIM;
   type(context, `BMS / ${code}`, pad, pad * 1.05, tiny, ink, "left", 600);
@@ -212,7 +217,8 @@ function chrome(
 function orbitalTelemetry(frame: SceneFrame) {
   const { context, width, height, time, phase } = frame;
   fill(context, width, height);
-  grid(context, width, height, Math.max(20, width / 17));
+  const unit = layoutUnit(width, height);
+  grid(context, width, height, Math.max(20, unit / 17));
   chrome(frame, "Orbital telemetry", "ORBIT-07");
 
   const cx = width * 0.5;
@@ -252,7 +258,7 @@ function orbitalTelemetry(frame: SceneFrame) {
     const arm = index % 7;
     const distance = radius * (0.12 + random() * 0.8);
     const angle = (arm / 7) * TAU + (random() - 0.5) * 0.56;
-    const point = Math.max(1, width * (0.002 + random() * 0.0025));
+    const point = Math.max(1, unit * (0.002 + random() * 0.0025));
     context.fillStyle = index % 23 === phase % 23 ? MAGENTA : IVORY;
     context.globalAlpha = 0.45 + random() * 0.55;
     context.fillRect(Math.cos(angle) * distance, Math.sin(angle) * distance, point, point);
@@ -265,14 +271,19 @@ function orbitalTelemetry(frame: SceneFrame) {
   const top = height * 0.49;
   const gap = width * 0.025;
   const moduleWidth = (inner - gap) / 2;
-  panel(context, pad, top, moduleWidth, height * 0.22);
-  panel(context, pad + moduleWidth + gap, top, moduleWidth, height * 0.22);
-  const tiny = Math.max(7, width * 0.022);
+  const moduleHeight = height * 0.22;
+  panel(context, pad, top, moduleWidth, moduleHeight);
+  panel(context, pad + moduleWidth + gap, top, moduleWidth, moduleHeight);
+  const tiny = Math.max(6, Math.min(unit * 0.022, moduleHeight / 15));
+  const cell = Math.max(
+    1,
+    Math.min(moduleWidth * 0.085, (moduleHeight - tiny * 2.55) / 8.63),
+  );
+  const cellXStep = moduleWidth * 0.085 * 1.35;
   type(context, "ACT / DISTRIBUTION", pad + tiny, top + tiny * 1.6, tiny, DIM);
   for (let row = 0; row < 8; row += 1) {
     for (let column = 0; column < 7; column += 1) {
-      const cell = moduleWidth * 0.085;
-      const x = pad + tiny + column * cell * 1.35;
+      const x = pad + tiny + column * cellXStep;
       const y = top + tiny * 2.55 + row * cell * 1.13;
       const active = hash(column, row, phase >> 1) > 0.58;
       context.fillStyle = active ? ((row + column + phase) % 13 === 0 ? MAGENTA : IVORY) : FAINT;
@@ -292,7 +303,8 @@ function orbitalTelemetry(frame: SceneFrame) {
 function constellationMesh(frame: SceneFrame) {
   const { context, width, height, time, phase } = frame;
   fill(context, width, height, NIGHT);
-  grid(context, width, height, Math.max(24, width / 12), "rgba(234, 223, 206, 0.07)");
+  const unit = layoutUnit(width, height);
+  grid(context, width, height, Math.max(24, unit / 12), "rgba(234, 223, 206, 0.07)");
   chrome(frame, "Constellation mesh", "NODE-42");
   const pad = width * 0.07;
   const top = height * 0.14;
@@ -301,17 +313,18 @@ function constellationMesh(frame: SceneFrame) {
   for (let index = 0; index < 38; index += 1) {
     nodes.push({
       x: pad + hash(index, 1, 73) * (width - pad * 2) + Math.sin(time * 0.00015 + index) * width * 0.008,
-      y: top + hash(index, 2, 19) * fieldHeight + Math.cos(time * 0.00011 + index * 1.7) * width * 0.008,
-      r: Math.max(1.4, width * (0.003 + hash(index, 3, 7) * 0.005)),
+      y: top + hash(index, 2, 19) * fieldHeight + Math.cos(time * 0.00011 + index * 1.7) * unit * 0.008,
+      r: Math.max(1.4, unit * (0.003 + hash(index, 3, 7) * 0.005)),
     });
   }
+  const connectionRadius = unit * 0.19;
   for (let a = 0; a < nodes.length; a += 1) {
     for (let b = a + 1; b < nodes.length; b += 1) {
       const dx = nodes[a].x - nodes[b].x;
       const dy = nodes[a].y - nodes[b].y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance < width * 0.19 && hash(a, b, 22) > 0.45) {
-        const alpha = 0.08 + (1 - distance / (width * 0.19)) * 0.3;
+      if (distance < connectionRadius && hash(a, b, 22) > 0.45) {
+        const alpha = 0.08 + (1 - distance / connectionRadius) * 0.3;
         line(context, nodes[a].x, nodes[a].y, nodes[b].x, nodes[b].y, `rgba(234, 223, 206, ${alpha})`);
       }
     }
@@ -324,7 +337,7 @@ function constellationMesh(frame: SceneFrame) {
     else context.lineTo(node.x, node.y);
   });
   context.strokeStyle = MAGENTA;
-  context.lineWidth = Math.max(1.4, width * 0.003);
+  context.lineWidth = Math.max(1.4, unit * 0.003);
   context.stroke();
   nodes.forEach((node, index) => {
     circle(context, node.x, node.y, node.r, index % 11 === phase % 11 ? MAGENTA : IVORY, 1, NIGHT);
@@ -332,7 +345,7 @@ function constellationMesh(frame: SceneFrame) {
       circle(context, node.x, node.y, node.r * 2.8, MAGENTA);
     }
   });
-  const tiny = Math.max(7, width * 0.021);
+  const tiny = Math.max(7, unit * 0.021);
   type(context, "ROUTE / 02-08-19-31-23-35", pad, height * 0.84, tiny, IVORY);
   type(context, `${nodes.length} PEERS / ${String(phase % 999).padStart(3, "0")} ms`, width - pad, height * 0.84, tiny, DIM, "right");
 }
@@ -340,9 +353,11 @@ function constellationMesh(frame: SceneFrame) {
 function glyphCascade(frame: SceneFrame) {
   const { context, width, height, time, phase } = frame;
   fill(context, width, height);
+  const unit = layoutUnit(width, height);
   const columns = 14;
   const cellWidth = width / columns;
-  const cellHeight = Math.max(18, width * 0.075);
+  const cellHeight = Math.max(18, unit * 0.075);
+  const glyphSize = Math.min(cellWidth * 0.45, unit * 0.045);
   const rows = Math.ceil(height / cellHeight) + 3;
   const alphabet = "AEFHKMNPRSTVX0123456789:/";
   for (let column = 0; column < columns; column += 1) {
@@ -353,10 +368,10 @@ function glyphCascade(frame: SceneFrame) {
       const glyphIndex = Math.floor(hash(column, row + (phase >> 2), 61) * alphabet.length);
       const head = positiveModulo(row + Math.floor(time / 180) + column * 3, 23) === 0;
       const color = head ? MAGENTA : hash(column, row, 90) > 0.76 ? IVORY : DIM;
-      type(context, alphabet[glyphIndex], column * cellWidth + cellWidth * 0.5, y, cellWidth * 0.45, color, "center", head ? 700 : 400);
+      type(context, alphabet[glyphIndex], column * cellWidth + cellWidth * 0.5, y, glyphSize, color, "center", head ? 700 : 400);
       if (hash(row, column, phase >> 3) > 0.88) {
         context.fillStyle = color;
-        context.fillRect(column * cellWidth + cellWidth * 0.17, y + cellHeight * 0.18, cellWidth * 0.66, Math.max(1, cellWidth * 0.035));
+        context.fillRect(column * cellWidth + cellWidth * 0.17, y + cellHeight * 0.18, cellWidth * 0.66, Math.max(1, unit * 0.0025));
       }
     }
   }
@@ -365,14 +380,16 @@ function glyphCascade(frame: SceneFrame) {
   context.fillRect(0, scanY - cellHeight, width, cellHeight * 2);
   line(context, 0, scanY, width, scanY, MAGENTA, 2);
   context.fillStyle = "rgba(37, 16, 21, 0.88)";
-  context.fillRect(0, 0, width, width * 0.13);
-  context.fillRect(0, height - width * 0.13, width, width * 0.13);
+  const chromeBandHeight = unit * 0.13;
+  context.fillRect(0, 0, width, chromeBandHeight);
+  context.fillRect(0, height - chromeBandHeight, width, chromeBandHeight);
   chrome(frame, "Glyph cascade", "RAIN-14");
 }
 
 function barcodeCathedral(frame: SceneFrame) {
   const { context, width, height, time } = frame;
   fill(context, width, height, NIGHT);
+  const sceneUnit = layoutUnit(width, height);
   const pad = width * 0.055;
   const base = height * 0.8;
   const count = 43;
@@ -392,9 +409,9 @@ function barcodeCathedral(frame: SceneFrame) {
   context.strokeStyle = DIM;
   context.lineWidth = 1;
   context.beginPath();
-  context.arc(width / 2, base, width * 0.34, Math.PI, TAU);
-  context.arc(width / 2, base, width * 0.24, Math.PI, TAU);
-  context.arc(width / 2, base, width * 0.14, Math.PI, TAU);
+  context.arc(width / 2, base, sceneUnit * 0.34, Math.PI, TAU);
+  context.arc(width / 2, base, sceneUnit * 0.24, Math.PI, TAU);
+  context.arc(width / 2, base, sceneUnit * 0.14, Math.PI, TAU);
   context.stroke();
   const vanishingX = width / 2;
   const vanishingY = height * 0.48;
@@ -406,8 +423,8 @@ function barcodeCathedral(frame: SceneFrame) {
     const y = vanishingY + Math.pow(amount, 1.75) * (height - vanishingY);
     line(context, 0, y, width, y, FAINT);
   }
-  type(context, "DATA / NAVE", width / 2, height * 0.19, width * 0.055, IVORY, "center", 700);
-  type(context, "43 CHANNELS // HARMONIC LOCK", width / 2, height * 0.225, width * 0.022, DIM, "center");
+  type(context, "DATA / NAVE", width / 2, height * 0.19, sceneUnit * 0.055, IVORY, "center", 700);
+  type(context, "43 CHANNELS // HARMONIC LOCK", width / 2, height * 0.225, sceneUnit * 0.022, DIM, "center");
   chrome(frame, "Barcode cathedral", "NAVE-43");
 }
 
@@ -450,12 +467,13 @@ function cellularAtlas(frame: SceneFrame) {
   const { context, width, height, time } = frame;
   fill(context, width, height);
   chrome(frame, "Cellular atlas", "LIFE-32");
+  const unit = layoutUnit(width, height);
   const columns = LIFE_COLUMNS;
   const rows = LIFE_ROWS;
   const pad = width * 0.06;
   const top = height * 0.13;
   const fieldHeight = height * 0.72;
-  const gap = Math.max(1, width * 0.0045);
+  const gap = Math.max(1, unit * 0.0045);
   const cell = Math.min((width - pad * 2 - gap * (columns - 1)) / columns, (fieldHeight - gap * (rows - 1)) / rows);
   const state = LIFE_STATES[Math.floor(time / 700) % LIFE_STATES.length];
   let alive = 0;
@@ -467,7 +485,7 @@ function cellularAtlas(frame: SceneFrame) {
       context.fillRect(pad + x * (cell + gap), top + y * (cell + gap), cell, cell);
     }
   }
-  const tiny = Math.max(7, width * 0.022);
+  const tiny = Math.max(7, unit * 0.022);
   type(context, `POP ${String(alive).padStart(4, "0")}`, pad, height * 0.88, tiny, IVORY);
   type(context, "RULE B3/S23 / TOROIDAL", width - pad, height * 0.88, tiny, DIM, "right");
 }
@@ -475,7 +493,8 @@ function cellularAtlas(frame: SceneFrame) {
 function packetRiver(frame: SceneFrame) {
   const { context, width, height, time } = frame;
   fill(context, width, height, NIGHT);
-  grid(context, width, height, Math.max(22, width / 15), "rgba(234, 223, 206, 0.055)", time * -0.004, 0);
+  const unit = layoutUnit(width, height);
+  grid(context, width, height, Math.max(22, unit / 15), "rgba(234, 223, 206, 0.055)", time * -0.004, 0);
   chrome(frame, "Packet river", "FLOW-06");
   const top = height * 0.15;
   const bottom = height * 0.82;
@@ -498,12 +517,12 @@ function packetRiver(frame: SceneFrame) {
       const amount = positiveModulo(time * (0.000055 + lane * 0.000004) + packet / 5 + hash(lane, packet, 4), 1);
       const y = top + amount * (bottom - top);
       const x = startX + Math.sin(amount * TAU * (1.2 + lane * 0.08) + lane) * amplitude + Math.sin(time * 0.00018 + amount * 8) * width * 0.012;
-      const size = Math.max(3, width * (0.009 + hash(lane, packet, 33) * 0.01));
+      const size = Math.max(3, unit * (0.009 + hash(lane, packet, 33) * 0.01));
       context.fillStyle = packet === 0 ? MAGENTA : IVORY;
       context.fillRect(x - size / 2, y - size / 2, size, size);
     }
   }
-  const tiny = Math.max(7, width * 0.021);
+  const tiny = Math.max(7, unit * 0.021);
   for (let lane = 0; lane < lanes; lane += 1) {
     type(context, String(lane + 1).padStart(2, "0"), width * (0.08 + lane * 0.14), height * 0.86, tiny, lane === 3 ? MAGENTA : DIM, "center");
   }
@@ -513,6 +532,7 @@ function seismicField(frame: SceneFrame) {
   const { context, width, height, time, phase } = frame;
   fill(context, width, height);
   chrome(frame, "Seismic field", "QUAKE-12");
+  const unit = layoutUnit(width, height);
   const pad = width * 0.06;
   const top = height * 0.15;
   const trackHeight = height * 0.052;
@@ -534,19 +554,21 @@ function seismicField(frame: SceneFrame) {
     context.strokeStyle = track === phase % 12 ? MAGENTA : IVORY;
     context.lineWidth = track === phase % 12 ? 2 : 1;
     context.stroke();
-    type(context, `S${String(track + 1).padStart(2, "0")}`, pad, baseline - 4, Math.max(7, width * 0.017), DIM);
+    type(context, `S${String(track + 1).padStart(2, "0")}`, pad, baseline - 4, Math.max(7, unit * 0.017), DIM);
   }
   const focalY = top + trackHeight * 5.5;
+  const ringStep = unit * 0.025;
   for (let ring = 1; ring <= 4; ring += 1) {
-    circle(context, epicenter, focalY, ring * width * 0.025 + positiveModulo(time * 0.012, width * 0.025), ring === 4 ? MAGENTA : DIM);
+    circle(context, epicenter, focalY, ring * ringStep + positiveModulo(time * 0.012, ringStep), ring === 4 ? MAGENTA : DIM);
   }
-  type(context, `EPICENTER / ${String(Math.floor(epicenter)).padStart(4, "0")}`, pad, height * 0.84, width * 0.022, IVORY);
+  type(context, `EPICENTER / ${String(Math.floor(epicenter)).padStart(4, "0")}`, pad, height * 0.84, unit * 0.022, IVORY);
 }
 
 function clockworkRings(frame: SceneFrame) {
   const { context, width, height, time } = frame;
   fill(context, width, height, NIGHT);
-  grid(context, width, height, Math.max(23, width / 14), "rgba(234, 223, 206, 0.05)");
+  const unit = layoutUnit(width, height);
+  grid(context, width, height, Math.max(23, unit / 14), "rgba(234, 223, 206, 0.05)");
   chrome(frame, "Clockwork rings", "GEAR-05");
   const cx = width / 2;
   const cy = height * 0.45;
@@ -558,7 +580,7 @@ function clockworkRings(frame: SceneFrame) {
     circle(context, cx, cy, radius, ring === 2 ? MAGENTA : DIM, ring === 2 ? 2 : 1);
     for (let tick = 0; tick < ticks; tick += 1) {
       const angle = rotation + (tick / ticks) * TAU;
-      const tooth = tick % 3 === 0 ? width * 0.018 : width * 0.008;
+      const tooth = tick % 3 === 0 ? unit * 0.018 : unit * 0.008;
       const inner = radius - tooth * 0.25;
       const outer = radius + tooth;
       line(context, cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner, cx + Math.cos(angle) * outer, cy + Math.sin(angle) * outer, tick % 11 === 0 ? IVORY : DIM, tick % 11 === 0 ? 2 : 1);
@@ -574,8 +596,8 @@ function clockworkRings(frame: SceneFrame) {
     context.fillStyle = blade === 0 ? MAGENTA : IVORY;
     context.fill();
   }
-  circle(context, cx, cy, width * 0.028, IVORY, 2, OXBLOOD);
-  const tiny = Math.max(7, width * 0.022);
+  circle(context, cx, cy, unit * 0.028, IVORY, 2, OXBLOOD);
+  const tiny = Math.max(7, unit * 0.022);
   type(context, "ESCAPEMENT / 0.972", width * 0.06, height * 0.79, tiny, DIM);
   type(context, "PHASE LOCKED", width * 0.94, height * 0.79, tiny, MAGENTA, "right");
 }
@@ -584,6 +606,7 @@ function vectorScope(frame: SceneFrame) {
   const { context, width, height, time } = frame;
   fill(context, width, height);
   chrome(frame, "Vector scope", "XY-09");
+  const unit = layoutUnit(width, height);
   const cx = width / 2;
   const cy = height * 0.43;
   const radius = Math.min(width * 0.39, height * 0.25);
@@ -605,7 +628,7 @@ function vectorScope(frame: SceneFrame) {
     else context.lineTo(x, y);
   }
   context.strokeStyle = IVORY;
-  context.lineWidth = Math.max(1.2, width * 0.003);
+  context.lineWidth = Math.max(1.2, unit * 0.003);
   context.stroke();
   context.beginPath();
   for (let sample = 0; sample <= 160; sample += 1) {
@@ -618,7 +641,7 @@ function vectorScope(frame: SceneFrame) {
   context.strokeStyle = MAGENTA;
   context.lineWidth = 2;
   context.stroke();
-  const tiny = Math.max(7, width * 0.022);
+  const tiny = Math.max(7, unit * 0.022);
   type(context, "X 03.000 Hz", width * 0.08, height * 0.77, tiny, DIM);
   type(context, "Y 04.000 Hz", width * 0.92, height * 0.77, tiny, DIM, "right");
   type(context, "PHASE +067 DEG", width / 2, height * 0.82, tiny, MAGENTA, "center");
@@ -628,12 +651,13 @@ function memoryMap(frame: SceneFrame) {
   const { context, width, height, phase } = frame;
   fill(context, width, height, NIGHT);
   chrome(frame, "Memory map", "RAM-64");
+  const unit = layoutUnit(width, height);
   const pad = width * 0.06;
   const top = height * 0.14;
   const mapHeight = height * 0.66;
   const columns = 8;
   const rows = 14;
-  const gap = width * 0.009;
+  const gap = unit * 0.009;
   const cellWidth = (width - pad * 2 - gap * (columns - 1)) / columns;
   const cellHeight = (mapHeight - gap * (rows - 1)) / rows;
   for (let row = 0; row < rows; row += 1) {
@@ -650,7 +674,7 @@ function memoryMap(frame: SceneFrame) {
       }
     }
   }
-  const tiny = Math.max(7, width * 0.02);
+  const tiny = Math.max(7, unit * 0.02);
   type(context, "0000", pad, height * 0.84, tiny, IVORY);
   type(context, "FFFF", width - pad, height * 0.84, tiny, IVORY, "right");
   line(context, pad + width * 0.09, height * 0.835, width - pad - width * 0.09, height * 0.835, DIM);
@@ -661,13 +685,14 @@ function waveformStack(frame: SceneFrame) {
   const { context, width, height, time, phase } = frame;
   fill(context, width, height);
   chrome(frame, "Waveform stack", "WAVE-16");
+  const unit = layoutUnit(width, height);
   const pad = width * 0.06;
   const top = height * 0.14;
   const tracks = 16;
   const trackHeight = height * 0.043;
   for (let track = 0; track < tracks; track += 1) {
     const baseline = top + track * trackHeight;
-    type(context, String(track + 1).padStart(2, "0"), pad, baseline + 3, Math.max(7, width * 0.017), DIM);
+    type(context, String(track + 1).padStart(2, "0"), pad, baseline + 3, Math.max(7, unit * 0.017), DIM);
     line(context, pad + width * 0.06, baseline, width - pad, baseline, FAINT);
     context.beginPath();
     for (let sample = 0; sample <= 90; sample += 1) {
@@ -684,13 +709,14 @@ function waveformStack(frame: SceneFrame) {
     context.lineWidth = track === phase % tracks ? 2 : 1;
     context.stroke();
   }
-  type(context, "16 BUS / COHERENCE 0.9984", pad, height * 0.86, width * 0.021, IVORY);
+  type(context, "16 BUS / COHERENCE 0.9984", pad, height * 0.86, unit * 0.021, IVORY);
 }
 
 function dataLoom(frame: SceneFrame) {
   const { context, width, height, time, phase } = frame;
   fill(context, width, height, NIGHT);
   chrome(frame, "Data loom", "WARP-18");
+  const unit = layoutUnit(width, height);
   const pad = width * 0.055;
   const top = height * 0.14;
   const bottom = height * 0.82;
@@ -718,7 +744,7 @@ function dataLoom(frame: SceneFrame) {
     for (let sample = 0; sample <= 36; sample += 1) {
       const amount = sample / 36;
       const x = pad + amount * (width - pad * 2);
-      const localY = y + Math.sin(amount * TAU * 2 + weft + time * 0.00015) * width * 0.008;
+      const localY = y + Math.sin(amount * TAU * 2 + weft + time * 0.00015) * unit * 0.008;
       if (sample === 0) context.moveTo(x, localY);
       else context.lineTo(x, localY);
     }
@@ -728,7 +754,7 @@ function dataLoom(frame: SceneFrame) {
     context.fillStyle = weft % 7 === 0 ? MAGENTA : IVORY;
     context.fillRect(width / 2 + travel - width * 0.025, y - 1, width * 0.05, 3);
   }
-  type(context, "WARP 18 / WEFT 24", pad, height * 0.86, width * 0.021, DIM);
+  type(context, "WARP 18 / WEFT 24", pad, height * 0.86, unit * 0.021, DIM);
 }
 
 function hexPath(
@@ -752,7 +778,8 @@ function hexField(frame: SceneFrame) {
   const { context, width, height, time } = frame;
   fill(context, width, height);
   chrome(frame, "Hex field", "HEX-19");
-  const radius = Math.max(8, width * 0.037);
+  const unit = layoutUnit(width, height);
+  const radius = Math.max(8, unit * 0.037);
   const xStep = radius * Math.sqrt(3);
   const yStep = radius * 1.5;
   const centerX = width / 2;
@@ -777,14 +804,15 @@ function hexField(frame: SceneFrame) {
     }
     row += 1;
   }
-  type(context, `RADIUS ${String(Math.floor(pulse)).padStart(3, "0")}`, width * 0.06, height * 0.86, width * 0.021, IVORY);
-  type(context, "CELL LINK / ACTIVE", width * 0.94, height * 0.86, width * 0.021, MAGENTA, "right");
+  type(context, `RADIUS ${String(Math.floor(pulse)).padStart(3, "0")}`, width * 0.06, height * 0.86, unit * 0.021, IVORY);
+  type(context, "CELL LINK / ACTIVE", width * 0.94, height * 0.86, unit * 0.021, MAGENTA, "right");
 }
 
 function satelliteTopology(frame: SceneFrame) {
   const { context, width, height, time, phase } = frame;
   fill(context, width, height, NIGHT);
-  grid(context, width, height, Math.max(23, width / 14), "rgba(234, 223, 206, 0.05)");
+  const unit = layoutUnit(width, height);
+  grid(context, width, height, Math.max(23, unit / 14), "rgba(234, 223, 206, 0.05)");
   chrome(frame, "Satellite topology", "SAT-08");
   const cx = width / 2;
   const cy = height * 0.42;
@@ -819,12 +847,12 @@ function satelliteTopology(frame: SceneFrame) {
   }
   satellites.forEach((satellite, index) => {
     line(context, cx, cy, satellite.x, satellite.y, index === phase % 4 ? MAGENTA : FAINT);
-    const size = width * 0.018;
+    const size = unit * 0.018;
     context.fillStyle = index === phase % 4 ? MAGENTA : IVORY;
     context.fillRect(satellite.x - size / 2, satellite.y - size / 2, size, size);
     line(context, satellite.x - size * 1.2, satellite.y, satellite.x + size * 1.2, satellite.y, context.fillStyle as string);
   });
-  const tiny = Math.max(7, width * 0.021);
+  const tiny = Math.max(7, unit * 0.021);
   satellites.forEach((_, index) => {
     type(context, `SAT-${index + 1} / ${index === phase % 4 ? "TX" : "IDLE"}`, width * 0.08, height * (0.72 + index * 0.035), tiny, index === phase % 4 ? MAGENTA : DIM);
   });
@@ -834,11 +862,13 @@ function archiveIndex(frame: SceneFrame) {
   const { context, width, height, phase } = frame;
   fill(context, width, height);
   chrome(frame, "Archive index", "ARC-96");
-  const pad = width * 0.06;
+  const unit = layoutUnit(width, height);
+  const pad = unit * 0.06;
   const top = height * 0.14;
-  const columnGap = width * 0.035;
+  const columnGap = unit * 0.035;
   const columnWidth = (width - pad * 2 - columnGap) / 2;
   const rowHeight = height * 0.031;
+  const rowTypeSize = unit * 0.019;
   const labels = ["FIELD", "ORBIT", "GLYPH", "MEMORY", "VECTOR", "PACKET", "SIGNAL", "FRAME"];
   for (let column = 0; column < 2; column += 1) {
     const x = pad + column * (columnWidth + columnGap);
@@ -849,22 +879,23 @@ function archiveIndex(frame: SceneFrame) {
       const selected = index === (phase >> 1) % 38;
       if (selected) {
         context.fillStyle = MAGENTA;
-        context.fillRect(x + width * 0.01, y - rowHeight * 0.72, columnWidth - width * 0.02, rowHeight * 0.9);
+        context.fillRect(x + unit * 0.01, y - rowHeight * 0.72, columnWidth - unit * 0.02, rowHeight * 0.9);
       }
-      type(context, String(index + 1).padStart(3, "0"), x + width * 0.018, y, width * 0.019, selected ? OXBLOOD : IVORY);
-      type(context, labels[index % labels.length], x + width * 0.095, y, width * 0.019, selected ? OXBLOOD : DIM);
-      type(context, String(Math.floor(hash(index, 2, 88) * 9999)).padStart(4, "0"), x + columnWidth - width * 0.018, y, width * 0.019, selected ? OXBLOOD : DIM, "right");
+      type(context, String(index + 1).padStart(3, "0"), x + unit * 0.018, y, rowTypeSize, selected ? OXBLOOD : IVORY);
+      type(context, labels[index % labels.length], x + unit * 0.095, y, rowTypeSize, selected ? OXBLOOD : DIM);
+      type(context, String(Math.floor(hash(index, 2, 88) * 9999)).padStart(4, "0"), x + columnWidth - unit * 0.018, y, rowTypeSize, selected ? OXBLOOD : DIM, "right");
     }
   }
-  type(context, "A", pad, height * 0.82, width * 0.095, IVORY, "left", 700);
-  type(context, "96", width / 2, height * 0.82, width * 0.095, MAGENTA, "center", 700);
-  type(context, "Z", width - pad, height * 0.82, width * 0.095, IVORY, "right", 700);
+  type(context, "A", pad, height * 0.82, unit * 0.095, IVORY, "left", 700);
+  type(context, "96", width / 2, height * 0.82, unit * 0.095, MAGENTA, "center", 700);
+  type(context, "Z", width - pad, height * 0.82, unit * 0.095, IVORY, "right", 700);
 }
 
 function rasterPortrait(frame: SceneFrame) {
   const { context, width, height, time } = frame;
   fill(context, width, height, NIGHT);
   chrome(frame, "Raster portrait", "FACE-01");
+  const unit = layoutUnit(width, height);
   const columns = 25;
   const rows = 35;
   const cell = Math.min(width * 0.032, height * 0.018);
@@ -894,7 +925,7 @@ function rasterPortrait(frame: SceneFrame) {
       }
     }
   }
-  const tiny = Math.max(7, width * 0.021);
+  const tiny = Math.max(7, unit * 0.021);
   line(context, width * 0.08, height * 0.79, width * 0.92, height * 0.79, DIM);
   type(context, "SUBJECT / UNKNOWN", width * 0.08, height * 0.83, tiny, IVORY);
   type(context, "MATCH 00.13%", width * 0.92, height * 0.83, tiny, MAGENTA, "right");
@@ -904,9 +935,10 @@ function rasterPortrait(frame: SceneFrame) {
 function checkerError(frame: SceneFrame) {
   const { context, width, height, time, phase } = frame;
   fill(context, width, height, IVORY);
-  grid(context, width, height, Math.max(18, width / 17), "rgba(37, 16, 21, 0.14)");
+  const unit = layoutUnit(width, height);
+  grid(context, width, height, Math.max(18, unit / 17), "rgba(37, 16, 21, 0.14)");
   chrome(frame, "Checker error", "ERR-77", true);
-  const size = Math.max(11, width * 0.046);
+  const size = Math.max(11, unit * 0.046);
   const bandTop = height * 0.2;
   const bandRows = 7;
   const columns = Math.ceil(width / size) + 2;
@@ -918,15 +950,15 @@ function checkerError(frame: SceneFrame) {
       context.fillRect(column * size + positiveModulo(time * (row % 2 ? -0.008 : 0.012), size), bandTop + row * size, size, size);
     }
   }
-  type(context, "SYNC", width * 0.06, height * 0.59, width * 0.15, OXBLOOD, "left", 700);
-  type(context, "LOST", width * 0.94, height * 0.68, width * 0.15, MAGENTA, "right", 700);
+  type(context, "SYNC", width * 0.06, height * 0.59, unit * 0.15, OXBLOOD, "left", 700);
+  type(context, "LOST", width * 0.94, height * 0.68, unit * 0.15, MAGENTA, "right", 700);
   const random = randomFrom(920 + (phase >> 1));
   for (let row = 0; row < 10; row += 1) {
-    const y = height * 0.72 + row * width * 0.025;
+    const y = height * 0.72 + row * unit * 0.025;
     const barWidth = width * (0.12 + random() * 0.68);
     context.fillStyle = row % 4 === 0 ? MAGENTA : OXBLOOD;
-    context.fillRect(width * 0.06, y, barWidth, Math.max(2, width * 0.008));
-    type(context, String(Math.floor(random() * 65535)).padStart(5, "0"), width * 0.94, y + width * 0.009, width * 0.018, OXBLOOD, "right");
+    context.fillRect(width * 0.06, y, barWidth, Math.max(2, unit * 0.008));
+    type(context, String(Math.floor(random() * 65535)).padStart(5, "0"), width * 0.94, y + unit * 0.009, unit * 0.018, OXBLOOD, "right");
   }
 }
 
@@ -934,6 +966,7 @@ function deepScan(frame: SceneFrame) {
   const { context, width, height, time, phase } = frame;
   fill(context, width, height, NIGHT);
   chrome(frame, "Deep scan", "DEPTH-∞");
+  const unit = layoutUnit(width, height);
   const vx = width * (0.5 + Math.sin(time * 0.00013) * 0.04);
   const vy = height * 0.42;
   const horizon = height * 0.43;
@@ -957,10 +990,10 @@ function deepScan(frame: SceneFrame) {
     context.lineWidth = portal === phase % 9 ? 2 : 1;
     context.strokeRect(x, y, portalWidth, portalHeight);
   }
-  const tiny = Math.max(7, width * 0.021);
+  const tiny = Math.max(7, unit * 0.021);
   panel(context, width * 0.07, height * 0.16, width * 0.28, height * 0.14, DIM);
   type(context, "RANGE", width * 0.09, height * 0.205, tiny, DIM);
-  type(context, `${String(Math.floor(positiveModulo(time * 0.043, 9999))).padStart(4, "0")} M`, width * 0.09, height * 0.26, width * 0.045, IVORY, "left", 700);
+  type(context, `${String(Math.floor(positiveModulo(time * 0.043, 9999))).padStart(4, "0")} M`, width * 0.09, height * 0.26, unit * 0.045, IVORY, "left", 700);
   panel(context, width * 0.65, height * 0.67, width * 0.28, height * 0.12, DIM);
   type(context, "RETURN / CLEAN", width * 0.91, height * 0.72, tiny, MAGENTA, "right");
   type(context, "VOID CONFIDENCE 99.8", width * 0.91, height * 0.755, tiny, DIM, "right");

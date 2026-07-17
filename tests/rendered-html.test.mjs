@@ -51,6 +51,9 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(frame, /Swikipedia/);
   assert.match(signal, /requestAnimationFrame/);
   assert.match(signal, /cancelAnimationFrame/);
+  assert.match(signal, /getBoundingClientRect/);
+  assert.match(signal, /ResizeObserver/);
+  assert.match(signal, /MAX_CANVAS_PIXELS/);
   assert.match(gallery, /5 \* 60 \* 1000/);
   assert.match(gallery, /clearTimeout/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton|drizzle/);
@@ -71,9 +74,16 @@ test("ships the expanded, verified artwork and signal libraries", async () => {
 
   const paintingRows = paintings.match(/^\s*\["Q\d+"/gm) ?? [];
   const signalRows = signal.match(/^\s*\{ id: "[^"]+".+draw: [a-zA-Z]+ \},?$/gm) ?? [];
+  const responsiveSignalUnits = signal.match(/layoutUnit\(width, height\)/g) ?? [];
 
   assert.ok(paintingRows.length >= 150, `expected at least 150 paintings, found ${paintingRows.length}`);
   assert.ok(signalRows.length >= 18, `expected at least 18 signal scenes, found ${signalRows.length}`);
+  assert.ok(
+    responsiveSignalUnits.length >= 18,
+    `expected short-edge sizing across the signal library, found ${responsiveSignalUnits.length} uses`,
+  );
+  assert.match(signal, /function layoutUnit\(width: number, height: number\)/);
+  assert.match(signal, /Math\.min\(width, height\)/);
   assert.match(paintings, /Copyrighted=False \/ Public domain/);
   assert.match(artworks, /ARTWORK_DATASET_VERSION/);
   assert.match(gallery, /gallery-artwork-matte/);
@@ -85,6 +95,19 @@ test("ships the expanded, verified artwork and signal libraries", async () => {
   assert.match(gallery, /ArrowRight/);
   assert.doesNotMatch(gallery, /className="gallery-next"/);
   assert.match(styles, /grid-template-rows: minmax\(0, 3fr\) minmax\(0, 2fr\)/);
+  assert.match(
+    styles,
+    /\.portrait-frame\s*\{[\s\S]*?width: 100%;\s*height: 100%;\s*min-width: 0;\s*min-height: 0;/,
+  );
+  assert.doesNotMatch(styles, /calc\(100s?vh \* 9 \/ 16\)|calc\(100vw \* 16 \/ 9\)/);
+  assert.doesNotMatch(styles, /min-width: 280px/);
+  assert.match(styles, /@media \(min-aspect-ratio: 4 \/ 3\)/);
+  assert.match(
+    styles,
+    /@media \(min-aspect-ratio: 4 \/ 3\)[\s\S]*?\.gallery-image-stage\s*\{[\s\S]*?position: absolute;[\s\S]*?\.gallery-caption\s*\{[\s\S]*?position: absolute;[\s\S]*?width: min\(100%, 68rem\);/,
+  );
+  assert.match(styles, /safe-area-inset-left/);
+  assert.match(styles, /safe-area-inset-right/);
   assert.match(styles, /--gallery-header-safe:/);
   assert.match(
     styles,
