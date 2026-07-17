@@ -1,6 +1,6 @@
 const SHELL_CACHE = "always-on-frame-shell-v1";
-const IMAGE_CACHE = "always-on-frame-images-v1";
-const MAX_IMAGES = 18;
+const IMAGE_CACHE = "always-on-frame-images-v2";
+const MAX_IMAGES = 36;
 
 self.addEventListener("install", () => {
   self.skipWaiting();
