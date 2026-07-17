@@ -273,16 +273,18 @@ a:focus-visible {
 }
 
 .signal-preview {
+  --signal-paper: #cfccc6;
+  --signal-ink: #121113;
   position: absolute;
   inset: 0;
   padding: 10%;
   overflow: hidden;
-  color: var(--frame-paper);
+  color: var(--signal-paper);
   font-family: var(--font-signal);
-  background-color: #2a1017;
+  background-color: var(--signal-ink);
   background-image:
-    linear-gradient(rgba(234, 223, 206, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(234, 223, 206, 0.08) 1px, transparent 1px);
+    linear-gradient(rgba(207, 204, 198, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(207, 204, 198, 0.08) 1px, transparent 1px);
   background-size: 13% 9%;
 }
 
@@ -295,14 +297,14 @@ a:focus-visible {
 }
 
 .signal-preview-heading span:last-child {
-  color: var(--frame-accent);
+  color: var(--signal-paper);
 }
 
 .signal-preview-star {
   height: 32%;
   display: grid;
   place-items: center;
-  color: var(--frame-paper);
+  color: var(--signal-paper);
   font-size: clamp(30px, 11vw, 72px);
   line-height: 1;
 }
@@ -317,18 +319,18 @@ a:focus-visible {
 
 .signal-preview-cells i {
   aspect-ratio: 1;
-  border: 1px solid rgba(234, 223, 206, 0.23);
+  border: 1px solid rgba(207, 204, 198, 0.26);
 }
 
 .signal-preview-cells i.is-on {
-  background: var(--frame-paper);
+  background: var(--signal-paper);
 }
 
 .signal-preview-type {
   position: absolute;
   right: 7%;
   bottom: 4%;
-  color: rgba(234, 223, 206, 0.58);
+  color: rgba(207, 204, 198, 0.58);
   font-size: clamp(5px, 1vw, 7px);
 }
 
@@ -390,19 +392,20 @@ a:focus-visible {
   inset: 0;
   overflow: hidden;
   color: #eadfce;
-  background: #160c0f;
+  background: #110d09;
 }
 
 .composition-preview img {
   position: absolute;
   z-index: 1;
-  top: 0;
-  right: 0;
-  width: 42%;
-  height: 100%;
+  top: 6%;
+  right: 3%;
+  width: 34%;
+  height: 88%;
   object-fit: cover;
   object-position: 52% 34%;
-  filter: sepia(0.34) saturate(0.64) contrast(1.08);
+  filter: sepia(0.28) saturate(0.52) contrast(1.08) brightness(0.72);
+  border: 1px solid rgba(234, 223, 206, 0.28);
 }
 
 .composition-preview-grid {
@@ -413,13 +416,14 @@ a:focus-visible {
     linear-gradient(rgba(234, 223, 206, 0.16) 1px, transparent 1px),
     linear-gradient(90deg, rgba(234, 223, 206, 0.16) 1px, transparent 1px);
   background-size: 12.5% 20%;
+  box-shadow: inset 0 0 0 3px #110d09, inset 0 0 0 4px rgba(234, 223, 206, 0.32);
 }
 
 .composition-preview strong {
   position: absolute;
   z-index: 3;
   left: 6%;
-  top: 37%;
+  top: 13%;
   font-family: var(--font-serif);
   font-size: clamp(12px, 3vw, 23px);
   font-weight: 400;
@@ -431,7 +435,7 @@ a:focus-visible {
   position: absolute;
   z-index: 3;
   left: 6%;
-  bottom: 7%;
+  bottom: 5%;
   color: var(--frame-accent);
   font-size: clamp(4px, 0.82vw, 6px);
   letter-spacing: 0.12em;
@@ -440,9 +444,9 @@ a:focus-visible {
 .composition-preview-constellation {
   position: absolute;
   z-index: 3;
-  top: 8%;
+  top: 24%;
   left: 34%;
-  width: 19%;
+  width: 27%;
   aspect-ratio: 1;
   border: 1px solid rgba(234, 223, 206, 0.28);
 }
@@ -469,9 +473,10 @@ a:focus-visible {
 .composition-preview-matrix {
   position: absolute;
   z-index: 3;
-  right: 43%;
-  bottom: 7%;
-  width: 32%;
+  right: auto;
+  bottom: 13%;
+  left: 6%;
+  width: 22%;
   display: grid;
   grid-template-columns: repeat(10, 1fr);
   gap: 2px;
@@ -522,7 +527,7 @@ a:focus-visible {
 
 .signal-mode {
   overflow: hidden;
-  background: var(--frame-ink);
+  background: #121113;
 }
 
 .signal-canvas {
@@ -536,14 +541,16 @@ a:focus-visible {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.14), transparent 14%, transparent 82%, rgba(0, 0, 0, 0.28)),
-    radial-gradient(ellipse at center, transparent 62%, rgba(0, 0, 0, 0.3));
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08), transparent 12%, transparent 86%, rgba(0, 0, 0, 0.16)),
+    radial-gradient(ellipse at center, transparent 72%, rgba(0, 0, 0, 0.18));
   mix-blend-mode: multiply;
 }
 
 .gallery-mode {
   --gallery-fade-depth: clamp(72px, 10vh, 118px);
   --gallery-header-safe: clamp(54px, 7.5vh, 82px);
+  --gallery-info-height: clamp(300px, 40vh, 440px);
+  --gallery-artwork-gap: clamp(10px, 1.8vh, 24px);
   display: block;
   overflow: hidden;
   color: #f0e7d9;
@@ -562,14 +569,14 @@ a:focus-visible {
 .gallery-plate {
   position: absolute;
   inset: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  display: block;
   min-height: 0;
   margin: 0;
 }
 
 .gallery-image-stage {
-  position: relative;
+  position: absolute;
+  inset: 0;
   min-height: 0;
   overflow: hidden;
   isolation: isolate;
@@ -583,15 +590,17 @@ a:focus-visible {
   position: absolute;
   z-index: 3;
   right: 0;
+  top: calc(100% - var(--gallery-info-height) - var(--gallery-fade-depth));
   bottom: 0;
   left: 0;
-  height: var(--gallery-fade-depth);
+  height: auto;
   pointer-events: none;
   background: linear-gradient(
     180deg,
     transparent 0,
-    rgba(22, 15, 13, 0.12) 18%,
-    rgba(22, 15, 13, 0.58) 62%,
+    rgba(22, 15, 13, 0.16) 8%,
+    rgba(22, 15, 13, 0.72) 20%,
+    #160f0d 34%,
     #160f0d 100%
   );
 }
@@ -624,18 +633,14 @@ a:focus-visible {
 .gallery-artwork-matte {
   position: absolute;
   z-index: 2;
-  top: var(--gallery-header-safe);
-  right: 0;
-  bottom: var(--gallery-fade-depth);
-  left: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: visible;
+  inset: 0;
+  overflow: hidden;
 }
 
 .gallery-artwork {
-  position: static;
+  position: absolute;
+  top: var(--gallery-art-center-y, 50%);
+  left: 0;
   display: block;
   width: 100%;
   height: auto;
@@ -643,6 +648,7 @@ a:focus-visible {
   max-height: none;
   object-fit: contain;
   filter: saturate(0.92) contrast(1.02);
+  transform: translateY(-50%);
   box-shadow: 0 12px 44px rgba(0, 0, 0, 0.34);
   animation: artwork-in 1.65s cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
@@ -659,12 +665,15 @@ a:focus-visible {
 }
 
 .gallery-mode.is-vertical-art .gallery-image-stage::after {
-  height: 58%;
+  top: calc(100% - var(--gallery-info-height) - var(--gallery-fade-depth));
+  bottom: 0;
+  height: auto;
   background: linear-gradient(
     180deg,
     transparent 0,
-    rgba(22, 15, 13, 0.12) 18%,
-    rgba(22, 15, 13, 0.68) 62%,
+    rgba(22, 15, 13, 0.16) 8%,
+    rgba(22, 15, 13, 0.72) 20%,
+    #160f0d 34%,
     #160f0d 100%
   );
 }
@@ -674,24 +683,16 @@ a:focus-visible {
 }
 
 .gallery-mode.is-vertical-art .gallery-artwork {
+  top: 0;
+  left: 0;
   width: 100%;
   max-width: none;
   height: 100%;
   max-height: none;
   object-fit: cover;
-  object-position: center 35%;
+  object-position: center center;
+  transform: none;
   box-shadow: none;
-}
-
-.gallery-mode.is-vertical-art .gallery-caption {
-  position: absolute;
-  z-index: 4;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  color: #f0e7d9;
-  background: transparent;
-  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.68);
 }
 
 .gallery-header {
@@ -765,7 +766,14 @@ a:focus-visible {
 }
 
 .gallery-caption {
-  position: relative;
+  position: absolute;
+  z-index: 4;
+  top: calc(100% - var(--gallery-info-height));
+  right: auto;
+  bottom: 0;
+  left: 0;
+  width: min(100%, 68rem);
+  height: var(--gallery-info-height);
   min-height: 0;
   padding:
     clamp(14px, 2.2vh, 24px)
@@ -773,7 +781,9 @@ a:focus-visible {
     max(clamp(16px, 2.8vh, 30px), env(safe-area-inset-bottom))
     max(clamp(18px, 6.2vw, 46px), env(safe-area-inset-left));
   overflow: hidden;
-  background: #160f0d;
+  color: #f0e7d9;
+  background: transparent;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.68);
 }
 
 .gallery-caption-rule {
@@ -802,6 +812,8 @@ a:focus-visible {
 .gallery-caption h1 {
   display: -webkit-box;
   max-width: 92%;
+  height: 2.32em;
+  padding-block: 0.08em;
   overflow: hidden;
   font-family: var(--font-serif);
   font-size: clamp(30px, 8.8vw, 64px);
@@ -840,6 +852,7 @@ a:focus-visible {
 .gallery-description {
   display: -webkit-box;
   margin-top: clamp(8px, 1.1vh, 12px) !important;
+  height: 2.84em;
   overflow: hidden;
   color: rgba(240, 231, 217, 0.72);
   font-family: var(--font-serif);
@@ -2622,6 +2635,441 @@ a:focus-visible {
   }
 }
 
+/*
+ * Atlas board restoration. The generated studies worked because every panel
+ * read as one object: title, measured diagram, evidence plate, and archival
+ * notation. This layer restores that hierarchy to the live collection.
+ */
+.composition-sheet {
+  --atlas-frame-inset: clamp(14px, 2.15vmin, 32px);
+  --composition-shadow: rgba(0, 0, 0, 0.48);
+  background-color: var(--composition-bg);
+  background-image:
+    linear-gradient(90deg, transparent 49.9%, color-mix(in srgb, var(--composition-ink) 7%, transparent) 50%, transparent 50.1%),
+    linear-gradient(0deg, transparent 49.9%, color-mix(in srgb, var(--composition-ink) 6%, transparent) 50%, transparent 50.1%),
+    repeating-linear-gradient(90deg, transparent 0 7.95%, color-mix(in srgb, var(--composition-ink) 4%, transparent) 8% 8.08%),
+    radial-gradient(circle at 72% 35%, color-mix(in srgb, var(--composition-accent) 12%, transparent), transparent 44%),
+    linear-gradient(118deg, color-mix(in srgb, var(--composition-bg) 86%, #000), var(--composition-bg) 67%);
+}
+
+.composition-sheet::before {
+  opacity: calc(0.16 + var(--composition-grain-variation));
+}
+
+.composition-sheet::after {
+  opacity: 0.48;
+  background:
+    radial-gradient(ellipse at var(--composition-wear-x, 50%) var(--composition-wear-y, 44%), transparent 32%, rgba(0, 0, 0, 0.11) 74%, rgba(0, 0, 0, 0.38) 124%),
+    linear-gradient(101deg, transparent 0 48%, rgba(255, 255, 255, 0.016) 49%, transparent 51%);
+}
+
+.composition-registration {
+  position: absolute;
+  z-index: 18;
+  inset: var(--atlas-frame-inset);
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--composition-ink) 35%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--composition-bg) 78%, transparent),
+    0 0 0 1px color-mix(in srgb, #000 26%, transparent);
+}
+
+.composition-registration::before,
+.composition-registration::after {
+  content: "";
+  position: absolute;
+  width: clamp(8px, 1.1vmin, 16px);
+  height: clamp(8px, 1.1vmin, 16px);
+  border-color: var(--composition-accent);
+  opacity: 0.74;
+}
+
+.composition-registration::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid var(--composition-accent);
+  border-left: 2px solid var(--composition-accent);
+}
+
+.composition-registration::after {
+  right: -1px;
+  bottom: -1px;
+  border-right: 2px solid var(--composition-accent);
+  border-bottom: 2px solid var(--composition-accent);
+}
+
+.composition-registration span {
+  position: absolute;
+  display: block;
+}
+
+.composition-registration span:first-child {
+  top: 50%;
+  left: 50%;
+  width: clamp(13px, 1.5vmin, 22px);
+  height: clamp(13px, 1.5vmin, 22px);
+  transform: translate(-50%, -50%);
+  opacity: 0.28;
+  background:
+    linear-gradient(90deg, transparent 47%, var(--composition-ink) 48% 52%, transparent 53%),
+    linear-gradient(0deg, transparent 47%, var(--composition-ink) 48% 52%, transparent 53%);
+}
+
+.composition-registration span:nth-child(2) {
+  bottom: clamp(7px, 1vmin, 15px);
+  left: clamp(7px, 1vmin, 15px);
+  width: clamp(42px, 6vmin, 88px);
+  height: clamp(12px, 1.8vmin, 26px);
+  opacity: 0.34;
+  background-image: radial-gradient(circle, var(--composition-ink) 0 0.7px, transparent 0.9px);
+  background-size: 7px 7px;
+}
+
+.composition-registration span:last-child {
+  right: clamp(7px, 1vmin, 15px);
+  bottom: clamp(7px, 1vmin, 15px);
+  width: clamp(5px, 0.65vmin, 10px);
+  height: clamp(5px, 0.65vmin, 10px);
+  background: var(--composition-accent);
+}
+
+.composition-art {
+  border: 1px solid color-mix(in srgb, var(--composition-ink) 28%, transparent);
+  clip-path: none;
+  outline: 0;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--composition-bg) 68%, var(--composition-field));
+}
+
+.composition-treatment-folio .composition-art,
+.composition-treatment-scroll .composition-art,
+.composition-treatment-offset .composition-art {
+  clip-path: none;
+  outline: 0;
+  box-shadow: none;
+}
+
+.composition-art::after {
+  opacity: calc(0.06 + var(--composition-grain-variation));
+}
+
+.composition-art-image,
+.composition-palette-parchment .composition-art-image,
+.composition-surface-dry-ink .composition-art-image,
+.composition-surface-washed .composition-art-image {
+  filter: saturate(0.82) contrast(1.045) brightness(0.86);
+}
+
+.composition-art-backdrop {
+  filter: blur(clamp(3px, 0.55vmin, 9px)) saturate(0.68) contrast(1.06) brightness(0.5);
+}
+
+.composition-sheet.is-contained .composition-art-backdrop {
+  opacity: 0.46;
+}
+
+.composition-art-wash,
+.composition-title-overlay .composition-art-wash,
+.composition-treatment-bleed .composition-art-wash,
+.composition-title-banner .composition-art-wash {
+  background:
+    linear-gradient(0deg, color-mix(in srgb, var(--composition-bg) 20%, transparent), transparent 32% 76%, rgba(0, 0, 0, 0.16)),
+    linear-gradient(90deg, color-mix(in srgb, var(--composition-accent) 8%, transparent), transparent 38% 84%, rgba(0, 0, 0, 0.1));
+}
+
+.composition-art-label {
+  right: clamp(8px, 1vmin, 15px);
+  bottom: clamp(8px, 1vmin, 15px);
+  color: color-mix(in srgb, #f5ead7 72%, transparent);
+  font-size: clamp(5px, 0.62vmin, 8px);
+  letter-spacing: 0.14em;
+}
+
+.composition-chrome {
+  top: max(clamp(7px, 1.3vmin, 18px), env(safe-area-inset-top));
+  right: max(calc(var(--atlas-frame-inset) + clamp(7px, 0.9vmin, 13px)), env(safe-area-inset-right));
+  left: max(calc(var(--atlas-frame-inset) + clamp(7px, 0.9vmin, 13px)), env(safe-area-inset-left));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: clamp(8px, 1.2vmin, 18px);
+  font-size: clamp(5px, 0.68vmin, 9px);
+  letter-spacing: 0.17em;
+  text-shadow: none;
+}
+
+.composition-chrome::after {
+  top: calc(100% + clamp(4px, 0.62vmin, 9px));
+  opacity: 0.36;
+  background: linear-gradient(90deg, var(--composition-line), transparent 46%, var(--composition-line));
+}
+
+.composition-chrome span:nth-child(2) {
+  color: var(--composition-ink);
+}
+
+.composition-chrome span:last-child {
+  max-width: none;
+  text-align: right;
+}
+
+.composition-heading,
+.composition-title-margin .composition-heading,
+.composition-title-vertical .composition-heading,
+.composition-title-banner .composition-heading,
+.composition-title-caption .composition-heading {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: hidden;
+}
+
+.composition-heading::before {
+  display: none;
+}
+
+.composition-heading p {
+  max-width: 100%;
+  margin-bottom: clamp(7px, 1vmin, 14px);
+  overflow: hidden;
+  color: var(--composition-accent-readable);
+  font-size: clamp(5px, 0.66vmin, 9px);
+  line-height: 1.4;
+  letter-spacing: 0.15em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composition-heading h1,
+.composition-title-monumental .composition-heading h1,
+.composition-title-overlay .composition-heading h1,
+.composition-title-margin .composition-heading h1,
+.composition-title-vertical .composition-heading h1,
+.composition-title-banner .composition-heading h1,
+.composition-title-caption .composition-heading h1,
+.composition-sheet.is-medium .composition-heading h1,
+.composition-sheet.is-long .composition-heading h1 {
+  max-width: 100%;
+  max-height: none;
+  flex-direction: column;
+  gap: 0;
+  color: var(--composition-ink);
+  font-size: clamp(32px, min(4.8vw, 8.8vh), 112px);
+  line-height: 0.88;
+  letter-spacing: -0.045em;
+  writing-mode: horizontal-tb;
+  transform: none;
+  text-shadow: none;
+}
+
+.composition-heading h1 span,
+.composition-title-vertical .composition-heading h1 span,
+.composition-sheet.is-long .composition-heading h1 span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composition-heading small {
+  max-width: 100%;
+  margin-top: clamp(7px, 1vmin, 14px);
+  color: var(--composition-dim);
+  font-size: clamp(5px, 0.69vmin, 9px);
+  line-height: 1.35;
+  letter-spacing: 0.09em;
+  text-shadow: none;
+}
+
+.composition-motif {
+  z-index: 5;
+  display: block;
+  padding: clamp(8px, 1.15vmin, 17px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--composition-ink) 28%, transparent);
+  background:
+    linear-gradient(90deg, transparent 49.9%, color-mix(in srgb, var(--composition-ink) 9%, transparent) 50%, transparent 50.1%),
+    linear-gradient(0deg, transparent 49.9%, color-mix(in srgb, var(--composition-ink) 8%, transparent) 50%, transparent 50.1%),
+    color-mix(in srgb, var(--composition-bg) 84%, #000);
+}
+
+.composition-blueprint {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: auto;
+  overflow: hidden;
+}
+
+.composition-blueprint-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.composition-diagram {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.composition-diagram-element.mode-stroke {
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+
+.composition-diagram-element.tone-muted {
+  color: color-mix(in srgb, var(--composition-ink) 36%, transparent);
+}
+
+.composition-diagram-element.tone-field {
+  color: color-mix(in srgb, var(--composition-field) 78%, transparent);
+}
+
+.composition-blueprint-caption {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 0.34fr) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(8px, 1.15vmin, 17px);
+  min-height: clamp(34px, 5.2vmin, 68px);
+  padding-top: clamp(7px, 0.9vmin, 13px);
+  border-top: 1px solid color-mix(in srgb, var(--composition-ink) 28%, transparent);
+}
+
+.composition-blueprint-caption small,
+.composition-blueprint-caption p {
+  margin: 0;
+  color: var(--composition-dim);
+  font-size: clamp(5px, 0.62vmin, 8px);
+  line-height: 1.4;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.composition-blueprint-caption small {
+  color: var(--composition-accent-readable);
+}
+
+.composition-blueprint-caption p {
+  display: -webkit-box;
+  overflow: hidden;
+  letter-spacing: 0.035em;
+  text-transform: none;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.composition-details {
+  justify-content: flex-end;
+  gap: clamp(2px, 0.38vmin, 6px);
+  padding: clamp(6px, 0.8vmin, 12px) 0 0;
+  color: var(--composition-dim);
+  font-size: clamp(5px, 0.62vmin, 8px);
+  line-height: 1.28;
+  letter-spacing: 0.11em;
+  text-shadow: none;
+}
+
+.composition-details::before {
+  width: 100%;
+  background: linear-gradient(90deg, var(--composition-accent), var(--composition-line) 28%, transparent 78%);
+}
+
+.composition-details strong {
+  max-width: 100%;
+  color: var(--composition-ink);
+  font-size: clamp(11px, 1.25vmin, 20px);
+  line-height: 1.06;
+  letter-spacing: -0.018em;
+}
+
+.composition-swatches {
+  display: flex;
+  gap: clamp(3px, 0.4vmin, 6px);
+  margin-top: clamp(3px, 0.48vmin, 7px);
+}
+
+.composition-swatches i {
+  display: block;
+  width: clamp(8px, 1vmin, 14px);
+  height: clamp(4px, 0.56vmin, 8px);
+  background: var(--swatch);
+  border: 1px solid color-mix(in srgb, var(--composition-ink) 26%, transparent);
+}
+
+.composition-footer {
+  right: max(calc(var(--atlas-frame-inset) + clamp(7px, 0.9vmin, 13px)), env(safe-area-inset-right));
+  bottom: max(clamp(7px, 1.15vmin, 16px), env(safe-area-inset-bottom));
+  left: max(calc(var(--atlas-frame-inset) + clamp(7px, 0.9vmin, 13px)), env(safe-area-inset-left));
+  gap: clamp(8px, 1.2vmin, 18px);
+  font-size: clamp(5px, 0.61vmin, 8px);
+  letter-spacing: 0.1em;
+  text-shadow: none;
+}
+
+@media (max-aspect-ratio: 5 / 4) {
+  .composition-heading,
+  .composition-title-margin .composition-heading,
+  .composition-title-vertical .composition-heading,
+  .composition-title-banner .composition-heading,
+  .composition-title-caption .composition-heading {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .composition-heading p {
+    margin-bottom: clamp(4px, 0.7vmin, 9px);
+  }
+
+  .composition-heading h1,
+  .composition-title-monumental .composition-heading h1,
+  .composition-title-overlay .composition-heading h1,
+  .composition-title-margin .composition-heading h1,
+  .composition-title-vertical .composition-heading h1,
+  .composition-title-banner .composition-heading h1,
+  .composition-title-caption .composition-heading h1,
+  .composition-sheet.is-medium .composition-heading h1,
+  .composition-sheet.is-long .composition-heading h1 {
+    font-size: clamp(32px, min(8.4vw, 6.2vh), 92px);
+  }
+
+  .composition-heading small {
+    margin-top: clamp(4px, 0.7vmin, 9px);
+  }
+
+  .composition-blueprint-caption {
+    grid-template-columns: minmax(5.5rem, 0.32fr) minmax(0, 1fr);
+    min-height: clamp(36px, 5.6vmin, 72px);
+  }
+
+  .composition-details strong {
+    font-size: clamp(10px, 1.8vmin, 18px);
+  }
+}
+
+@media (min-aspect-ratio: 21 / 9) {
+  .composition-heading h1,
+  .composition-title-monumental .composition-heading h1,
+  .composition-title-overlay .composition-heading h1,
+  .composition-title-margin .composition-heading h1,
+  .composition-title-vertical .composition-heading h1,
+  .composition-title-banner .composition-heading h1,
+  .composition-title-caption .composition-heading h1,
+  .composition-sheet.is-medium .composition-heading h1,
+  .composition-sheet.is-long .composition-heading h1 {
+    font-size: clamp(30px, min(4.2vw, 10vh), 112px);
+  }
+
+  .composition-blueprint-caption {
+    grid-template-columns: minmax(5rem, 0.3fr) minmax(0, 1fr);
+  }
+}
+
 @keyframes composition-in {
   from {
     opacity: 0;
@@ -2768,38 +3216,6 @@ a:focus-visible {
     font-size: clamp(20px, 3vw, 38px);
   }
 
-  .gallery-plate {
-    display: block;
-  }
-
-  .gallery-image-stage {
-    position: absolute;
-    inset: 0;
-  }
-
-  .gallery-image-stage::after {
-    height: 58%;
-    background: linear-gradient(
-      180deg,
-      transparent 0,
-      rgba(22, 15, 13, 0.12) 18%,
-      rgba(22, 15, 13, 0.68) 62%,
-      #160f0d 100%
-    );
-  }
-
-  .gallery-caption {
-    position: absolute;
-    z-index: 4;
-    right: auto;
-    bottom: 0;
-    left: 0;
-    width: min(100%, 68rem);
-    color: #f0e7d9;
-    background: transparent;
-    text-shadow: 0 2px 24px rgba(0, 0, 0, 0.68);
-  }
-
   .gallery-description {
     max-width: 72ch;
   }
@@ -2820,13 +3236,11 @@ a:focus-visible {
     font-size: 46px;
   }
 
-  .gallery-plate {
-    grid-template-rows: minmax(0, 8fr) minmax(0, 5fr);
-  }
-
   .gallery-mode {
     --gallery-fade-depth: clamp(48px, 8vh, 72px);
     --gallery-header-safe: clamp(44px, 7vh, 62px);
+    --gallery-info-height: clamp(238px, 44vh, 292px);
+    --gallery-artwork-gap: clamp(8px, 1.5vh, 14px);
   }
 
   .gallery-caption {
@@ -2854,8 +3268,9 @@ a:focus-visible {
 }
 
 @media (max-height: 540px) {
-  .gallery-plate {
-    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  .gallery-mode {
+    --gallery-info-height: clamp(158px, 38vh, 198px);
+    --gallery-artwork-gap: 8px;
   }
 
   .gallery-description,
@@ -2869,6 +3284,7 @@ a:focus-visible {
   }
 
   .gallery-caption h1 {
+    height: 1.24em;
     max-width: 100%;
     -webkit-line-clamp: 1;
   }

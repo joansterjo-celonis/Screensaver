@@ -2,7 +2,14 @@
 
 /* eslint-disable @next/next/no-img-element -- Wikimedia Commons images are dynamic cross-origin assets. */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { classifyArtworkCopySource } from "../data/artwork-copy-source";
 import {
   ARTWORK_DATASET_VERSION,
@@ -12,6 +19,7 @@ import {
   type GalleryArtwork,
 } from "../data/artworks";
 import { shuffledCycle } from "../shuffle";
+import { resolveGalleryArtPlacement } from "./gallery-layout";
 
 const CACHE_KEY = "always-on-frame.gallery.v3";
 const CACHE_TTL = 24 * 60 * 60 * 1000;
@@ -279,6 +287,7 @@ export function GalleryMode({
   paused?: boolean;
   shuffleSeed: string;
 }) {
+  const galleryRef = useRef<HTMLElement>(null);
   const fallbackCollection = useMemo(
     () => ARTWORK_SEEDS.map(fallbackArtwork),
     [],
@@ -414,6 +423,36 @@ export function GalleryMode({
         ? "COPY UNAVAILABLE"
         : "COPY LOADING";
 
+  useLayoutEffect(() => {
+    const gallery = galleryRef.current;
+    if (!gallery) return;
+
+    const placeArtwork = () => {
+      const bounds = gallery.getBoundingClientRect();
+      const placement = resolveGalleryArtPlacement(
+        bounds.width,
+        bounds.height,
+        current.width,
+        current.height,
+      );
+      gallery.style.setProperty("--gallery-art-center-y", `${placement.centerY}px`);
+      gallery.dataset.artAvoidsCaption = String(placement.canAvoidCaption);
+    };
+
+    placeArtwork();
+    const observer = "ResizeObserver" in window
+      ? new ResizeObserver(placeArtwork)
+      : null;
+    observer?.observe(gallery);
+    window.addEventListener("resize", placeArtwork);
+    window.addEventListener("orientationchange", placeArtwork);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", placeArtwork);
+      window.removeEventListener("orientationchange", placeArtwork);
+    };
+  }, [current.height, current.width]);
+
   useEffect(() => {
     if (paused) return;
     if (orderedArtworks.length < 2) return;
@@ -449,6 +488,7 @@ export function GalleryMode({
 
   return (
     <section
+      ref={galleryRef}
       className={`gallery-mode${isVerticalArtwork ? " is-vertical-art" : ""}`}
       aria-labelledby="gallery-title"
       aria-describedby="gallery-navigation-help"
@@ -471,7 +511,10 @@ export function GalleryMode({
           navigateManually(1);
         }
       }}
-      style={{ "--art-accent": current.accent } as React.CSSProperties}
+      style={{
+        "--art-accent": current.accent,
+        "--gallery-art-center-y": "50%",
+      } as React.CSSProperties}
     >
       <header className="gallery-header">
         <div className="gallery-header-brand">

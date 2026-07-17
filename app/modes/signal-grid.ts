@@ -32,6 +32,44 @@ export type SignalLayout = Readonly<{
 
 export type SignalWeightRole = "primary" | "secondary" | "tertiary";
 
+export type SignalCellState =
+  | "off"
+  | "low"
+  | "mid"
+  | "on"
+  | "pattern"
+  | "outline";
+
+export type SignalHeaderTextPlacement = Readonly<{
+  x: number;
+  y: number;
+  align: "left" | "right";
+  maxWidth: number;
+}>;
+
+export type SignalHeaderLayout = Readonly<{
+  mode: "single-row" | "stacked";
+  left: SignalHeaderTextPlacement;
+  right: SignalHeaderTextPlacement;
+  rule: Readonly<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  }>;
+  contentTop: number;
+  availableWidth: number;
+}>;
+
+export type SignalHeaderLayoutOptions = Readonly<{
+  paddingCells?: number;
+  topCells?: number;
+  minimumGapCells?: number;
+  rowHeightCells?: number;
+  ruleGapCells?: number;
+  contentGapCells?: number;
+}>;
+
 export type SignalFlipCell = Readonly<{
   id: string;
   column: number;
@@ -202,6 +240,74 @@ export function signalWeight(confidence: number, role: SignalWeightRole) {
       ? [300, 620]
       : [220, 460];
   return range[0] + (range[1] - range[0]) * amount;
+}
+
+export function quantizeSignalCellState(
+  level: number,
+  selected = false,
+  delta = 0,
+): SignalCellState {
+  const amount = clamp(Number.isFinite(level) ? level : 0);
+  const change = Number.isFinite(delta) ? clamp(delta, -1, 1) : 0;
+  const meaningfulChange = 0.14;
+
+  if (selected) {
+    if (amount < 0.08) return "outline";
+    if (amount < 0.74) return "pattern";
+    return "on";
+  }
+
+  if (change <= -meaningfulChange) return "outline";
+  if (change >= meaningfulChange && amount < 0.82) return "pattern";
+  if (amount < 0.08) return "off";
+  if (amount < 0.34) return "low";
+  if (amount < 0.68) return "mid";
+  return "on";
+}
+
+export function resolveSignalHeaderLayout(
+  layout: SignalLayout,
+  leftTextWidth: number,
+  rightTextWidth: number,
+  options: SignalHeaderLayoutOptions = {},
+): SignalHeaderLayout {
+  const cellSize = finiteDimension(layout.cellSize);
+  const viewportWidth = finiteDimension(layout.viewportWidth);
+  const originX = Number.isFinite(layout.originX) ? layout.originX : 0;
+  const originY = Number.isFinite(layout.originY) ? layout.originY : 0;
+  const paddingCells = finiteNonNegative(options.paddingCells ?? 2, 2);
+  const topCells = finiteNonNegative(options.topCells ?? 3, 3);
+  const gapCells = finiteNonNegative(options.minimumGapCells ?? 2, 2);
+  const rowHeightCells = finiteNonNegative(options.rowHeightCells ?? 1.55, 1.55);
+  const ruleGapCells = finiteNonNegative(options.ruleGapCells ?? 1, 1);
+  const contentGapCells = finiteNonNegative(options.contentGapCells ?? 3, 3);
+  const leftWidth = finiteNonNegative(leftTextWidth);
+  const rightWidth = finiteNonNegative(rightTextWidth);
+  const inset = Math.max(originX + cellSize * paddingCells, cellSize * paddingCells);
+  const leftX = clamp(inset, 0, viewportWidth);
+  const rightX = clamp(viewportWidth - inset, leftX, viewportWidth);
+  const availableWidth = Math.max(0, rightX - leftX);
+  const minimumGap = cellSize * gapCells;
+  const top = originY + cellSize * topCells;
+  const mode = leftWidth + rightWidth + minimumGap <= availableWidth
+    ? "single-row"
+    : "stacked";
+  const rowHeight = Math.max(cellSize, cellSize * rowHeightCells);
+  const rightY = mode === "stacked" ? top + rowHeight : top;
+  const ruleY = rightY + cellSize * ruleGapCells;
+  const maxWidth = Math.max(0, availableWidth);
+  const left = Object.freeze({ x: leftX, y: top, align: "left" as const, maxWidth });
+  const right = Object.freeze({ x: rightX, y: rightY, align: "right" as const, maxWidth });
+  const rule = Object.freeze({ x1: leftX, y1: ruleY, x2: rightX, y2: ruleY });
+
+  return Object.freeze({
+    mode,
+    left,
+    right,
+    rule,
+    contentTop: ruleY + cellSize * contentGapCells,
+    availableWidth,
+  });
 }
 
 export function resolveBackingStore(

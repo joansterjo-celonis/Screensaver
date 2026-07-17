@@ -68,6 +68,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(signal, /getBoundingClientRect/);
   assert.match(signal, /ResizeObserver/);
   assert.match(signal, /MAX_CANVAS_PIXELS/);
+  assert.equal(JSON.parse(packageJson).dependencies.geist, "^1.7.2");
   assert.match(gallery, /5 \* 60 \* 1000/);
   assert.match(gallery, /clearTimeout/);
   assert.match(compositions, /buildCompositionDeck/);
@@ -127,6 +128,7 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   const {
     compositionRectCoverage,
     compositionRectDistance,
+    resolveCompositionAtlasBoard,
     resolveCompositionGeometry,
     resolveCompositionMotifAttachment,
     resolveCompositionViewportProfile,
@@ -279,12 +281,27 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   );
 
   const viewportProfiles = [
-    { width: 3840, height: 1080, profile: "panorama", artFloor: 0.68 },
-    { width: 3440, height: 1440, profile: "ultrawide", artFloor: 0.7 },
-    { width: 1920, height: 1080, profile: "landscape", artFloor: 0.6 },
-    { width: 1080, height: 1920, profile: "portrait", artFloor: 0.64 },
-    { width: 1280, height: 480, profile: "short", artFloor: 0.76 },
+    { width: 3840, height: 1080, profile: "panorama" },
+    { width: 3440, height: 1440, profile: "ultrawide" },
+    { width: 1920, height: 1080, profile: "landscape" },
+    { width: 1080, height: 1920, profile: "portrait" },
+    { width: 1280, height: 480, profile: "short" },
   ];
+  const boardCounts = new Map();
+  for (const recipe of COMPOSITION_RECIPES) {
+    const board = resolveCompositionAtlasBoard(recipe.motif);
+    boardCounts.set(board, (boardCounts.get(board) ?? 0) + 1);
+  }
+  assert.deepEqual(
+    Object.fromEntries([...boardCounts].sort()),
+    {
+      foundations: 8,
+      "light-landscape": 8,
+      "measure-perspective": 8,
+      "tension-identity": 8,
+    },
+    "the 32 posters must resolve into four eight-study blueprint boards",
+  );
   const assertCanvasRect = (rect, label) => {
     assert.ok(Array.isArray(rect) && rect.length === 4, `${label} must be a four-value rectangle`);
     assert.ok(rect.every(Number.isFinite), `${label} values must be finite`);
@@ -305,22 +322,24 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
         assertCanvasRect(geometry[region], `${recipe.id} ${viewport.profile} ${region}`);
       }
       assert.ok(
-        compositionRectCoverage(geometry.art) + 0.000_001 >= viewport.artFloor,
-        `${recipe.id} ${viewport.profile} artwork must meet its dominance floor`,
-      );
-      if (viewport.profile === "panorama" || viewport.profile === "short") {
-        assert.ok(
-          Math.max(geometry.art[2], geometry.art[3]) >= 94,
-          `${recipe.id} ${viewport.profile} artwork must dominate one canvas axis`,
-        );
-      }
-      assert.ok(
-        compositionRectCoverage(geometry.motif) <= 0.220_001,
-        `${recipe.id} ${viewport.profile} motif must remain subordinate to the painting`,
+        compositionRectCoverage(geometry.art) + 0.000_001 >= 0.288,
+        `${recipe.id} ${viewport.profile} artwork must remain a substantial evidence plate`,
       );
       assert.ok(
-        compositionRectDistance(geometry.motif, geometry.art) <= 1.501,
-        `${recipe.id} ${viewport.profile} motif must stay attached to the painting`,
+        compositionRectCoverage(geometry.art) <= 0.362,
+        `${recipe.id} ${viewport.profile} artwork must leave room for the authored board`,
+      );
+      assert.ok(
+        compositionRectCoverage(geometry.motif) + 0.000_001 >= 0.22,
+        `${recipe.id} ${viewport.profile} motif must read as a primary field`,
+      );
+      assert.ok(
+        compositionRectCoverage(geometry.motif) <= 0.31,
+        `${recipe.id} ${viewport.profile} motif must retain measured breathing room`,
+      );
+      assert.ok(
+        compositionRectDistance(geometry.motif, geometry.art) <= 23.001,
+        `${recipe.id} ${viewport.profile} motif must stay optically paired with the painting`,
       );
 
       const blueprint = MOTIF_BLUEPRINTS[recipe.motif];
@@ -351,8 +370,8 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
       ];
       assertCanvasRect(visibleFrame, `${recipe.id} ${viewport.profile} visible motif frame`);
       assert.ok(
-        compositionRectDistance(visibleFrame, geometry.art) <= 1.501,
-        `${recipe.id} ${viewport.profile} visible motif drawing must stay attached to the painting`,
+        compositionRectDistance(visibleFrame, geometry.art) <= 23.001,
+        `${recipe.id} ${viewport.profile} visible motif drawing must remain in the paired board field`,
       );
     }
   }
@@ -379,6 +398,7 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.match(compositions, /vectorEffect="non-scaling-stroke"/);
   assert.match(compositions, /getCompositionPalette/);
   assert.match(compositions, /resolveCompositionGeometry/);
+  assert.match(compositions, /resolveCompositionAtlasBoard/);
   assert.match(compositions, /resolveCompositionMotifAttachment/);
   assert.match(compositions, /resolveCompositionViewportProfile/);
   assert.match(compositions, /data-viewport-profile=/);
@@ -412,7 +432,13 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.match(gallery, /ArrowLeft/);
   assert.match(gallery, /ArrowRight/);
   assert.doesNotMatch(gallery, /className="gallery-next"/);
-  assert.match(styles, /grid-template-rows: minmax\(0, 3fr\) minmax\(0, 2fr\)/);
+  assert.match(gallery, /resolveGalleryArtPlacement/);
+  assert.match(gallery, /--gallery-art-center-y/);
+  assert.match(styles, /--gallery-info-height:/);
+  assert.match(
+    styles,
+    /\.gallery-caption\s*\{[\s\S]*?top: calc\(100% - var\(--gallery-info-height\)\);[\s\S]*?height: var\(--gallery-info-height\);/,
+  );
   assert.match(
     styles,
     /\.portrait-frame\s*\{[\s\S]*?width: 100%;\s*height: 100%;\s*min-width: 0;\s*min-height: 0;/,
@@ -420,9 +446,10 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.doesNotMatch(styles, /calc\(100s?vh \* 9 \/ 16\)|calc\(100vw \* 16 \/ 9\)/);
   assert.doesNotMatch(styles, /min-width: 280px/);
   assert.match(styles, /@media \(min-aspect-ratio: 4 \/ 3\)/);
-  assert.match(
+  assert.doesNotMatch(
     styles,
-    /@media \(min-aspect-ratio: 4 \/ 3\)[\s\S]*?\.gallery-image-stage\s*\{[\s\S]*?position: absolute;[\s\S]*?\.gallery-caption\s*\{[\s\S]*?position: absolute;[\s\S]*?width: min\(100%, 68rem\);/,
+    /@media \(min-aspect-ratio: 4 \/ 3\)[\s\S]*?\.gallery-caption\s*\{[\s\S]*?position:/,
+    "caption anchoring must not change with artwork or viewport aspect ratio",
   );
   assert.match(styles, /safe-area-inset-left/);
   assert.match(styles, /safe-area-inset-right/);
@@ -433,11 +460,11 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   );
   assert.match(
     styles,
-    /\.gallery-artwork-matte\s*\{[\s\S]*?top: var\(--gallery-header-safe\);\s*right: 0;[\s\S]*?left: 0;[\s\S]*?overflow: visible;/,
+    /\.gallery-artwork-matte\s*\{[\s\S]*?inset: 0;[\s\S]*?overflow: hidden;/,
   );
   assert.match(
     styles,
-    /\.gallery-artwork\s*\{[\s\S]*?width: 100%;\s*height: auto;\s*max-width: none;\s*max-height: none;/,
+    /\.gallery-artwork\s*\{[\s\S]*?top: var\(--gallery-art-center-y, 50%\);[\s\S]*?width: 100%;\s*height: auto;\s*max-width: none;\s*max-height: none;/,
   );
   assert.match(
     styles,
@@ -456,8 +483,8 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   );
   assert.match(
     styles,
-    /\.composition-sheet\.is-contained \.composition-art-backdrop\s*\{\s*opacity: 0\.82;/,
-    "the painting extension must remain visually dominant behind the sharp full artwork",
+    /\.composition-sheet\.is-contained \.composition-art-backdrop\s*\{\s*opacity: 0\.46;/,
+    "the painting extension must remain restrained behind the sharp evidence plate",
   );
   assert.doesNotMatch(styles, /\.composition-panel\b/);
   assert.doesNotMatch(compositions, /composition-panel\b/);
@@ -471,6 +498,11 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.match(styles, /opacity: calc\(var\(--composition-grain\) \+ var\(--composition-grain-variation\)\)/);
   assert.match(styles, /\.composition-art::after/);
   assert.match(styles, /\.composition-blueprint\b/);
+  assert.match(styles, /\.composition-blueprint-caption\b/);
+  assert.match(styles, /\.composition-registration\b/);
+  assert.match(styles, /\.composition-swatches\b/);
+  assert.match(compositions, /data-atlas-board=/);
+  assert.match(compositions, /blueprint\.rationale/);
   assert.match(styles, /\.composition-diagram\b/);
   assert.equal(
     styles.match(/--atlas-rule-width\s*:/g)?.length,
@@ -485,6 +517,62 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   }
 });
 
+test("anchors every Swikipedia caption and vertically centers full-width artwork", async () => {
+  const [galleryLayoutModule, paintingsSource] = await Promise.all([
+    import(new URL("../app/modes/gallery-layout.ts", import.meta.url).href),
+    readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
+  ]);
+  const {
+    resolveGalleryArtPlacement,
+    resolveGalleryLayoutMetrics,
+  } = galleryLayoutModule.default ?? galleryLayoutModule;
+  const paintings = (paintingsSource.match(/^\s*\["Q\d+".+\],?$/gm) ?? []).map((line) =>
+    JSON.parse(line.trim().replace(/,$/, "")),
+  );
+  const viewports = [
+    [3440, 1440],
+    [1920, 1080],
+    [1080, 1920],
+    [1280, 480],
+  ];
+
+  assert.equal(paintings.length, 300);
+  for (const [viewportWidth, viewportHeight] of viewports) {
+    const metrics = resolveGalleryLayoutMetrics(viewportHeight);
+    assert.ok(metrics.headerSafe > 0);
+    assert.ok(metrics.infoHeight > 0 && metrics.infoHeight < viewportHeight);
+    assert.ok(metrics.artworkGap >= 0);
+    for (const painting of paintings) {
+      const placement = resolveGalleryArtPlacement(
+        viewportWidth,
+        viewportHeight,
+        painting[6],
+        painting[7],
+      );
+      for (const value of Object.values(placement)) {
+        if (typeof value === "number") assert.ok(Number.isFinite(value));
+      }
+      assert.ok(placement.renderedHeight > 0);
+      assert.ok(placement.centerY >= 0 && placement.centerY <= viewportHeight);
+      if (placement.canAvoidCaption) {
+        assert.ok(
+          placement.centerY - placement.renderedHeight / 2 >= placement.headerSafe - 0.001,
+          `${painting[0]} must clear the header on ${viewportWidth}×${viewportHeight}`,
+        );
+        assert.ok(
+          placement.centerY + placement.renderedHeight / 2 <= placement.captionTop + 0.001,
+          `${painting[0]} must clear the fixed caption on ${viewportWidth}×${viewportHeight}`,
+        );
+      } else {
+        assert.ok(
+          Math.abs(placement.centerY - viewportHeight / 2) < 0.001,
+          `${painting[0]} must stay vertically centered when overlap is unavoidable`,
+        );
+      }
+    }
+  }
+});
+
 test("keeps Signal Field geometry deterministic across display shapes", async () => {
   const signalGridModule = await import(
     new URL("../app/modes/signal-grid.ts", import.meta.url).href
@@ -494,8 +582,10 @@ test("keeps Signal Field geometry deterministic across display shapes", async ()
     cellFlipProgress,
     classifySignalViewport,
     fitCellGrid,
+    quantizeSignalCellState,
     quantizeSignalTime,
     resolveBackingStore,
+    resolveSignalHeaderLayout,
     resolveSignalLayout,
     signalConfidence,
     signalWeight,
@@ -546,6 +636,25 @@ test("keeps Signal Field geometry deterministic across display shapes", async ()
     assert.ok(layout.bounds.x >= -epsilon && layout.bounds.y >= -epsilon);
     assert.ok(layout.bounds.x + layout.bounds.width <= width + epsilon);
     assert.ok(layout.bounds.y + layout.bounds.height <= height + epsilon);
+
+    const singleHeader = resolveSignalHeaderLayout(
+      layout,
+      layout.cellSize * 8,
+      layout.cellSize * 10,
+    );
+    assert.equal(singleHeader.mode, "single-row");
+    assert.ok(singleHeader.left.x < singleHeader.right.x);
+    assert.ok(singleHeader.rule.y1 > singleHeader.left.y);
+    assert.ok(singleHeader.contentTop > singleHeader.rule.y1);
+    const stackedHeader = resolveSignalHeaderLayout(
+      layout,
+      singleHeader.availableWidth * 0.72,
+      singleHeader.availableWidth * 0.72,
+    );
+    assert.equal(stackedHeader.mode, "stacked");
+    assert.ok(stackedHeader.right.y > stackedHeader.left.y);
+    assert.ok(stackedHeader.rule.y1 > stackedHeader.right.y);
+    assert.ok(stackedHeader.contentTop > stackedHeader.rule.y1);
 
     for (const column of [0, Math.floor(layout.columns / 2), layout.columns]) {
       const snappedX = layout.originX + column * layout.cellSize;
@@ -679,6 +788,14 @@ test("keeps Signal Field geometry deterministic across display shapes", async ()
   for (const role of ["primary", "secondary", "tertiary"]) {
     assert.ok(signalWeight(0, role) < signalWeight(1, role));
   }
+  assert.deepEqual(
+    [0, 0.2, 0.5, 0.9].map((level) => quantizeSignalCellState(level)),
+    ["off", "low", "mid", "on"],
+  );
+  assert.equal(quantizeSignalCellState(0.5, true), "pattern");
+  assert.equal(quantizeSignalCellState(0, true), "outline");
+  assert.equal(quantizeSignalCellState(0.7, false, -0.4), "outline");
+  assert.equal(quantizeSignalCellState(0.4, false, 0.4), "pattern");
 });
 
 test("shuffles every Signal Field scene once per cycle", async () => {
@@ -749,6 +866,26 @@ test("keeps Signal Field on its discrete grid, typography and transition languag
   );
   assert.match(signalField, /document\.fonts\.load\(/);
   assert.match(signalField, /document\.fonts\.ready/);
+  for (const face of [
+    "GeistSans",
+    "GeistMono",
+    "GeistPixelSquare",
+    "GeistPixelGrid",
+    "GeistPixelCircle",
+    "GeistPixelTriangle",
+    "GeistPixelLine",
+  ]) {
+    assert.ok(signalField.includes(face), `Signal Field must load ${face}`);
+  }
+  assert.match(signalField, /configureSignalFontFamilies\(SIGNAL_FONT_MAP\)/);
+  assert.doesNotMatch(signalLibrary, /#e34c82|rgba\(227,\s*76,\s*130/);
+  assert.match(signalLibrary, /"pixel-square"/);
+  assert.match(signalLibrary, /"pixel-grid"/);
+  assert.match(signalLibrary, /"pixel-circle"/);
+  assert.match(signalLibrary, /"pixel-triangle"/);
+  assert.match(signalLibrary, /"pixel-line"/);
+  assert.match(signalLibrary, /activeSignalTime/);
+  assert.match(signalLibrary, /trackedText/);
 
   assert.match(signalLibrary, /\bSIGNAL_STATE_INTERVAL\s*=\s*160\b/);
   for (const helper of ["drawSignalCells", "drawDotMatrixValue", "drawCellStrip"]) {
@@ -758,6 +895,20 @@ test("keeps Signal Field on its discrete grid, typography and transition languag
       `${helper} must make state changes out of discrete cells`,
     );
   }
+  assert.match(signalLibrary, /quantizeSignalCellState/);
+  assert.match(signalLibrary, /resolveSignalHeaderLayout/);
+  assert.match(signalLibrary, /state\?: SignalCellState/);
+  for (const state of ["off", "low", "mid", "on", "pattern", "outline"]) {
+    assert.ok(signalLibrary.includes(`"${state}"`), `missing Signal cell state: ${state}`);
+  }
+  assert.ok(
+    (signalLibrary.match(/drawSignalCircle\(/g)?.length ?? 0) >= 3,
+    "semantic circle instruments must use shared ratio-safe circle geometry",
+  );
+  assert.ok(
+    (signalLibrary.match(/drawSignalEllipse\(/g)?.length ?? 0) >= 2,
+    "planetary paths must use shared ratio-safe ellipse geometry",
+  );
   for (const marker of [
     "ACQUISITION / LOCK",
     "AMPLITUDE MATRIX / 43",
@@ -844,6 +995,18 @@ test("keeps Signal Field on its discrete grid, typography and transition languag
     "checker-error",
     "deep-scan",
   ]);
+
+  const lifeStart = signalLibrary.indexOf("function cellularAtlas");
+  const lifeEnd = signalLibrary.indexOf("function packetRiver", lifeStart);
+  const lifeScene = signalLibrary.slice(lifeStart, lifeEnd);
+  assert.ok(lifeScene.indexOf("chrome(frame") < lifeScene.indexOf("signalContent(frame"));
+  assert.doesNotMatch(lifeScene, /const firstRow = 3/);
+  assert.match(lifeScene, /"pattern"|quantizeSignalCellState/);
+  const voidStart = signalLibrary.indexOf("function deepScan");
+  const voidEnd = signalLibrary.indexOf("const INTERNAL_SCENES", voidStart);
+  const voidScene = signalLibrary.slice(voidStart, voidEnd);
+  assert.match(voidScene, /"VOID"/);
+  assert.match(voidScene, /drawDotMatrixValue/);
 
   const signalPreviewStar = styles.match(/\.signal-preview-star\s*\{([^}]*)\}/)?.[1] ?? "";
   assert.doesNotMatch(signalPreviewStar, /\banimation\s*:/);

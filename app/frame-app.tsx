@@ -62,7 +62,7 @@ const MODES: ModeDefinition[] = [
     id: "compositions",
     number: "03",
     name: "Composition Atlas",
-    description: "32 smart arrangements of painting, type and archival signal.",
+    description: "32 painting-specific blueprint posters in four museum-board families.",
     component: CompositionsMode,
     preview: CompositionPreview,
   },
@@ -188,7 +188,7 @@ function CompositionPreview() {
       <div className="composition-preview-constellation">
         {Array.from({ length: 7 }, (_, index) => <i key={index} />)}
       </div>
-      <strong>ALWAYS–ON<br />FRAME</strong>
+      <strong>MECHANICAL<br />SUN</strong>
       <div className="composition-preview-matrix">
         {Array.from({ length: 40 }, (_, index) => (
           <i key={index} className={(index * 5 + 3) % 11 < 5 ? "is-on" : ""} />

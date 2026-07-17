@@ -34,6 +34,7 @@ import {
   type Point,
 } from "./composition-motifs";
 import {
+  resolveCompositionAtlasBoard,
   resolveCompositionGeometry,
   resolveCompositionMotifAttachment,
   resolveCompositionViewportProfile,
@@ -101,16 +102,18 @@ function compositionStyle(
 ) {
   const signature = `${recipe.id}:${artwork.qid}`;
   const seed = hashString(signature);
+  const posterPaper = `color-mix(in srgb, ${palette.paper} 32%, #090908)`;
+  const posterInk = `color-mix(in srgb, ${palette.ink} 34%, #eddbc0)`;
   return {
     ...rectVariables("layout-art", geometry.art),
     ...rectVariables("layout-heading", geometry.heading),
     ...rectVariables("layout-motif", geometry.motif),
     ...rectVariables("layout-details", geometry.details),
-    "--composition-bg": palette.paper,
-    "--composition-ink": palette.ink,
+    "--composition-bg": posterPaper,
+    "--composition-ink": posterInk,
     "--composition-accent": palette.accent,
-    "--composition-accent-readable": `color-mix(in srgb, ${palette.accent} 15%, ${palette.ink})`,
-    "--composition-field": palette.field,
+    "--composition-accent-readable": `color-mix(in srgb, ${palette.accent} 48%, ${posterInk})`,
+    "--composition-field": `color-mix(in srgb, ${palette.field} 58%, #12110f)`,
     "--composition-spot": palette.accent,
     "--composition-art-accent": palette.accent,
     "--composition-dim": `color-mix(in srgb, ${palette.ink} 62%, transparent)`,
@@ -264,17 +267,22 @@ function CompositionBlueprint({ recipe }: { recipe: CompositionRecipe }) {
       data-semantic-tags={blueprint.semanticTags.join(" ")}
       style={{ "--motif-aspect": String(width / height) } as CSSProperties}
     >
-      <svg
-        className="composition-diagram"
-        viewBox={blueprint.viewBox.join(" ")}
-        preserveAspectRatio={preserveAspectRatio}
-        role="presentation"
-      >
-        {blueprint.elements.map((element) => (
-          <DiagramElementView key={element.id} element={element} />
-        ))}
-      </svg>
-      <small>{recipe.motifLabel}</small>
+      <div className="composition-blueprint-stage">
+        <svg
+          className="composition-diagram"
+          viewBox={blueprint.viewBox.join(" ")}
+          preserveAspectRatio={preserveAspectRatio}
+          role="presentation"
+        >
+          {blueprint.elements.map((element) => (
+            <DiagramElementView key={element.id} element={element} />
+          ))}
+        </svg>
+      </div>
+      <div className="composition-blueprint-caption">
+        <small>{recipe.motifLabel}</small>
+        <p>{blueprint.rationale}</p>
+      </div>
     </div>
   );
 }
@@ -485,9 +493,11 @@ export function CompositionsMode({
   const palette = getCompositionPalette(artwork.qid);
   const resolvedGeometry = resolveCompositionGeometry(recipe, viewportProfile);
   const motifAttachment = resolveCompositionMotifAttachment(resolvedGeometry);
-  const headline = balancedLines(artwork.title);
+  const atlasBoard = resolveCompositionAtlasBoard(recipe.motif);
+  const blueprint = MOTIF_BLUEPRINTS[recipe.motif];
+  const headline = balancedLines(recipe.name);
   const sourceShape = artworkShape(artwork);
-  const headlineLength = artwork.title.length;
+  const headlineLength = recipe.name.length;
   const headlineClass = headlineLength > 46 ? "is-long" : headlineLength > 28 ? "is-medium" : "is-short";
   const articleUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(artwork.articleTitle.replace(/ /g, "_"))}`;
   const imageMissing = failedImages.has(artwork.qid);
@@ -543,14 +553,21 @@ export function CompositionsMode({
         data-composition={recipe.id}
         data-artwork={artwork.qid}
         data-theme={recipe.theme}
+        data-atlas-board={atlasBoard}
         data-viewport-profile={viewportProfile}
         data-crop-retention={effectivePortalAspect ? measuredCropRetention.toFixed(3) : "measuring"}
         style={compositionStyle(recipe, artwork, palette, resolvedGeometry)}
       >
+        <div className="composition-registration" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+
         <header className="composition-chrome">
           <span>SWIKIPEDIA / COMPOSITION ATLAS</span>
           <span>{String(activeIndex + 1).padStart(2, "0")} / {String(COMPOSITION_COUNT).padStart(2, "0")}</span>
-          <span>{recipe.name.toLocaleUpperCase()}</span>
+          <span>{atlasBoard.replace("-", " / ").toLocaleUpperCase()}</span>
         </header>
 
         <div ref={artRef} className={`composition-art${imageMissing ? " is-missing" : ""}`}>
@@ -611,28 +628,38 @@ export function CompositionsMode({
         </div>
 
         <section className="composition-heading">
-          <p>{recipe.theme} / {artwork.year}</p>
+          <p>STUDY {String(activeIndex + 1).padStart(3, "0")} / {recipe.theme}</p>
           <h1 id="composition-title">
             <span>{headline[0]}</span>
             {headline[1] && <span>{headline[1]}</span>}
           </h1>
-          <small>{artwork.artist} · {recipe.motifLabel}</small>
+          <small>{artwork.title} · {artwork.artist}</small>
         </section>
 
         <div
           className="composition-motif"
           data-attach-x={motifAttachment.horizontal}
           data-attach-y={motifAttachment.vertical}
-          aria-hidden="true"
+          role="img"
+          aria-label={`${recipe.name} compositional study. ${blueprint.rationale}`}
         >
           <CompositionBlueprint recipe={recipe} />
         </div>
 
         <aside className="composition-details" aria-label="Artwork details">
-          <span>PLATE {String(activeIndex + 1).padStart(3, "0")}</span>
-          <strong>{artwork.artist}</strong>
+          <span>PLATE {String(activeIndex + 1).padStart(3, "0")} / {artwork.qid}</span>
+          <strong>{artwork.title}</strong>
+          <span>{artwork.artist}</span>
           <span>{artwork.year} · {artwork.width}×{artwork.height}</span>
-          <span>{recipe.motifLabel}</span>
+          <div className="composition-swatches" aria-label="Artwork-derived palette">
+            {palette.sourceSwatches.map((swatch, index) => (
+              <i
+                key={swatch}
+                aria-label={`Palette color ${index + 1}: ${swatch}`}
+                style={{ "--swatch": swatch } as CSSProperties}
+              />
+            ))}
+          </div>
         </aside>
 
         <footer className="composition-footer">

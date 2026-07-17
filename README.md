@@ -6,7 +6,7 @@ A responsive digital frame with multiple passive display modes. It is designed f
 
 - **Signal Field** — a reference-inspired generative composition of glyphs, grids, telemetry, and checkerboard glitches rendered on one canvas.
 - **Swikipedia** — a slow gallery of 300 verified public-domain paintings. Metadata and licensing are refreshed from Wikipedia and Wikimedia Commons, then cached locally.
-- **Composition Atlas** — 32 responsive editorial systems that intelligently pair paintings with typography, grids, constellations, timelines, and artwork-derived archival data.
+- **Composition Atlas** — 32 painting-specific museum-poster studies across four blueprint families, pairing restrained artwork plates with authored diagrams, typography, registration marks, and artwork-derived archival data.
 
 The selected mode is remembered on the device. Press `I` to reopen the frame index, `1`, `2`, or `3` to switch modes, and `F` to enter fullscreen. Swikipedia and Composition Atlas also support left/right clicks, taps, and arrow keys.
 

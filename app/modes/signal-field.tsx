@@ -1,9 +1,19 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { GeistMono } from "geist/font/mono";
+import {
+  GeistPixelCircle,
+  GeistPixelGrid,
+  GeistPixelLine,
+  GeistPixelSquare,
+  GeistPixelTriangle,
+} from "geist/font/pixel";
+import { GeistSans } from "geist/font/sans";
 import { resolveBackingStore } from "./signal-grid";
 import {
   SIGNAL_SCENE_COUNT,
+  configureSignalFontFamilies,
   renderSignalLibraryFrame,
 } from "./signal-library";
 
@@ -11,6 +21,26 @@ const MOTION_FRAME_GAP = 66;
 const REDUCED_MOTION_FRAME_GAP = 1_000;
 const REDUCED_MOTION_SCENE_DURATION = 30_000;
 const MAX_CANVAS_PIXELS = 2_200_000;
+
+const SIGNAL_FONT_CLASSES = [
+  GeistSans.variable,
+  GeistMono.variable,
+  GeistPixelSquare.variable,
+  GeistPixelGrid.variable,
+  GeistPixelCircle.variable,
+  GeistPixelTriangle.variable,
+  GeistPixelLine.variable,
+].join(" ");
+
+const SIGNAL_FONT_MAP = {
+  sans: GeistSans.style.fontFamily,
+  mono: GeistMono.style.fontFamily,
+  "pixel-square": GeistPixelSquare.style.fontFamily,
+  "pixel-grid": GeistPixelGrid.style.fontFamily,
+  "pixel-circle": GeistPixelCircle.style.fontFamily,
+  "pixel-triangle": GeistPixelTriangle.style.fontFamily,
+  "pixel-line": GeistPixelLine.style.fontFamily,
+} as const;
 
 export function SignalField({
   paused = false,
@@ -27,6 +57,7 @@ export function SignalField({
     if (!canvas) return;
     const context = canvas.getContext("2d", { alpha: false });
     if (!context) return;
+    configureSignalFontFamilies(SIGNAL_FONT_MAP);
 
     let frame = 0;
     let disposed = false;
@@ -123,7 +154,12 @@ export function SignalField({
 
     const loadSignalFont = async () => {
       try {
-        await document.fonts.load('400 12px "Geist Signal"');
+        await Promise.all([
+          document.fonts.load('400 12px "Geist Signal"'),
+          ...Object.values(SIGNAL_FONT_MAP).map((family) =>
+            document.fonts.load(`500 12px ${family}`),
+          ),
+        ]);
         await document.fonts.ready;
       } catch {
         // The system mono fallback keeps Signal Field usable if font loading is blocked.
@@ -171,7 +207,7 @@ export function SignalField({
 
   return (
     <section
-      className="signal-mode"
+      className={`signal-mode ${SIGNAL_FONT_CLASSES}`}
       aria-label={`Signal Field generative animation with ${SIGNAL_SCENE_COUNT} scenes`}
     >
       <canvas ref={canvasRef} className="signal-canvas">
