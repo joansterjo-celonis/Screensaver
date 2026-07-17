@@ -355,6 +355,7 @@ export function GalleryMode() {
   const activeIndex = artworks.length ? currentIndex % artworks.length : 0;
   const current = artworks[activeIndex] ?? fallbackCollection[0];
   const nextArtwork = artworks[(activeIndex + 1) % Math.max(1, artworks.length)] ?? current;
+  const isVerticalArtwork = current.height / current.width >= 1.3;
   const fallbackUrl = commonsRedirect(current.fallbackFile);
   const imageSource =
     imageRecovery?.articleTitle === current.articleTitle &&
@@ -380,7 +381,7 @@ export function GalleryMode() {
 
   return (
     <section
-      className="gallery-mode"
+      className={`gallery-mode${isVerticalArtwork ? " is-vertical-art" : ""}`}
       aria-labelledby="gallery-title"
       style={{ "--art-accent": current.accent } as React.CSSProperties}
     >

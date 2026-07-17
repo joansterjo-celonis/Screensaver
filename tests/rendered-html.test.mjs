@@ -78,5 +78,8 @@ test("ships the expanded, verified artwork and signal libraries", async () => {
   assert.match(artworks, /ARTWORK_DATASET_VERSION/);
   assert.match(gallery, /gallery-artwork-matte/);
   assert.match(gallery, /figcaption className="gallery-caption"/);
+  assert.match(gallery, /current\.height \/ current\.width >= 1\.3/);
   assert.match(styles, /grid-template-rows: minmax\(0, 3fr\) minmax\(0, 2fr\)/);
+  assert.match(styles, /\.gallery-mode\.is-vertical-art \.gallery-artwork/);
+  assert.match(styles, /object-fit: cover/);
 });

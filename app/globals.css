@@ -523,6 +523,52 @@ a:focus-visible {
   animation: artwork-in 1.65s cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
+.gallery-mode.is-vertical-art .gallery-plate {
+  position: relative;
+  display: block;
+}
+
+.gallery-mode.is-vertical-art .gallery-image-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.gallery-mode.is-vertical-art .gallery-image-stage::after {
+  height: 58%;
+  background: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(22, 15, 13, 0.12) 18%,
+    rgba(22, 15, 13, 0.68) 62%,
+    #160f0d 100%
+  );
+}
+
+.gallery-mode.is-vertical-art .gallery-artwork-matte {
+  inset: 0;
+}
+
+.gallery-mode.is-vertical-art .gallery-artwork {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+  object-position: center 35%;
+  box-shadow: none;
+}
+
+.gallery-mode.is-vertical-art .gallery-caption {
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  color: #f0e7d9;
+  background: transparent;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.68);
+}
+
 .gallery-header {
   justify-content: space-between;
   gap: 16px;
