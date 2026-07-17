@@ -79,7 +79,13 @@ test("ships the expanded, verified artwork and signal libraries", async () => {
   assert.match(gallery, /gallery-artwork-matte/);
   assert.match(gallery, /figcaption className="gallery-caption"/);
   assert.match(gallery, /current\.height \/ current\.width >= 1\.3/);
+  assert.match(gallery, /navigateManually/);
+  assert.match(gallery, /event\.clientX/);
+  assert.match(gallery, /ArrowLeft/);
+  assert.match(gallery, /ArrowRight/);
+  assert.doesNotMatch(gallery, /className="gallery-next"/);
   assert.match(styles, /grid-template-rows: minmax\(0, 3fr\) minmax\(0, 2fr\)/);
   assert.match(styles, /\.gallery-mode\.is-vertical-art \.gallery-artwork/);
   assert.match(styles, /object-fit: cover/);
+  assert.doesNotMatch(styles, /\.gallery-next/);
 });

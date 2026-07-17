@@ -112,7 +112,6 @@ a:focus-visible {
 .gallery-header,
 .gallery-header-actions,
 .gallery-header-status,
-.gallery-caption-head,
 .gallery-byline,
 .gallery-meta,
 .frame-controls {
@@ -438,6 +437,15 @@ a:focus-visible {
   background: #160f0d;
 }
 
+.gallery-mode:focus {
+  outline: none;
+}
+
+.gallery-mode:focus-visible {
+  outline: 1px solid rgba(240, 231, 217, 0.55);
+  outline-offset: -4px;
+}
+
 .gallery-plate {
   display: grid;
   grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
@@ -638,14 +646,8 @@ a:focus-visible {
   background: var(--frame-accent);
 }
 
-.gallery-caption-head {
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: clamp(7px, 1vh, 11px);
-}
-
 .gallery-eyebrow {
-  margin: 0 !important;
+  margin: 0 0 clamp(7px, 1vh, 11px) !important;
   color: rgba(240, 231, 217, 0.66);
   font-size: clamp(7px, 1.5vw, 10px);
   letter-spacing: 0.15em;
@@ -721,29 +723,6 @@ a:focus-visible {
 
 .gallery-meta a:hover {
   color: #f0e7d9;
-}
-
-.gallery-next {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
-  min-width: 68px;
-  min-height: 36px;
-  padding: 8px 10px;
-  color: #f0e7d9;
-  background: rgba(240, 231, 217, 0.05);
-  border: 1px solid rgba(240, 231, 217, 0.45);
-  font-size: clamp(7px, 1.5vw, 10px);
-  letter-spacing: 0.1em;
-  cursor: pointer;
-  opacity: 0.72;
-  transition: opacity 160ms ease, background 160ms ease;
-}
-
-.gallery-next:hover {
-  opacity: 1;
-  background: rgba(240, 231, 217, 0.12);
 }
 
 .sr-only {

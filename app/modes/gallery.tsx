@@ -354,7 +354,6 @@ export function GalleryMode() {
 
   const activeIndex = artworks.length ? currentIndex % artworks.length : 0;
   const current = artworks[activeIndex] ?? fallbackCollection[0];
-  const nextArtwork = artworks[(activeIndex + 1) % Math.max(1, artworks.length)] ?? current;
   const isVerticalArtwork = current.height / current.width >= 1.3;
   const fallbackUrl = commonsRedirect(current.fallbackFile);
   const imageSource =
@@ -364,25 +363,46 @@ export function GalleryMode() {
       : current.imageUrl;
 
   useEffect(() => {
-    const lookahead = Math.min(2, Math.max(0, artworks.length - 1));
-    for (let offset = 1; offset <= lookahead; offset += 1) {
-      const following = artworks[(activeIndex + offset) % artworks.length];
-      if (!following) continue;
+    if (artworks.length < 2) return;
+    for (const offset of [-1, 1]) {
+      const adjacent = artworks[(activeIndex + offset + artworks.length) % artworks.length];
+      if (!adjacent) continue;
       const preloader = new Image();
       preloader.decoding = "async";
-      preloader.src = following.imageUrl;
+      preloader.src = adjacent.imageUrl;
     }
   }, [activeIndex, artworks]);
 
-  const showNext = () => {
-    advance();
+  const navigateManually = useCallback((direction: -1 | 1) => {
+    const collectionSize = Math.max(1, artworks.length);
+    setCurrentIndex((index) => (index + direction + collectionSize) % collectionSize);
     setTimerReset((value) => value + 1);
-  };
+  }, [artworks.length]);
 
   return (
     <section
       className={`gallery-mode${isVerticalArtwork ? " is-vertical-art" : ""}`}
       aria-labelledby="gallery-title"
+      aria-describedby="gallery-navigation-help"
+      aria-keyshortcuts="ArrowLeft ArrowRight"
+      tabIndex={0}
+      onClick={(event) => {
+        if (event.target instanceof Element && event.target.closest("a, button")) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const direction = event.clientX < bounds.left + bounds.width / 2 ? -1 : 1;
+        navigateManually(direction);
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          navigateManually(-1);
+        }
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          navigateManually(1);
+        }
+      }}
       style={{ "--art-accent": current.accent } as React.CSSProperties}
     >
       <header className="gallery-header">
@@ -430,20 +450,9 @@ export function GalleryMode() {
 
         <figcaption className="gallery-caption">
           <div className="gallery-caption-rule" aria-hidden="true" />
-          <div className="gallery-caption-head">
-            <p className="gallery-eyebrow">
-              PLATE {String(activeIndex + 1).padStart(3, "0")} / {String(artworks.length).padStart(3, "0")}
-            </p>
-            <button
-              className="gallery-next"
-              type="button"
-              onClick={showNext}
-              aria-label={`Show next artwork: ${nextArtwork.title}`}
-            >
-              NEXT
-              <span aria-hidden="true">→</span>
-            </button>
-          </div>
+          <p className="gallery-eyebrow">
+            PLATE {String(activeIndex + 1).padStart(3, "0")} / {String(artworks.length).padStart(3, "0")}
+          </p>
           <h1 id="gallery-title">{current.title}</h1>
           <div className="gallery-byline">
             <span>{current.artist}</span>
@@ -477,6 +486,9 @@ export function GalleryMode() {
 
       <span className="sr-only" aria-live="polite" aria-atomic="true">
         Now showing {current.title} by {current.artist}
+      </span>
+      <span id="gallery-navigation-help" className="sr-only">
+        Click or tap the left half for the previous painting and the right half for the next painting. You can also use the left and right arrow keys.
       </span>
     </section>
   );
