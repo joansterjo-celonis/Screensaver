@@ -1,7 +1,10 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- Wikimedia Commons images are dynamic cross-origin assets. */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ARTWORK_DATASET_VERSION,
   ARTWORK_SEEDS,
   commonsRedirect,
   fallbackArtwork,
@@ -47,6 +50,7 @@ type CommonsResponse = {
 
 type CachedGallery = {
   version: 3;
+  datasetVersion: string;
   savedAt: number;
   artworks: GalleryArtwork[];
 };
@@ -63,6 +67,16 @@ function normalizeTitle(value: string) {
   return value.replace(/^File:/i, "").replace(/_/g, " ").trim().toLocaleLowerCase();
 }
 
+function resolveAlias(title: string, aliases: Map<string, string>) {
+  let resolved = title;
+  const visited = new Set<string>();
+  while (aliases.has(resolved) && !visited.has(resolved)) {
+    visited.add(resolved);
+    resolved = aliases.get(resolved) ?? resolved;
+  }
+  return resolved;
+}
+
 function shorten(value: string, limit = 330) {
   const compact = value.replace(/\s+/g, " ").trim();
   if (compact.length <= limit) return compact;
@@ -77,7 +91,12 @@ function readCache(): CachedGallery | null {
     const raw = window.localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedGallery;
-    if (parsed.version !== 3 || !Array.isArray(parsed.artworks) || parsed.artworks.length < 150) {
+    if (
+      parsed.version !== 3 ||
+      parsed.datasetVersion !== ARTWORK_DATASET_VERSION ||
+      !Array.isArray(parsed.artworks) ||
+      parsed.artworks.length !== ARTWORK_SEEDS.length
+    ) {
       return null;
     }
     return parsed;
@@ -88,7 +107,12 @@ function readCache(): CachedGallery | null {
 
 function writeCache(artworks: GalleryArtwork[]) {
   try {
-    const payload: CachedGallery = { version: 3, savedAt: Date.now(), artworks };
+    const payload: CachedGallery = {
+      version: 3,
+      datasetVersion: ARTWORK_DATASET_VERSION,
+      savedAt: Date.now(),
+      artworks,
+    };
     window.localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
   } catch {
     // Storage can be unavailable in private or tightly managed kiosk browsers.
@@ -133,7 +157,7 @@ async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
           for (const item of data.query?.redirects ?? []) aliases.set(item.from, item.to);
 
           return seeds.map((seed) => {
-            const resolved = aliases.get(seed.articleTitle) ?? seed.articleTitle;
+            const resolved = resolveAlias(seed.articleTitle, aliases);
             const page = pages.find(
               (candidate) => candidate.title.toLocaleLowerCase() === resolved.toLocaleLowerCase(),
             );
@@ -211,23 +235,24 @@ async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
     const license = page.pageimage
       ? licenseByFile.get(normalizeTitle(page.pageimage))
       : undefined;
-    const licenseName = license?.license ?? "Public domain";
-    const explicitlyRestricted =
-      license?.copyrighted?.toLocaleLowerCase() === "true" &&
-      !/public domain|cc0/i.test(licenseName);
-    if (explicitlyRestricted) return [];
+    const licenseName = license?.license ?? "";
+    const verifiedPublicDomain =
+      Boolean(license?.imageUrl) &&
+      license?.copyrighted?.toLocaleLowerCase() === "false" &&
+      /public domain|cc0|public domain mark/i.test(licenseName);
+    const description = page.extract ? shorten(page.extract) : fallback.description;
+    const articleUrl = page.fullurl ?? fallback.articleUrl;
+
+    if (!verifiedPublicDomain) {
+      return [{ ...fallback, articleUrl, description }];
+    }
 
     return [
       {
         ...seed,
-        imageUrl:
-          license?.imageUrl ?? page.thumbnail?.source ?? commonsRedirect(seed.fallbackFile),
-        articleUrl:
-          page.fullurl ??
-          `https://en.wikipedia.org/wiki/${encodeURIComponent(seed.articleTitle.replace(/ /g, "_"))}`,
-        description: page.extract
-          ? shorten(page.extract)
-          : fallback.description,
+        imageUrl: license?.imageUrl ?? fallback.imageUrl,
+        articleUrl,
+        description,
         license: licenseName,
         licenseUrl: license?.licenseUrl ?? fallback.licenseUrl,
       },
@@ -338,7 +363,7 @@ export function GalleryMode() {
       : current.imageUrl;
 
   useEffect(() => {
-    const lookahead = Math.min(5, Math.max(0, artworks.length - 1));
+    const lookahead = Math.min(2, Math.max(0, artworks.length - 1));
     for (let offset = 1; offset <= lookahead; offset += 1) {
       const following = artworks[(activeIndex + offset) % artworks.length];
       if (!following) continue;
@@ -369,15 +394,6 @@ export function GalleryMode() {
             <span>{sourceState === "live" ? "COMMONS LIVE" : sourceState === "cache" ? "LOCAL ARCHIVE" : "CURATED SET"}</span>
             <span className="gallery-pulse" aria-hidden="true" />
           </div>
-          <button
-            className="gallery-next"
-            type="button"
-            onClick={showNext}
-            aria-label={`Show next artwork: ${nextArtwork.title}`}
-          >
-            NEXT
-            <span aria-hidden="true">→</span>
-          </button>
         </div>
       </header>
 
@@ -413,9 +429,20 @@ export function GalleryMode() {
 
         <figcaption className="gallery-caption">
           <div className="gallery-caption-rule" aria-hidden="true" />
-          <p className="gallery-eyebrow">
-            PLATE {String(activeIndex + 1).padStart(3, "0")} / {String(artworks.length).padStart(3, "0")}
-          </p>
+          <div className="gallery-caption-head">
+            <p className="gallery-eyebrow">
+              PLATE {String(activeIndex + 1).padStart(3, "0")} / {String(artworks.length).padStart(3, "0")}
+            </p>
+            <button
+              className="gallery-next"
+              type="button"
+              onClick={showNext}
+              aria-label={`Show next artwork: ${nextArtwork.title}`}
+            >
+              NEXT
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
           <h1 id="gallery-title">{current.title}</h1>
           <div className="gallery-byline">
             <span>{current.artist}</span>

@@ -411,14 +411,15 @@ function barcodeCathedral(frame: SceneFrame) {
   chrome(frame, "Barcode cathedral", "NAVE-43");
 }
 
-function lifeState(columns: number, rows: number, steps: number) {
+function buildLifeStates(columns: number, rows: number, generations: number) {
   let state = new Uint8Array(columns * rows);
   for (let y = 0; y < rows; y += 1) {
     for (let x = 0; x < columns; x += 1) {
       state[y * columns + x] = hash(x, y, 177) > 0.71 ? 1 : 0;
     }
   }
-  for (let step = 0; step < steps; step += 1) {
+  const states = [state];
+  for (let step = 1; step < generations; step += 1) {
     const next = new Uint8Array(columns * rows);
     for (let y = 0; y < rows; y += 1) {
       for (let x = 0; x < columns; x += 1) {
@@ -436,22 +437,27 @@ function lifeState(columns: number, rows: number, steps: number) {
       }
     }
     state = next;
+    states.push(state);
   }
-  return state;
+  return states;
 }
+
+const LIFE_COLUMNS = 26;
+const LIFE_ROWS = 42;
+const LIFE_STATES = buildLifeStates(LIFE_COLUMNS, LIFE_ROWS, 13);
 
 function cellularAtlas(frame: SceneFrame) {
   const { context, width, height, time } = frame;
   fill(context, width, height);
   chrome(frame, "Cellular atlas", "LIFE-32");
-  const columns = 26;
-  const rows = 42;
+  const columns = LIFE_COLUMNS;
+  const rows = LIFE_ROWS;
   const pad = width * 0.06;
   const top = height * 0.13;
   const fieldHeight = height * 0.72;
   const gap = Math.max(1, width * 0.0045);
   const cell = Math.min((width - pad * 2 - gap * (columns - 1)) / columns, (fieldHeight - gap * (rows - 1)) / rows);
-  const state = lifeState(columns, rows, Math.floor(time / 700) % 13);
+  const state = LIFE_STATES[Math.floor(time / 700) % LIFE_STATES.length];
   let alive = 0;
   for (let y = 0; y < rows; y += 1) {
     for (let x = 0; x < columns; x += 1) {
@@ -1091,9 +1097,11 @@ export function renderSignalLibraryFrame(
       context.rect(edge, row * rowHeight, width - edge, rowHeight + 1);
     }
     context.clip();
-    drawScene(context, width, height, info.nextSceneIndex, info.transitionProgress * 900);
+    drawScene(context, width, height, info.nextSceneIndex, 0);
     context.restore();
+    context.save();
     drawTransitionBoundary(context, width, height, info.transitionProgress);
+    context.restore();
   }
 
   return info;

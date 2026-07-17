@@ -112,6 +112,7 @@ a:focus-visible {
 .gallery-header,
 .gallery-header-actions,
 .gallery-header-status,
+.gallery-caption-head,
 .gallery-byline,
 .gallery-meta,
 .frame-controls {
@@ -569,8 +570,14 @@ a:focus-visible {
   background: var(--frame-accent);
 }
 
+.gallery-caption-head {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: clamp(7px, 1vh, 11px);
+}
+
 .gallery-eyebrow {
-  margin-bottom: clamp(6px, 0.9vh, 10px) !important;
+  margin: 0 !important;
   color: rgba(240, 231, 217, 0.66);
   font-size: clamp(7px, 1.5vw, 10px);
   letter-spacing: 0.15em;
@@ -653,6 +660,8 @@ a:focus-visible {
   align-items: center;
   gap: 8px;
   flex: none;
+  min-width: 68px;
+  min-height: 36px;
   padding: 8px 10px;
   color: #f0e7d9;
   background: rgba(240, 231, 217, 0.05);
@@ -814,7 +823,7 @@ a:focus-visible {
 
 @media (max-height: 540px) {
   .gallery-plate {
-    grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
   }
 
   .gallery-description,
@@ -825,6 +834,11 @@ a:focus-visible {
   .gallery-byline {
     margin-top: 8px;
     padding: 7px 0;
+  }
+
+  .gallery-caption h1 {
+    max-width: 100%;
+    -webkit-line-clamp: 1;
   }
 }
 

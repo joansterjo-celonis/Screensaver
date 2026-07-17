@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- Wikimedia Commons images are dynamic cross-origin assets. */
+
 import {
   Component,
   useCallback,
@@ -8,7 +10,6 @@ import {
   useRef,
   useState,
   type ComponentType,
-  type ErrorInfo,
   type ReactNode,
 } from "react";
 import { commonsRedirect } from "./data/artworks";
@@ -48,7 +49,7 @@ const MODES: ModeDefinition[] = [
     id: "gallery",
     number: "02",
     name: "Swikipedia",
-    description: "A slow public-domain gallery of Renaissance painting.",
+    description: "A slow public-domain gallery spanning six centuries.",
     component: GalleryMode,
   },
 ];
@@ -63,7 +64,7 @@ class ModeBoundary extends Component<
     return { failed: true };
   }
 
-  componentDidCatch(_error: Error, _info: ErrorInfo) {
+  componentDidCatch() {
     // Keep the passive display alive even if a mode fails unexpectedly.
   }
 
@@ -104,12 +105,15 @@ function useWakeLock(active: boolean) {
 
   useEffect(() => {
     if (!active) return;
-    void request();
+    const requestTimer = window.setTimeout(() => void request(), 0);
     const restore = () => {
       if (document.visibilityState === "visible") void request();
     };
     document.addEventListener("visibilitychange", restore);
-    return () => document.removeEventListener("visibilitychange", restore);
+    return () => {
+      window.clearTimeout(requestTimer);
+      document.removeEventListener("visibilitychange", restore);
+    };
   }, [active, request]);
 
   useEffect(
@@ -153,7 +157,7 @@ function GalleryPreview() {
       />
       <div className="gallery-preview-wash" />
       <div className="gallery-preview-label">
-        <span>PLATE 03 / 10</span>
+        <span>PLATE 003 / 180</span>
         <strong>Lady with an Ermine</strong>
         <small>Leonardo da Vinci · c. 1489–1491</small>
       </div>
@@ -240,16 +244,19 @@ export default function FrameApp() {
   const ActiveComponent = currentMode?.component;
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY) as ModeId | null;
-      if (stored && MODES.some((mode) => mode.id === stored)) {
-        setActiveMode(stored);
-        setIndexOpen(false);
+    const hydrationTimer = window.setTimeout(() => {
+      try {
+        const stored = window.localStorage.getItem(STORAGE_KEY) as ModeId | null;
+        if (stored && MODES.some((mode) => mode.id === stored)) {
+          setActiveMode(stored);
+          setIndexOpen(false);
+        }
+      } catch {
+        // The selector remains available when local storage is blocked.
       }
-    } catch {
-      // The selector remains available when local storage is blocked.
-    }
-    setHydrated(true);
+      setHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(hydrationTimer);
   }, []);
 
   useEffect(() => {
@@ -273,8 +280,11 @@ export default function FrameApp() {
 
   useEffect(() => {
     if (!activeMode || indexOpen) return;
-    revealControls();
-    return () => window.clearTimeout(hideTimer.current);
+    const revealTimer = window.setTimeout(revealControls, 0);
+    return () => {
+      window.clearTimeout(revealTimer);
+      window.clearTimeout(hideTimer.current);
+    };
   }, [activeMode, indexOpen, revealControls]);
 
   const selectMode = useCallback(

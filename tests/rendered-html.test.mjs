@@ -59,3 +59,24 @@ test("keeps the product modes explicit and the starter removed", async () => {
     access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)),
   );
 });
+
+test("ships the expanded, verified artwork and signal libraries", async () => {
+  const [paintings, artworks, signal, gallery, styles] = await Promise.all([
+    readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/data/artworks.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/gallery.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  const paintingRows = paintings.match(/^\s*\["Q\d+"/gm) ?? [];
+  const signalRows = signal.match(/^\s*\{ id: "[^"]+".+draw: [a-zA-Z]+ \},?$/gm) ?? [];
+
+  assert.ok(paintingRows.length >= 150, `expected at least 150 paintings, found ${paintingRows.length}`);
+  assert.ok(signalRows.length >= 18, `expected at least 18 signal scenes, found ${signalRows.length}`);
+  assert.match(paintings, /Copyrighted=False \/ Public domain/);
+  assert.match(artworks, /ARTWORK_DATASET_VERSION/);
+  assert.match(gallery, /gallery-artwork-matte/);
+  assert.match(gallery, /figcaption className="gallery-caption"/);
+  assert.match(styles, /grid-template-rows: minmax\(0, 3fr\) minmax\(0, 2fr\)/);
+});

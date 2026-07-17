@@ -1,6 +1,6 @@
 const SHELL_CACHE = "always-on-frame-shell-v1";
-const IMAGE_CACHE = "always-on-frame-images-v2";
-const MAX_IMAGES = 36;
+const IMAGE_CACHE = "always-on-frame-images-v1";
+const MAX_IMAGES = 24;
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -41,8 +41,12 @@ self.addEventListener("fetch", (event) => {
       fetch(request)
         .then(async (response) => {
           if (response.ok) {
-            const cache = await caches.open(SHELL_CACHE);
-            await cache.put(request, response.clone());
+            try {
+              const cache = await caches.open(SHELL_CACHE);
+              await cache.put(request, response.clone());
+            } catch {
+              // A full or unavailable cache must never block a valid response.
+            }
           }
           return response;
         })
@@ -61,8 +65,12 @@ self.addEventListener("fetch", (event) => {
         if (cached) return cached;
         const response = await fetch(request);
         if (response.ok || response.type === "opaque") {
-          await cache.put(request, response.clone());
-          await trimImages(cache);
+          try {
+            await cache.put(request, response.clone());
+            await trimImages(cache);
+          } catch {
+            // Treat image storage as an optimization on quota-limited tablets.
+          }
         }
         return response;
       }),
@@ -76,7 +84,13 @@ self.addEventListener("fetch", (event) => {
         const cached = await cache.match(request);
         if (cached) return cached;
         const response = await fetch(request);
-        if (response.ok) await cache.put(request, response.clone());
+        if (response.ok) {
+          try {
+            await cache.put(request, response.clone());
+          } catch {
+            // Keep serving the network response if Cache Storage is unavailable.
+          }
+        }
         return response;
       }),
     );
