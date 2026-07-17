@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://joansterjo-celonis.github.io/Screensaver/"),
   title: "Always-On Frame",
   description:
-    "A living portrait display for generative typography and Renaissance painting.",
+    "A living portrait display with 18 generative signal scenes and 180 verified public-domain paintings.",
   applicationName: "Always-On Frame",
   appleWebApp: {
     capable: true,
@@ -16,14 +16,14 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Always-On Frame",
     description:
-      "A living portrait display for generative typography and Renaissance painting.",
+      "A living portrait display with 18 generative signal scenes and 180 verified public-domain paintings.",
     type: "website",
     images: [
       {
         url: "https://joansterjo-celonis.github.io/Screensaver/og.png",
         width: 1731,
         height: 909,
-        alt: "Always-On Frame — generative typography meets Renaissance painting",
+        alt: "Always-On Frame — generative typography meets public-domain painting",
       },
     ],
   },
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Always-On Frame",
     description:
-      "A living portrait display for generative typography and Renaissance painting.",
+      "A living portrait display with 18 generative signal scenes and 180 verified public-domain paintings.",
     images: ["https://joansterjo-celonis.github.io/Screensaver/og.png"],
   },
 };

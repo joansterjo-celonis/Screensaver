@@ -430,6 +430,7 @@ a:focus-visible {
 }
 
 .gallery-mode {
+  --gallery-fade-depth: clamp(72px, 10vh, 118px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -452,6 +453,24 @@ a:focus-visible {
   background: #4a352e;
   background: color-mix(in srgb, var(--art-accent, #6b574a) 62%, #140d0b);
   box-shadow: inset 0 0 0 1px rgba(240, 231, 217, 0.12);
+}
+
+.gallery-image-stage::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--gallery-fade-depth);
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0,
+    rgba(22, 15, 13, 0.12) 18%,
+    rgba(22, 15, 13, 0.58) 62%,
+    #160f0d 100%
+  );
 }
 
 .gallery-backdrop {
@@ -482,7 +501,10 @@ a:focus-visible {
 .gallery-artwork-matte {
   position: absolute;
   z-index: 2;
-  inset: clamp(10px, 2.2vh, 24px) clamp(10px, 3.8vw, 30px);
+  top: clamp(10px, 2.2vh, 24px);
+  right: clamp(10px, 3.8vw, 30px);
+  bottom: var(--gallery-fade-depth);
+  left: clamp(10px, 3.8vw, 30px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -806,6 +828,10 @@ a:focus-visible {
 
   .gallery-plate {
     grid-template-rows: minmax(0, 8fr) minmax(0, 5fr);
+  }
+
+  .gallery-mode {
+    --gallery-fade-depth: clamp(48px, 8vh, 72px);
   }
 
   .gallery-caption {
