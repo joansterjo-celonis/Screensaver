@@ -170,6 +170,10 @@ test("ships the expanded artwork, signal and composition libraries", async () =>
   assert.match(serviceWorker, /isLocalArtwork \? ARTWORK_CACHE : IMAGE_CACHE/);
   assert.match(gallery, /gallery-artwork-matte/);
   assert.match(gallery, /figcaption className="gallery-caption"/);
+  assert.match(
+    styles,
+    /\.gallery-caption h1\s*\{[\s\S]*?line-height: 1\.08;/,
+  );
   assert.match(gallery, /current\.height \/ current\.width >= 1\.3/);
   assert.match(gallery, /navigateManually/);
   assert.match(gallery, /event\.clientX/);

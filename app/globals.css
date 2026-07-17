@@ -782,7 +782,7 @@ a:focus-visible {
   font-family: var(--font-serif);
   font-size: clamp(30px, 8.8vw, 64px);
   font-weight: 400;
-  line-height: 0.92;
+  line-height: 1.08;
   letter-spacing: -0.045em;
   text-wrap: balance;
   -webkit-box-orient: vertical;
