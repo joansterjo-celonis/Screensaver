@@ -83,7 +83,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(posterjo, /ArrowLeft/);
   assert.match(posterjo, /ArrowRight/);
   assert.match(posterjo, /posterjoArtworkUrl\(current\)/);
-  assert.doesNotMatch(posterjo, /\bfetch\s*\(|https?:\/\/|dribbble\.com/i);
+  assert.doesNotMatch(posterjo, /\bfetch\s*\(/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton|drizzle/);
 
   await assert.rejects(
@@ -189,7 +189,7 @@ test("ships the expanded artwork and signal libraries", async () => {
   assert.match(styles, /@media \(min-aspect-ratio: 4 \/ 3\)[\s\S]*?\.mode-list\s*\{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
 });
 
-test("keeps Posterjo local, cover-fitted and minimally captioned", async () => {
+test("keeps Posterjo local, cover-fitted and richly footered", async () => {
   const [posterjo, posterjoData, generatedData, styles] = await Promise.all([
     readFile(new URL("../app/modes/posterjo.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/data/posterjo.ts", import.meta.url), "utf8"),
@@ -202,21 +202,55 @@ test("keeps Posterjo local, cover-fitted and minimally captioned", async () => {
   assert.match(posterjoData, /import\.meta\.env\.BASE_URL/);
   assert.match(generatedData, /readonly title: string/);
   assert.match(generatedData, /readonly description: string/);
-  assert.match(posterjo, /figcaption className="posterjo-caption"/);
+  assert.match(
+    posterjo,
+    /figcaption className="posterjo-caption posterjo-footer"/,
+  );
   assert.match(posterjo, /className="posterjo-title"/);
   assert.match(posterjo, /className="posterjo-description"/);
-  assert.doesNotMatch(posterjo, /\bfetch\s*\(|https?:\/\/|dribbble\.com/i);
+  assert.match(posterjo, /src=\{imageUrl\}/);
+  assert.doesNotMatch(posterjo, /\bfetch\s*\(/);
+  assert.doesNotMatch(posterjo, /originalFileName/);
 
-  const captionStart = posterjo.indexOf('<figcaption className="posterjo-caption">');
-  const captionEnd = posterjo.indexOf("</figcaption>", captionStart);
-  assert.ok(captionStart >= 0 && captionEnd > captionStart);
-  const captionMarkup = posterjo.slice(captionStart, captionEnd);
-  assert.match(captionMarkup, /current\?\.title/);
-  assert.match(captionMarkup, /current\?\.description/);
+  const headerStart = posterjo.indexOf('<header className="posterjo-header">');
+  const headerEnd = posterjo.indexOf("</header>", headerStart);
+  assert.ok(headerStart >= 0 && headerEnd > headerStart);
+  const headerMarkup = posterjo.slice(headerStart, headerEnd);
   assert.doesNotMatch(
-    captionMarkup,
-    /sourceUrl|originalFileName|shotId|fileId|\bwidth\b|\bheight\b/,
-    "Posterjo captions must stay limited to title and description",
+    headerMarkup,
+    /formatCountdown|remaining|NEXT ARTWORK/i,
+    "the top Posterjo header must not carry the countdown",
+  );
+
+  const footerStart = posterjo.indexOf(
+    '<figcaption className="posterjo-caption posterjo-footer">',
+  );
+  const footerEnd = posterjo.indexOf("</figcaption>", footerStart);
+  assert.ok(footerStart >= 0 && footerEnd > footerStart);
+  const footerMarkup = posterjo.slice(footerStart, footerEnd);
+  assert.match(footerMarkup, /className="posterjo-footer-rule"/);
+  assert.match(footerMarkup, /className="posterjo-eyebrow"/);
+  assert.match(footerMarkup, /className="posterjo-byline"/);
+  assert.match(footerMarkup, /className="posterjo-meta"/);
+  assert.match(footerMarkup, /current\?\.title/);
+  assert.match(footerMarkup, /current\?\.description\s*(?:\?|&&)/);
+  assert.doesNotMatch(footerMarkup, /current\?\.description\s*\|\|/);
+  assert.match(posterjo, /activeIndex\s*\+\s*1/);
+  assert.match(footerMarkup, /ARTWORK/i);
+  assert.match(footerMarkup, /orderedArtworks\.length/);
+  assert.match(footerMarkup, /Joan Sterjo/i);
+  assert.match(footerMarkup, /current\??\.width/);
+  assert.match(footerMarkup, /current\??\.height/);
+  assert.match(footerMarkup, /href=\{current\??\.sourceUrl\}/);
+  assert.match(footerMarkup, /Dribbble/i);
+  assert.match(footerMarkup, /target="_blank"/);
+  assert.match(footerMarkup, /rel="[^"]*(?:noopener|noreferrer)[^"]*"/);
+  assert.match(footerMarkup, /formatCountdown\(remaining\)/);
+  assert.match(footerMarkup, /NEXT(?: ARTWORK)?/i);
+  assert.doesNotMatch(
+    footerMarkup,
+    /originalFileName|\.title\.(?:slice|substring)\(|(?:Webkit)?LineClamp|overflow:\s*"hidden"/,
+    "the Posterjo footer must show the full human-facing title, never a filename",
   );
 
   const artworkRule = styles.match(/\.posterjo-artwork\s*\{([^}]*)\}/)?.[1] ?? "";
@@ -224,6 +258,29 @@ test("keeps Posterjo local, cover-fitted and minimally captioned", async () => {
   assert.match(artworkRule, /\bheight:\s*100%;/);
   assert.match(artworkRule, /\bobject-fit:\s*cover;/);
   assert.doesNotMatch(styles, /\.posterjo-artwork[^\{]*\{[^}]*\bobject-fit:\s*(?:contain|scale-down)\b/);
+
+  const declarationsFor = (className) => [...styles.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, selectors]) => selectors.includes(`.${className}`))
+    .map(([, , declarations]) => declarations);
+  const titleRules = declarationsFor("posterjo-title");
+  assert.ok(titleRules.length > 0, "Posterjo title styling must remain explicit");
+  for (const declarations of titleRules) {
+    assert.doesNotMatch(
+      declarations,
+      /(?:-webkit-)?line-clamp|overflow:\s*hidden|text-overflow:\s*ellipsis/,
+      "Posterjo titles must remain fully visible rather than clamped",
+    );
+  }
+
+  const footerRule = declarationsFor("posterjo-footer-rule").join("\n");
+  const eyebrowRule = declarationsFor("posterjo-eyebrow").join("\n");
+  const bylineRule = declarationsFor("posterjo-byline").join("\n");
+  const metaRule = declarationsFor("posterjo-meta").join("\n");
+  assert.match(footerRule, /\b(?:background|border(?:-top)?):/);
+  assert.match(eyebrowRule, /\b(?:letter-spacing|text-transform|font-size):/);
+  assert.match(bylineRule, /\b(?:font-family|font-size|font-weight|letter-spacing):/);
+  assert.doesNotMatch(bylineRule, /display:\s*none|visibility:\s*hidden|opacity:\s*0(?:\D|$)/);
+  assert.match(metaRule, /\bdisplay:\s*(?:flex|grid);/);
 });
 
 test("anchors every Swikipedia caption and vertically centers full-width artwork", async () => {

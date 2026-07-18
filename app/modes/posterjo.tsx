@@ -188,9 +188,10 @@ export function PosterjoMode({
           <span>POSTERJO</span>
           <span className="posterjo-header-index">/ 03</span>
         </div>
-        <span className="posterjo-header-status">
-          NEXT ARTWORK / {formatCountdown(remaining)}
-        </span>
+        <div className="posterjo-header-status">
+          <span>LOCAL 4K ARCHIVE</span>
+          <span className="posterjo-status-dot" aria-hidden="true" />
+        </div>
       </header>
 
       <figure
@@ -242,11 +243,46 @@ export function PosterjoMode({
           )}
         </div>
 
-        <figcaption className="posterjo-caption">
+        <figcaption className="posterjo-caption posterjo-footer">
+          <div className="posterjo-footer-rule" aria-hidden="true" />
+          <p
+            className="posterjo-eyebrow"
+            aria-label={`Artwork ${activeIndex + 1} of ${orderedArtworks.length}`}
+          >
+            ARTWORK {String(activeIndex + 1).padStart(3, "0")} /{" "}
+            {String(orderedArtworks.length).padStart(3, "0")}
+          </p>
           <h1 id="posterjo-title" className="posterjo-title">
             {current?.title || "Posterjo"}
           </h1>
-          <p className="posterjo-description">{current?.description || ""}</p>
+          {current ? (
+            <div className="posterjo-byline">
+              <span>Joan Sterjo</span>
+              <span>
+                {current.width} × {current.height} px
+              </span>
+            </div>
+          ) : null}
+          {current?.description ? (
+            <p className="posterjo-description">{current.description}</p>
+          ) : null}
+          <div className="posterjo-meta">
+            <span>
+              {current ? (
+                <a
+                  href={current.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`View ${current.title} on Dribbble (opens in a new tab)`}
+                >
+                  Dribbble source ↗
+                </a>
+              ) : (
+                "Local archive"
+              )}
+            </span>
+            <span>NEXT ARTWORK / {formatCountdown(remaining)}</span>
+          </div>
         </figcaption>
       </figure>
 
