@@ -33,6 +33,8 @@ jobs:
         run: npm ci
       - name: Verify local artwork archive
         run: npm run artworks:verify
+      - name: Verify Posterjo archive
+        run: npm run posterjo:verify
       - name: Build static site
         run: npm run build
         env:

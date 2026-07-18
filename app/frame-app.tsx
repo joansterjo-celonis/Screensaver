@@ -13,11 +13,16 @@ import {
   type ReactNode,
 } from "react";
 import { localArtworkUrl, publicAssetUrl } from "./data/artworks";
+import {
+  POSTERJO_ARTWORKS,
+  posterjoArtworkUrl,
+} from "./data/posterjo";
 import { GalleryMode } from "./modes/gallery";
+import { PosterjoMode } from "./modes/posterjo";
 import { SignalField } from "./modes/signal-field";
 import { createPageLoadSeed } from "./shuffle";
 
-type ModeId = "signal" | "gallery";
+type ModeId = "signal" | "gallery" | "posterjo";
 type ModeDefinition = {
   id: ModeId;
   number: string;
@@ -39,6 +44,7 @@ type WakeLockNavigator = Navigator & {
 
 const STORAGE_KEY = "always-on-frame.mode.v1";
 const FULL_ARCHIVE_CACHE_MESSAGE = "CACHE_FULL_ARTWORK_ARCHIVE";
+const POSTERJO_ARCHIVE_CACHE_MESSAGE = "CACHE_POSTERJO_ARCHIVE";
 
 const MODES: ModeDefinition[] = [
   {
@@ -56,6 +62,14 @@ const MODES: ModeDefinition[] = [
     description: "A slow public-domain gallery spanning six centuries.",
     component: GalleryMode,
     preview: GalleryPreview,
+  },
+  {
+    id: "posterjo",
+    number: "03",
+    name: "Posterjo",
+    description: "Joan Sterjo’s 4K artwork archive, framed edge to edge.",
+    component: PosterjoMode,
+    preview: PosterjoPreview,
   },
 ];
 
@@ -168,6 +182,21 @@ function GalleryPreview() {
   );
 }
 
+function PosterjoPreview() {
+  const artwork = POSTERJO_ARTWORKS[0];
+
+  return (
+    <div className="posterjo-preview" aria-hidden="true">
+      {artwork && <img src={posterjoArtworkUrl(artwork)} alt="" />}
+      <div className="posterjo-preview-wash" />
+      <div className="posterjo-preview-label">
+        <span>POSTERJO / 4K</span>
+        <strong>{artwork?.title ?? "Posterjo"}</strong>
+      </div>
+    </div>
+  );
+}
+
 function ModeIndex({
   activeMode,
   onSelect,
@@ -225,7 +254,7 @@ function ModeIndex({
 
       <footer className="index-footer">
         <button type="button" onClick={onFullscreen}>ENTER FULLSCREEN</button>
-        <span>1–2 SELECT / F FULLSCREEN / I INDEX</span>
+        <span>1–3 SELECT / F FULLSCREEN / I INDEX</span>
         {activeMode && (
           <button type="button" onClick={onClose}>RETURN TO FRAME</button>
         )}
@@ -270,6 +299,7 @@ export default function FrameApp() {
 
   useEffect(() => {
     if (
+      (activeMode !== "gallery" && activeMode !== "posterjo") ||
       !("serviceWorker" in navigator) ||
       window.location.protocol !== "https:"
     ) {
@@ -277,29 +307,43 @@ export default function FrameApp() {
     }
 
     let disposed = false;
-    const requestFullArchiveWarm = () => {
+    const requestActiveArchiveWarm = () => {
       void navigator.serviceWorker.ready
         .then((registration) => {
           if (disposed) return;
-          registration.active?.postMessage({ type: FULL_ARCHIVE_CACHE_MESSAGE });
+          if (activeMode === "gallery") {
+            registration.active?.postMessage({ type: FULL_ARCHIVE_CACHE_MESSAGE });
+          } else {
+            registration.active?.postMessage({ type: POSTERJO_ARCHIVE_CACHE_MESSAGE });
+          }
         })
         .catch(() => undefined);
     };
-    const handleControllerChange = () => requestFullArchiveWarm();
+    const handleControllerChange = () => requestActiveArchiveWarm();
 
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
-    if (typeof navigator.storage?.persist === "function") {
-      void navigator.storage.persist().catch(() => undefined);
-    }
-    void navigator.serviceWorker
-      .register(publicAssetUrl("sw.js"), { scope: import.meta.env.BASE_URL })
-      .then(requestFullArchiveWarm)
-      .catch(() => undefined);
+    requestActiveArchiveWarm();
 
     return () => {
       disposed = true;
       navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
     };
+  }, [activeMode]);
+
+  useEffect(() => {
+    if (
+      !("serviceWorker" in navigator) ||
+      window.location.protocol !== "https:"
+    ) {
+      return;
+    }
+
+    if (typeof navigator.storage?.persist === "function") {
+      void navigator.storage.persist().catch(() => undefined);
+    }
+    void navigator.serviceWorker
+      .register(publicAssetUrl("sw.js"), { scope: import.meta.env.BASE_URL })
+      .catch(() => undefined);
   }, []);
 
   const revealControls = useCallback(() => {
@@ -342,6 +386,7 @@ export default function FrameApp() {
       const key = event.key.toLocaleLowerCase();
       if (key === "1") selectMode("signal");
       if (key === "2") selectMode("gallery");
+      if (key === "3") selectMode("posterjo");
       if (key === "i" || key === "escape") setIndexOpen((open) => !open);
       if (key === "f") enterFullscreen();
     };

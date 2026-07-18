@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://joansterjo-celonis.github.io/Screensaver/"),
   title: "Always-On Frame",
   description:
-    "A living display with 18 generative signal scenes and 300 verified public-domain paintings.",
+    "A living display of generative signal scenes, 300 verified public-domain paintings, and Joan Sterjo’s Posterjo artwork archive.",
   applicationName: "Always-On Frame",
   appleWebApp: {
     capable: true,
@@ -16,14 +16,14 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Always-On Frame",
     description:
-      "A living display with 18 generative signal scenes and 300 verified public-domain paintings.",
+      "Generative signal scenes, 300 verified public-domain paintings, and Joan Sterjo’s Posterjo artwork archive.",
     type: "website",
     images: [
       {
-        url: "https://joansterjo-celonis.github.io/Screensaver/og.png",
+        url: "https://joansterjo-celonis.github.io/Screensaver/og-posterjo.png",
         width: 1731,
         height: 909,
-        alt: "Always-On Frame — generative typography meets public-domain painting",
+        alt: "Always-On Frame — generative typography, public-domain painting, and Posterjo artwork",
       },
     ],
   },
@@ -31,8 +31,8 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Always-On Frame",
     description:
-      "A living display with 18 generative signal scenes and 300 verified public-domain paintings.",
-    images: ["https://joansterjo-celonis.github.io/Screensaver/og.png"],
+      "Generative signal scenes, 300 verified public-domain paintings, and Joan Sterjo’s Posterjo artwork archive.",
+    images: ["https://joansterjo-celonis.github.io/Screensaver/og-posterjo.png"],
   },
 };
 

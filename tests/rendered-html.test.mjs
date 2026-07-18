@@ -38,12 +38,13 @@ test("server-renders the always-on frame shell", async () => {
 });
 
 test("keeps the product modes explicit and the starter removed", async () => {
-  const [page, layout, frame, signal, gallery, packageJson] = await Promise.all([
+  const [page, layout, frame, signal, gallery, posterjo, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/gallery.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/posterjo.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
@@ -52,7 +53,14 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(layout, /300 verified public-domain paintings/);
   assert.match(frame, /Signal Field/);
   assert.match(frame, /Swikipedia/);
-  assert.match(frame, /1–2 SELECT/);
+  assert.match(frame, /Posterjo/);
+  assert.match(frame, /type ModeId = [^;]*"posterjo"/);
+  assert.match(frame, /id: "posterjo"/);
+  assert.match(frame, /1–3 SELECT/);
+  assert.match(
+    frame,
+    /if \(key === "3"\)\s*(?:\{\s*)?selectMode\("posterjo"\)/,
+  );
   assert.doesNotMatch(layout, /editorial compositions|Composition Atlas/i);
   assert.doesNotMatch(frame, /Composition Atlas|selectMode\("compositions"\)/);
   assert.match(frame, /inert=\{indexOpen\}/);
@@ -68,6 +76,14 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.equal(JSON.parse(packageJson).dependencies.geist, "^1.7.2");
   assert.match(gallery, /5 \* 60 \* 1000/);
   assert.match(gallery, /clearTimeout/);
+  assert.match(posterjo, /5 \* 60 \* 1000/);
+  assert.match(posterjo, /shuffledCycle\(/);
+  assert.match(posterjo, /navigateManually/);
+  assert.match(posterjo, /event\.clientX/);
+  assert.match(posterjo, /ArrowLeft/);
+  assert.match(posterjo, /ArrowRight/);
+  assert.match(posterjo, /posterjoArtworkUrl\(current\)/);
+  assert.doesNotMatch(posterjo, /\bfetch\s*\(|https?:\/\/|dribbble\.com/i);
   assert.doesNotMatch(packageJson, /react-loading-skeleton|drizzle/);
 
   await assert.rejects(
@@ -169,8 +185,45 @@ test("ships the expanded artwork and signal libraries", async () => {
   assert.match(styles, /object-fit: cover/);
   assert.doesNotMatch(styles, /\.gallery-next/);
   assert.doesNotMatch(styles, /\.composition-/);
-  assert.match(styles, /\.mode-list\s*\{[\s\S]*?grid-template-rows: repeat\(2, minmax\(0, 1fr\)\);/);
-  assert.match(styles, /@media \(min-aspect-ratio: 4 \/ 3\)[\s\S]*?\.mode-list\s*\{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(styles, /\.mode-list\s*\{[\s\S]*?grid-template-rows: repeat\(3, minmax\(0, 1fr\)\);/);
+  assert.match(styles, /@media \(min-aspect-ratio: 4 \/ 3\)[\s\S]*?\.mode-list\s*\{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+});
+
+test("keeps Posterjo local, cover-fitted and minimally captioned", async () => {
+  const [posterjo, posterjoData, generatedData, styles] = await Promise.all([
+    readFile(new URL("../app/modes/posterjo.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/data/posterjo.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/data/posterjo.generated.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(posterjoData, /POSTERJO_ARCHIVE_VERSION/);
+  assert.match(posterjoData, /POSTERJO_ARTWORKS/);
+  assert.match(posterjoData, /import\.meta\.env\.BASE_URL/);
+  assert.match(generatedData, /readonly title: string/);
+  assert.match(generatedData, /readonly description: string/);
+  assert.match(posterjo, /figcaption className="posterjo-caption"/);
+  assert.match(posterjo, /className="posterjo-title"/);
+  assert.match(posterjo, /className="posterjo-description"/);
+  assert.doesNotMatch(posterjo, /\bfetch\s*\(|https?:\/\/|dribbble\.com/i);
+
+  const captionStart = posterjo.indexOf('<figcaption className="posterjo-caption">');
+  const captionEnd = posterjo.indexOf("</figcaption>", captionStart);
+  assert.ok(captionStart >= 0 && captionEnd > captionStart);
+  const captionMarkup = posterjo.slice(captionStart, captionEnd);
+  assert.match(captionMarkup, /current\?\.title/);
+  assert.match(captionMarkup, /current\?\.description/);
+  assert.doesNotMatch(
+    captionMarkup,
+    /sourceUrl|originalFileName|shotId|fileId|\bwidth\b|\bheight\b/,
+    "Posterjo captions must stay limited to title and description",
+  );
+
+  const artworkRule = styles.match(/\.posterjo-artwork\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(artworkRule, /\bwidth:\s*100%;/);
+  assert.match(artworkRule, /\bheight:\s*100%;/);
+  assert.match(artworkRule, /\bobject-fit:\s*cover;/);
+  assert.doesNotMatch(styles, /\.posterjo-artwork[^\{]*\{[^}]*\bobject-fit:\s*(?:contain|scale-down)\b/);
 });
 
 test("anchors every Swikipedia caption and vertically centers full-width artwork", async () => {
@@ -803,6 +856,77 @@ test("warms the complete local archive and labels the copy that actually rendere
   );
 });
 
+test("pins and warms the complete Posterjo archive in its own cache", async () => {
+  const [frame, serviceWorker, manifestSource] = await Promise.all([
+    readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/posterjo/manifest.json", import.meta.url), "utf8"),
+  ]);
+  const manifest = JSON.parse(manifestSource);
+  const versionMatch = serviceWorker.match(
+    /const POSTERJO_ARCHIVE_VERSION = "([^"]+)";/,
+  );
+  const countMatch = serviceWorker.match(/const POSTERJO_ARCHIVE_COUNT = (\d+);/);
+  const batchSizeMatch = serviceWorker.match(/const POSTERJO_BATCH_SIZE = (\d+);/);
+
+  assert.ok(versionMatch, "service worker must pin a Posterjo archive version");
+  assert.ok(countMatch, "service worker must pin the complete Posterjo count");
+  assert.ok(batchSizeMatch, "service worker must bound Posterjo warming batches");
+  assert.equal(versionMatch[1], manifest.archiveVersion);
+  assert.equal(Number(countMatch[1]), manifest.count);
+  assert.ok(manifest.count > 0, "Posterjo must ship at least one qualifying 4K attachment");
+  assert.equal(manifest.files.length, manifest.count);
+  assert.equal(String(manifest.cutoff?.shotId), "9201225");
+  assert.equal(manifest.cutoff?.inclusive, true);
+  assert.ok(
+    Number(batchSizeMatch[1]) >= 1 && Number(batchSizeMatch[1]) <= 8,
+    `Posterjo archive warm batch must stay bounded, received ${batchSizeMatch[1]}`,
+  );
+
+  assert.ok(
+    serviceWorker.includes(
+      'const POSTERJO_CACHE = `always-on-frame-posterjo-${POSTERJO_ARCHIVE_VERSION}`;',
+    ),
+    "Posterjo must have an archive-versioned cache independent from Swikipedia",
+  );
+  assert.match(serviceWorker, /manifest\.archiveVersion !== POSTERJO_ARCHIVE_VERSION/);
+  assert.match(serviceWorker, /manifest\.count !== POSTERJO_ARCHIVE_COUNT/);
+  assert.match(serviceWorker, /manifest\.files\.length !== POSTERJO_ARCHIVE_COUNT/);
+  const strictPosterjoPattern =
+    '/^posterjo-\\d+-\\d+(?:-[a-f0-9]{12})?\\.webp$/';
+  assert.ok(
+    serviceWorker.includes(`!${strictPosterjoPattern}.test(file)`),
+    "service worker must reject malformed Posterjo filenames",
+  );
+  assert.ok(
+    serviceWorker.split(strictPosterjoPattern).length - 1 >= 2,
+    "manifest validation and local-request routing must share the strict Posterjo filename pattern",
+  );
+  assert.match(serviceWorker, /new Set\(files\)\.size !== POSTERJO_ARCHIVE_COUNT/);
+  assert.match(serviceWorker, /files\.slice\(index, index \+ POSTERJO_BATCH_SIZE\)/);
+  assert.match(serviceWorker, /index \+= POSTERJO_BATCH_SIZE/);
+  assert.match(
+    serviceWorker,
+    /new URL\(`posterjo\/\$\{file\}`, self\.registration\.scope\)/,
+  );
+  assert.match(
+    serviceWorker,
+    /posterjoUrl\.searchParams\.set\("v", POSTERJO_ARCHIVE_VERSION\)/,
+  );
+  assert.match(
+    serviceWorker,
+    /event\.data\?\.type !== POSTERJO_ARCHIVE_CACHE_MESSAGE[\s\S]*?event\.waitUntil\(requestPosterjoArchiveWarm\(\)\)/,
+  );
+  assert.match(
+    serviceWorker,
+    /if \(isLocalPosterjoUrl\(url\)\)[\s\S]*?caches\.open\(POSTERJO_CACHE\)/,
+  );
+  assert.match(
+    frame,
+    /registration\.active\?\.postMessage\(\{\s*type:\s*POSTERJO_ARCHIVE_CACHE_MESSAGE\s*\}\)/,
+  );
+});
+
 test("resumes the full service-worker archive after a transient artwork failure", async () => {
   const [serviceWorker, manifestSource] = await Promise.all([
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
@@ -903,6 +1027,118 @@ test("resumes the full service-worker archive after a transient artwork failure"
   }
 });
 
+test("resumes the Posterjo service-worker archive after a transient file failure", async () => {
+  const [serviceWorker, manifestSource] = await Promise.all([
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/posterjo/manifest.json", import.meta.url), "utf8"),
+  ]);
+  const manifest = JSON.parse(manifestSource);
+  const cacheStores = new Map();
+  const networkRequests = [];
+  const failingFile = manifest.files[Math.floor(manifest.files.length / 2)].file;
+  let failOnce = true;
+
+  const requestUrl = (request) =>
+    typeof request === "string" ? request : request.url;
+  const caches = {
+    async open(name) {
+      if (!cacheStores.has(name)) {
+        const entries = new Map();
+        cacheStores.set(name, {
+          entries,
+          async match(request) {
+            return entries.get(requestUrl(request))?.clone();
+          },
+          async put(request, response) {
+            entries.set(requestUrl(request), response.clone());
+          },
+          async keys() {
+            return [...entries.keys()].map((url) => new Request(url));
+          },
+          async delete(request) {
+            return entries.delete(requestUrl(request));
+          },
+        });
+      }
+      return cacheStores.get(name);
+    },
+    async keys() {
+      return [...cacheStores.keys()];
+    },
+    async delete(name) {
+      return cacheStores.delete(name);
+    },
+  };
+  const listeners = new Map();
+  const scope = "https://example.test/Screensaver/";
+  const context = createContext({
+    caches,
+    fetch: async (request) => {
+      const url = requestUrl(request);
+      networkRequests.push(url);
+      if (url.endsWith("/posterjo/manifest.json")) {
+        return new Response(manifestSource, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (failOnce && url.includes(`/${failingFile}?`)) {
+        return new Response("temporary failure", { status: 503 });
+      }
+      return new Response("verified Posterjo bytes", { status: 200 });
+    },
+    Request,
+    Response,
+    URL,
+    self: {
+      registration: { scope },
+      location: { origin: new URL(scope).origin },
+      clients: { claim: async () => undefined },
+      skipWaiting() {},
+      addEventListener(type, listener) {
+        listeners.set(type, listener);
+      },
+    },
+  });
+
+  runInContext(serviceWorker, context);
+  await runInContext("requestPosterjoArchiveWarm()", context);
+
+  const posterjoCacheName = `always-on-frame-posterjo-${manifest.archiveVersion}`;
+  const posterjoCache = cacheStores.get(posterjoCacheName);
+  assert.ok(posterjoCache, "the dedicated Posterjo cache must be created");
+  assert.equal(
+    posterjoCache.entries.size,
+    manifest.count - 1,
+    "one failed Posterjo file must not discard successful cache writes",
+  );
+
+  failOnce = false;
+  networkRequests.length = 0;
+  await runInContext("requestPosterjoArchiveWarm()", context);
+
+  assert.equal(
+    posterjoCache.entries.size,
+    manifest.count,
+    "a later Posterjo warm must fill the single remaining gap",
+  );
+  assert.deepEqual(
+    networkRequests.filter((url) =>
+      /\/posterjo\/posterjo-\d+-\d+(?:-[a-f0-9]{12})?\.webp\?/.test(url),
+    ),
+    [`${scope}posterjo/${failingFile}?v=${manifest.archiveVersion}`],
+    "a resumed Posterjo warm must download only the missing file",
+  );
+  for (const entry of manifest.files) {
+    assert.ok(
+      posterjoCache.entries.has(
+        `${scope}posterjo/${entry.file}?v=${manifest.archiveVersion}`,
+      ),
+      `${entry.id} must be cached under the exact app request URL`,
+    );
+  }
+});
+
 test("bundles an exact high-resolution local fallback for every painting", async () => {
   const [paintings, manifestSource, builtManifestSource, publicEntries, builtEntries] = await Promise.all([
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
@@ -958,6 +1194,127 @@ test("bundles an exact high-resolution local fallback for every painting", async
       `${entry.qid} built bytes must match the verified local master`,
     );
   }
+});
+
+test("bundles every verified Posterjo 4K file and its generated metadata", async () => {
+  const [generatedSource, manifestSource, builtManifestSource, publicEntries, builtEntries] = await Promise.all([
+    readFile(new URL("../app/data/posterjo.generated.ts", import.meta.url), "utf8"),
+    readFile(new URL("../public/posterjo/manifest.json", import.meta.url), "utf8"),
+    readFile(new URL("../dist/client/posterjo/manifest.json", import.meta.url), "utf8"),
+    readdir(new URL("../public/posterjo/", import.meta.url)),
+    readdir(new URL("../dist/client/posterjo/", import.meta.url)),
+  ]);
+  const recordsMatch = generatedSource.match(
+    /export const POSTERJO_ARTWORKS = (\[[\s\S]*\]) as const satisfies readonly PosterjoArtworkRecord\[\];/,
+  );
+  const generatedVersionMatch = generatedSource.match(
+    /export const POSTERJO_ARCHIVE_VERSION = "([^"]+)";/,
+  );
+  assert.ok(recordsMatch, "generated Posterjo records must remain machine-verifiable JSON");
+  assert.ok(generatedVersionMatch, "generated Posterjo data must pin its archive version");
+  const records = JSON.parse(recordsMatch[1]);
+  const manifest = JSON.parse(manifestSource);
+  const builtManifest = JSON.parse(builtManifestSource);
+  const expectedFiles = records.map((record) => {
+    assert.match(
+      record.file,
+      /^posterjo\/posterjo-\d+-\d+(?:-[a-f0-9]{12})?\.webp$/,
+    );
+    return record.file.slice("posterjo/".length);
+  }).sort();
+  const publicFiles = publicEntries
+    .filter((name) => /^posterjo-\d+-\d+(?:-[a-f0-9]{12})?\.webp$/.test(name))
+    .sort();
+  const builtFiles = builtEntries
+    .filter((name) => /^posterjo-\d+-\d+(?:-[a-f0-9]{12})?\.webp$/.test(name))
+    .sort();
+
+  assert.equal(manifest.archiveVersion, generatedVersionMatch[1]);
+  assert.equal(manifest.version, manifest.archiveVersion);
+  assert.equal(String(manifest.cutoff?.shotId), "9201225");
+  assert.equal(manifest.cutoff?.inclusive, true);
+  assert.ok(manifest.count > 0);
+  assert.equal(manifest.count, records.length);
+  assert.equal(manifest.files.length, records.length);
+  assert.equal(manifest.resolution.minimumSourceLongEdge, 3_840);
+  assert.equal(manifest.resolution.minimumSourcePixels, 3_840 * 2_160);
+  assert.equal(manifest.resolution.outputLongEdgeCap, 4_096);
+  assert.deepEqual(builtManifest, manifest, "built Posterjo manifest must match its verified source");
+  assert.deepEqual(publicFiles, expectedFiles);
+  assert.deepEqual(builtFiles, expectedFiles);
+  assert.deepEqual(manifest.files.map((entry) => entry.file).sort(), expectedFiles);
+  assert.equal(new Set(records.map((record) => record.id)).size, records.length);
+  assert.equal(new Set(records.map((record) => record.file)).size, records.length);
+
+  const recordsById = new Map(records.map((record) => [record.id, record]));
+  const manifestArchiveBytes = manifest.files.reduce(
+    (total, entry) => total + entry.bytes,
+    0,
+  );
+  let builtArchiveBytes = 0;
+  assert.ok(manifestArchiveBytes > 0, "Posterjo archive byte total must be positive");
+
+  for (const entry of manifest.files) {
+    const record = recordsById.get(entry.id);
+    assert.ok(record, `${entry.id} must exist in generated Posterjo data`);
+    assert.equal(record.shotId, entry.shotId);
+    assert.equal(record.fileId, entry.fileId);
+    assert.equal(record.title, entry.title);
+    assert.equal(record.description, entry.description);
+    assert.equal(record.file, `posterjo/${entry.file}`);
+    assert.equal(record.width, entry.width);
+    assert.equal(record.height, entry.height);
+    assert.equal(record.sourceUrl, entry.source.page);
+    assert.equal(record.originalFileName, entry.source.originalFileName);
+    assert.ok(record.title.trim().length > 0, `${entry.id} must retain its title`);
+    assert.equal(typeof record.description, "string", `${entry.id} must retain its description`);
+
+    assert.match(entry.file, /^posterjo-\d+-\d+(?:-[a-f0-9]{12})?\.webp$/);
+    assert.ok(entry.width > 0 && entry.height > 0, `${entry.id} must have valid dimensions`);
+    assert.ok(
+      Math.max(entry.source.width, entry.source.height) >= 3_840,
+      `${entry.id} source must retain a 4K-class long edge`,
+    );
+    assert.ok(
+      entry.source.width * entry.source.height >= 3_840 * 2_160,
+      `${entry.id} source must retain at least 4K UHD pixel area`,
+    );
+    assert.ok(
+      Math.max(entry.width, entry.height) >= 3_840 &&
+        Math.max(entry.width, entry.height) <= 4_096,
+      `${entry.id} output must retain its capped 4K-class long edge`,
+    );
+    assert.ok(
+      Math.abs(
+        entry.width / entry.height - entry.source.width / entry.source.height,
+      ) <= 0.001,
+      `${entry.id} output must preserve its source aspect ratio`,
+    );
+    assert.ok(entry.bytes > 0, `${entry.id} must not be empty`);
+    assert.ok(entry.bytes < 25 * 1024 * 1024, `${entry.id} must stay below 25 MiB`);
+    assert.match(entry.sha256, /^[a-f0-9]{64}$/);
+
+    const builtBytes = await readFile(
+      new URL(`../dist/client/posterjo/${entry.file}`, import.meta.url),
+    );
+    builtArchiveBytes += builtBytes.byteLength;
+    assert.equal(
+      builtBytes.byteLength,
+      entry.bytes,
+      `${entry.id} built byte count must match the verified manifest`,
+    );
+    assert.equal(
+      createHash("sha256").update(builtBytes).digest("hex"),
+      entry.sha256,
+      `${entry.id} built bytes must match the verified local master`,
+    );
+  }
+
+  assert.equal(
+    builtArchiveBytes,
+    manifestArchiveBytes,
+    "the built Posterjo archive total must exactly match its manifest",
+  );
 });
 
 test("builds deterministic non-repeating shuffled cycles", async () => {
