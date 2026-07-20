@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "records": {
+    "Q1247110": {
+      "artist": "Unknown artist, after Pieter Bruegel the Elder",
+      "year": "c. 1560s",
+      "reason": "The English article describes the Brussels painting as an early copy by an unknown artist after Bruegel's lost original.",
+      "source": "https://en.wikipedia.org/wiki/Landscape_with_the_Fall_of_Icarus"
+    },
+    "Q542066": {
+      "year": "c. 1594",
+      "reason": "The English article gives an approximate date rather than an exact year.",
+      "source": "https://en.wikipedia.org/wiki/Gabrielle_d%27Estr%C3%A9es_et_une_de_ses_s%C5%93urs"
+    },
+    "Q1813497": {
+      "year": "c. 1395–1399",
+      "reason": "The English article gives the diptych's narrower approximate date range.",
+      "source": "https://en.wikipedia.org/wiki/Wilton_Diptych"
+    },
+    "Q2155289": {
+      "artist": "Hieronymus Bosch or workshop",
+      "year": "c. 1502",
+      "reason": "The English article records the disputed Bosch-or-workshop attribution and approximate date.",
+      "source": "https://en.wikipedia.org/wiki/The_Conjurer_(painting)"
+    },
+    "Q2126369": {
+      "artist": "Workshop of Leonardo da Vinci",
+      "year": "c. 1507–1516",
+      "reason": "The English article identifies the Prado copy with Leonardo's workshop; Wikidata supplies the bounded creation interval.",
+      "source": "https://en.wikipedia.org/wiki/Mona_Lisa_(Prado)"
+    },
+    "Q1635039": {
+      "artist": "Andrea del Verrocchio",
+      "year": "c. 1470–1475",
+      "reason": "The English article attributes the work to Verrocchio and gives the approximate completion range.",
+      "source": "https://en.wikipedia.org/wiki/Tobias_and_the_Angel_(Verrocchio)"
+    },
+    "Q2512728": {
+      "artist": "Hieronymus Bosch or follower",
+      "year": "c. 1510–1515",
+      "reason": "The English article records the disputed Bosch-or-follower attribution; Wikidata supplies the bounded creation interval.",
+      "source": "https://en.wikipedia.org/wiki/The_Temptation_of_St_Anthony_(Bosch)"
+    },
+    "Q1195610": {
+      "artist": "Circle of Rembrandt",
+      "year": "c. 1650",
+      "reason": "The English article says the work is now considered to be by someone in Rembrandt's circle.",
+      "source": "https://en.wikipedia.org/wiki/The_Man_with_the_Golden_Helmet"
+    },
+    "Q3208135": {
+      "year": "1899–1900",
+      "reason": "The English article gives the painting's two-year creation range.",
+      "source": "https://en.wikipedia.org/wiki/The_Dance_of_Life_(Munch)"
+    },
+    "Q6728394": {
+      "year": "c. 1300",
+      "reason": "The best-precision Wikidata inception statement dates the work to circa 1300.",
+      "source": "https://www.wikidata.org/wiki/Q6728394"
+    }
+  }
+}

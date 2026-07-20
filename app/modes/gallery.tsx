@@ -14,25 +14,25 @@ import { classifyArtworkCopySource } from "../data/artwork-copy-source";
 import {
   ARTWORK_DATASET_VERSION,
   ARTWORK_SEEDS,
+  commonsRedirect,
   fallbackArtwork,
   localArtworkUrl,
+  type ArtworkSeed,
   type GalleryArtwork,
 } from "../data/artworks";
 import { shuffledCycle } from "../shuffle";
 import { resolveGalleryArtPlacement } from "./gallery-layout";
 
-const CACHE_KEY = "always-on-frame.gallery.v3";
+const CACHE_KEY = "always-on-frame.gallery.v4";
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const CYCLE_TIME = 5 * 60 * 1000;
-const API_BATCH_SIZE = 20;
 const ARTWORK_QIDS = ARTWORK_SEEDS.map(({ qid }) => qid);
+const ARTWORK_SEEDS_BY_QID = new Map(ARTWORK_SEEDS.map((seed) => [seed.qid, seed]));
 
 type WikiPage = {
   title: string;
   extract?: string;
   fullurl?: string;
-  pageimage?: string;
-  thumbnail?: { source: string };
 };
 
 type WikiResponse = {
@@ -43,24 +43,8 @@ type WikiResponse = {
   };
 };
 
-type CommonsMetadata = Record<string, { value?: string }>;
-
-type CommonsResponse = {
-  query?: {
-    pages?: Array<{
-      title: string;
-      imageinfo?: Array<{
-        thumburl?: string;
-        url?: string;
-        descriptionurl?: string;
-        extmetadata?: CommonsMetadata;
-      }>;
-    }>;
-  };
-};
-
 type CachedGallery = {
-  version: 3;
+  version: 4;
   datasetVersion: string;
   savedAt: number;
   artworks: GalleryArtwork[];
@@ -72,18 +56,6 @@ type VisibleCopyState = {
   key: string;
   source: VisibleCopySource;
 };
-
-function inBatches<T>(items: T[], size = API_BATCH_SIZE) {
-  const batches: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    batches.push(items.slice(index, index + size));
-  }
-  return batches;
-}
-
-function normalizeTitle(value: string) {
-  return value.replace(/^File:/i, "").replace(/_/g, " ").trim().toLocaleLowerCase();
-}
 
 function resolveAlias(title: string, aliases: Map<string, string>) {
   let resolved = title;
@@ -110,10 +82,11 @@ function readCache(): CachedGallery | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedGallery;
     if (
-      parsed.version !== 3 ||
+      parsed.version !== 4 ||
       parsed.datasetVersion !== ARTWORK_DATASET_VERSION ||
       !Array.isArray(parsed.artworks) ||
-      parsed.artworks.length !== ARTWORK_SEEDS.length
+      parsed.artworks.length !== ARTWORK_SEEDS.length ||
+      Date.now() - parsed.savedAt >= CACHE_TTL
     ) {
       return null;
     }
@@ -126,7 +99,7 @@ function readCache(): CachedGallery | null {
 function writeCache(artworks: GalleryArtwork[]) {
   try {
     const payload: CachedGallery = {
-      version: 3,
+      version: 4,
       datasetVersion: ARTWORK_DATASET_VERSION,
       savedAt: Date.now(),
       artworks,
@@ -137,140 +110,49 @@ function writeCache(artworks: GalleryArtwork[]) {
   }
 }
 
-async function fetchGallery(signal: AbortSignal): Promise<GalleryArtwork[]> {
-  const resolvedPages = (
-    await Promise.all(
-      inBatches(ARTWORK_SEEDS).map(async (seeds) => {
-        const wikipedia = new URL("https://en.wikipedia.org/w/api.php");
-        wikipedia.search = new URLSearchParams({
-          action: "query",
-          format: "json",
-          formatversion: "2",
-          origin: "*",
-          redirects: "1",
-          prop: "extracts|pageimages|info",
-          exintro: "1",
-          explaintext: "1",
-          exsentences: "3",
-          exlimit: "max",
-          inprop: "url",
-          piprop: "thumbnail|original|name",
-          pithumbsize: "1800",
-          pilicense: "free",
-          maxage: "86400",
-          smaxage: "86400",
-          titles: seeds.map((item) => item.articleTitle).join("|"),
-        }).toString();
+async function fetchGallery(
+  seeds: readonly ArtworkSeed[],
+  signal: AbortSignal,
+): Promise<GalleryArtwork[]> {
+  if (!seeds.length) return [];
+  const wikipedia = new URL("https://en.wikipedia.org/w/api.php");
+  wikipedia.search = new URLSearchParams({
+    action: "query",
+    format: "json",
+    formatversion: "2",
+    origin: "*",
+    redirects: "1",
+    prop: "extracts|info",
+    exintro: "1",
+    explaintext: "1",
+    exsentences: "3",
+    exlimit: "max",
+    inprop: "url",
+    maxage: "86400",
+    smaxage: "86400",
+    titles: seeds.map((item) => item.articleTitle).join("|"),
+  }).toString();
+  const result = await fetch(wikipedia, {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (!result.ok) throw new Error(`Wikipedia responded ${result.status}`);
+  const data = (await result.json()) as WikiResponse;
+  const pages = data.query?.pages ?? [];
+  const aliases = new Map<string, string>();
+  for (const item of data.query?.normalized ?? []) aliases.set(item.from, item.to);
+  for (const item of data.query?.redirects ?? []) aliases.set(item.from, item.to);
 
-        try {
-          const result = await fetch(wikipedia, {
-            signal,
-            headers: { Accept: "application/json" },
-          });
-          if (!result.ok) throw new Error(`Wikipedia responded ${result.status}`);
-          const data = (await result.json()) as WikiResponse;
-          const pages = data.query?.pages ?? [];
-          const aliases = new Map<string, string>();
-          for (const item of data.query?.normalized ?? []) aliases.set(item.from, item.to);
-          for (const item of data.query?.redirects ?? []) aliases.set(item.from, item.to);
-
-          return seeds.map((seed) => {
-            const resolved = resolveAlias(seed.articleTitle, aliases);
-            const page = pages.find(
-              (candidate) => candidate.title.toLocaleLowerCase() === resolved.toLocaleLowerCase(),
-            );
-            return { seed, page };
-          });
-        } catch (error) {
-          if (signal.aborted) throw error;
-          return seeds.map((seed) => ({ seed, page: undefined }));
-        }
-      }),
-    )
-  ).flat();
-
-  const sourceFiles = resolvedPages.map(({ seed }) => seed.fallbackFile);
-  if (!resolvedPages.some(({ page }) => page)) {
-    throw new Error("Wikipedia metadata was unavailable");
-  }
-  const licenseByFile = new Map<
-    string,
-    { imageUrl?: string; license?: string; licenseUrl?: string; copyrighted?: string }
-  >();
-
-  if (sourceFiles.length) {
-    const metadataBatches = await Promise.all(
-      inBatches(sourceFiles).map(async (files) => {
-        const commons = new URL("https://commons.wikimedia.org/w/api.php");
-        commons.search = new URLSearchParams({
-          action: "query",
-          format: "json",
-          formatversion: "2",
-          origin: "*",
-          prop: "imageinfo",
-          iiprop: "url|dimensions|mime|extmetadata",
-          iiurlwidth: "2800",
-          iiextmetadatalanguage: "en",
-          iiextmetadatafilter:
-            "LicenseShortName|LicenseUrl|UsageTerms|AttributionRequired|Copyrighted",
-          maxage: "86400",
-          smaxage: "86400",
-          titles: files.map((file) => `File:${file}`).join("|"),
-        }).toString();
-
-        try {
-          const result = await fetch(commons, {
-            signal,
-            headers: { Accept: "application/json" },
-          });
-          if (!result.ok) return [];
-          const data = (await result.json()) as CommonsResponse;
-          return data.query?.pages ?? [];
-        } catch (error) {
-          if (signal.aborted) throw error;
-          return [];
-        }
-      }),
+  return seeds.map((seed) => {
+    const resolved = resolveAlias(seed.articleTitle, aliases);
+    const page = pages.find(
+      (candidate) => candidate.title.toLocaleLowerCase() === resolved.toLocaleLowerCase(),
     );
-
-    for (const filePage of metadataBatches.flat()) {
-      const info = filePage.imageinfo?.[0];
-      const meta = info?.extmetadata;
-      licenseByFile.set(normalizeTitle(filePage.title), {
-        imageUrl: info?.thumburl ?? info?.url,
-        license: meta?.LicenseShortName?.value ?? meta?.UsageTerms?.value,
-        licenseUrl: meta?.LicenseUrl?.value ?? info?.descriptionurl,
-        copyrighted: meta?.Copyrighted?.value,
-      });
-    }
-  }
-
-  return resolvedPages.flatMap(({ seed, page }) => {
     const fallback = fallbackArtwork(seed);
-    if (!page) return [fallback];
-    const license = licenseByFile.get(normalizeTitle(seed.fallbackFile));
-    const licenseName = license?.license ?? "";
-    const verifiedPublicDomain =
-      Boolean(license?.imageUrl) &&
-      license?.copyrighted?.toLocaleLowerCase() === "false" &&
-      /public domain|cc0|public domain mark/i.test(licenseName);
+    if (!page) return fallback;
     const description = page.extract ? shorten(page.extract) : fallback.description;
     const articleUrl = page.fullurl ?? fallback.articleUrl;
-
-    if (!verifiedPublicDomain) {
-      return [{ ...fallback, articleUrl, description }];
-    }
-
-    return [
-      {
-        ...seed,
-        imageUrl: license?.imageUrl ?? fallback.imageUrl,
-        articleUrl,
-        description,
-        license: licenseName,
-        licenseUrl: license?.licenseUrl ?? fallback.licenseUrl,
-      },
-    ];
+    return { ...fallback, articleUrl, description };
   });
 }
 
@@ -304,39 +186,17 @@ export function GalleryMode({
     key: "",
     source: "loading",
   });
+  const metadataRequestsRef = useRef(new Set<string>());
 
   useEffect(() => {
-    const controller = new AbortController();
     let cacheHydration = 0;
     const cached = readCache();
     if (cached) {
       cacheHydration = window.setTimeout(() => {
-        if (controller.signal.aborted) return;
         setArtworks(cached.artworks);
       }, 0);
     }
-    const cacheFresh = cached && Date.now() - cached.savedAt < CACHE_TTL;
-    if (cacheFresh) {
-      return () => {
-        controller.abort();
-        window.clearTimeout(cacheHydration);
-      };
-    }
-
-    fetchGallery(controller.signal)
-      .then((collection) => {
-        if (!collection.length) return;
-        setArtworks(collection);
-        writeCache(collection);
-      })
-      .catch(() => {
-        // The seeded or cached collection remains fully usable offline.
-      });
-
-    return () => {
-      controller.abort();
-      window.clearTimeout(cacheHydration);
-    };
+    return () => window.clearTimeout(cacheHydration);
   }, []);
 
   const artworkDeck = useMemo(
@@ -406,10 +266,57 @@ export function GalleryMode({
     : 0;
   const current = orderedArtworks[activeIndex] ?? fallbackCollection[0];
   const isVerticalArtwork = current.height / current.width >= 1.3;
-  const fallbackUrl = localArtworkUrl(current.qid);
+  const metadataWindowQids = useMemo(() => {
+    if (!artworkDeck.length) return [];
+    return [-1, 0, 1].map(
+      (offset) => artworkDeck[
+        (activeIndex + offset + artworkDeck.length) % artworkDeck.length
+      ],
+    );
+  }, [activeIndex, artworkDeck]);
+  const metadataWindowKey = metadataWindowQids.join("|");
+
+  useEffect(() => {
+    if (paused) return;
+    const metadataRequests = metadataRequestsRef.current;
+    const qids = metadataWindowKey.split("|").filter(
+      (qid) => qid && !metadataRequests.has(qid),
+    );
+    if (!qids.length) return;
+    for (const qid of qids) metadataRequests.add(qid);
+    const seeds = qids
+      .map((qid) => ARTWORK_SEEDS_BY_QID.get(qid))
+      .filter((seed): seed is ArtworkSeed => Boolean(seed));
+    const controller = new AbortController();
+    let completed = false;
+    fetchGallery(seeds, controller.signal)
+      .then((enriched) => {
+        completed = true;
+        if (!enriched.length) return;
+        const byQid = new Map(enriched.map((artwork) => [artwork.qid, artwork]));
+        setArtworks((existing) => {
+          const next = existing.map((artwork) => byQid.get(artwork.qid) ?? artwork);
+          window.setTimeout(() => writeCache(next), 0);
+          return next;
+        });
+      })
+      .catch(() => {
+        for (const qid of qids) metadataRequests.delete(qid);
+      });
+    return () => {
+      controller.abort();
+      if (!completed) {
+        for (const qid of qids) metadataRequests.delete(qid);
+      }
+    };
+  }, [metadataWindowKey, paused]);
+
+  const recoveryUrl = current.localFallback
+    ? localArtworkUrl(current.qid)
+    : commonsRedirect(current.fallbackFile, 1_600);
   const remoteRequestKey = `${current.qid}:${current.imageUrl}`;
   const imageSource = failedRemoteRequests.has(remoteRequestKey)
-    ? fallbackUrl
+    ? recoveryUrl
     : current.imageUrl;
   const visibleCopyKey = `${current.qid}:${imageSource}`;
   const visibleCopySource = visibleCopy.key === visibleCopyKey
@@ -464,9 +371,11 @@ export function GalleryMode({
       const preloader = new Image();
       preloader.decoding = "async";
       preloader.onerror = () => {
-        if (preloader.dataset.recovery === "local") return;
-        preloader.dataset.recovery = "local";
-        preloader.src = localArtworkUrl(adjacent.qid);
+        if (preloader.dataset.recovery) return;
+        preloader.dataset.recovery = adjacent.localFallback ? "local" : "commons";
+        preloader.src = adjacent.localFallback
+          ? localArtworkUrl(adjacent.qid)
+          : commonsRedirect(adjacent.fallbackFile, 1_600);
       };
       preloader.src = adjacent.imageUrl;
     }
@@ -567,7 +476,7 @@ export function GalleryMode({
                   event.currentTarget.currentSrc || imageSource,
                   window.location.href,
                 );
-                if (failedSource !== "local") {
+                if (failedSource !== "local" && imageSource === current.imageUrl) {
                   setFailedRemoteRequests((failed) => {
                     if (failed.has(remoteRequestKey)) return failed;
                     const next = new Set(failed);

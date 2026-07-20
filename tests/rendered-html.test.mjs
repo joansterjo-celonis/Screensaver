@@ -50,7 +50,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
 
   assert.match(page, /<FrameApp \/>/);
   assert.match(layout, /title: "Always-On Frame"/);
-  assert.match(layout, /300 verified public-domain paintings/);
+  assert.match(layout, /1,024 verified public-domain paintings/);
   assert.match(frame, /Signal Field/);
   assert.match(frame, /Swikipedia/);
   assert.match(frame, /Posterjo/);
@@ -67,7 +67,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(frame, /paused=\{indexOpen\}/);
   assert.match(frame, /createPageLoadSeed\(\)/);
   assert.match(frame, /shuffleSeed=\{shuffleSeed\}/);
-  assert.match(frame, /PLATE 003 \/ 300/);
+  assert.match(frame, /PLATE 003 \/ 1024/);
   assert.match(signal, /requestAnimationFrame/);
   assert.match(signal, /cancelAnimationFrame/);
   assert.match(signal, /getBoundingClientRect/);
@@ -95,8 +95,10 @@ test("keeps the product modes explicit and the starter removed", async () => {
 });
 
 test("ships the expanded artwork and signal libraries", async () => {
-  const [paintings, artworks, frame, signal, gallery, styles, serviceWorker] = await Promise.all([
+  const [paintings, inventorySource, overridesSource, artworks, frame, signal, gallery, styles, serviceWorker] = await Promise.all([
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/data/painting-inventory.json", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/data/painting-overrides.json", import.meta.url), "utf8"),
     readFile(new URL("../app/data/artworks.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
@@ -111,24 +113,57 @@ test("ships the expanded artwork and signal libraries", async () => {
   );
   const signalRows = signal.match(/^\s*\{ id: "[^"]+".+draw: [a-zA-Z]+ \},?$/gm) ?? [];
 
-  assert.equal(paintingRows.length, 300, `expected exactly 300 paintings, found ${paintingRows.length}`);
-  assert.equal(new Set(paintingRows.map((row) => row[0])).size, 300, "painting QIDs must be unique");
-  assert.equal(new Set(paintingRows.map((row) => row[1])).size, 300, "Wikipedia articles must be unique");
-  assert.equal(new Set(paintingRows.map((row) => row[5])).size, 300, "Commons files must be unique");
-  for (const row of paintingRows) {
+  const inventory = JSON.parse(inventorySource);
+  const overrides = JSON.parse(overridesSource);
+  assert.equal(paintingRows.length, 1_024, `expected exactly 1,024 paintings, found ${paintingRows.length}`);
+  assert.equal(new Set(paintingRows.map((row) => row[0])).size, 1_024, "painting QIDs must be unique");
+  assert.equal(new Set(paintingRows.map((row) => row[1])).size, 1_024, "Wikipedia articles must be unique");
+  assert.equal(new Set(paintingRows.map((row) => row[5])).size, 1_024, "Commons files must be unique");
+  assert.equal(paintingRows.filter((row) => row[9]).length, 300, "exactly 300 paintings must have local fallbacks");
+  for (const [index, row] of paintingRows.entries()) {
+    assert.equal(row.length, 10, `${row[0]} must use the complete catalog tuple`);
+    assert.equal(row[9], index < 300, `${row[0]} must have the expected fallback policy`);
     assert.ok(row[6] * row[7] >= 1_000_000, `${row[0]} must be at least one megapixel`);
     assert.ok(Math.min(row[6], row[7]) >= 750, `${row[0]} must have a 750px short edge`);
+    assert.match(row[8], /^https:\/\//, `${row[0]} must include its verified license URL`);
+    if (index >= 300) {
+      assert.ok(row[6] * row[7] >= 6_000_000, `${row[0]} addition must be at least six megapixels`);
+      assert.ok(Math.min(row[6], row[7]) >= 2_160, `${row[0]} addition must have a 2160px short edge`);
+    }
+  }
+  assert.equal(inventory.count, 1_024);
+  assert.equal(inventory.records.length, 1_024);
+  assert.equal(inventory.policy.minimumAddedShortEdge, 2_160);
+  assert.equal(inventory.policy.minimumAddedPixels, 6_000_000);
+  assert.equal(inventory.policy.maximumWorksPerArtist, 8);
+  assert.equal(inventory.policy.curatorOverrides, "scripts/data/painting-overrides.json");
+  assert.ok(inventory.records.every((record) => /^[a-f0-9]{40}$/.test(record.commons.sha1)));
+  assert.ok(inventory.records.every((record) => record.commons.copyrighted.toLowerCase() === "false"));
+  assert.ok(paintingRows.slice(300).every((row) => row[4] !== "Date unknown"));
+  assert.equal(overrides.version, 1);
+  for (const [qid, override] of Object.entries(overrides.records)) {
+    const row = paintingRows.find((candidate) => candidate[0] === qid);
+    const record = inventory.records.find((candidate) => candidate.qid === qid);
+    assert.ok(row && record, `${qid} override must target a selected record`);
+    if (override.title) assert.equal(row[2], override.title);
+    if (override.artist) assert.equal(row[3], override.artist);
+    if (override.year) assert.equal(row[4], override.year);
+    assert.equal(record.title, row[2]);
+    assert.equal(record.artist, row[3]);
+    assert.equal(record.year, row[4]);
   }
   assert.ok(signalRows.length >= 18, `expected at least 18 signal scenes, found ${signalRows.length}`);
-  assert.match(paintings, /Copyrighted=False \/ Public domain/);
+  assert.match(paintings, /Copyrighted=False and public domain\/CC0/);
   assert.match(artworks, /ARTWORK_DATASET_VERSION/);
   assert.match(artworks, /LOCAL_ARTWORK_ARCHIVE_VERSION = "wikimedia-2026-07-17-4k1"/);
-  assert.match(artworks, /imageUrl: localArtworkUrl\(seed\.qid\)/);
+  assert.match(artworks, /seed\.localFallback[\s\S]*?localArtworkUrl\(seed\.qid\)[\s\S]*?commonsArtworkUrl\(seed\)/);
   assert.match(artworks, /import\.meta\.env\.BASE_URL/);
   assert.match(frame, /localArtworkUrl\("Q474338"\)/);
   assert.match(frame, /serviceWorker[\s\S]*?register\(publicAssetUrl\("sw\.js"\), \{ scope: import\.meta\.env\.BASE_URL \}\)/);
-  assert.match(gallery, /const sourceFiles = resolvedPages\.map\(\(\{ seed \}\) => seed\.fallbackFile\)/);
-  assert.match(gallery, /const fallbackUrl = localArtworkUrl\(current\.qid\)/);
+  assert.match(gallery, /const metadataWindowQids = useMemo/);
+  assert.match(gallery, /fetchGallery\(seeds, controller\.signal\)/);
+  assert.doesNotMatch(gallery, /commons\.wikimedia\.org\/w\/api\.php/);
+  assert.match(gallery, /current\.localFallback[\s\S]*?localArtworkUrl\(current\.qid\)/);
   assert.match(serviceWorker, /isLocalArtwork \? ARTWORK_CACHE : IMAGE_CACHE/);
   assert.doesNotMatch(serviceWorker, /composition-atlas|composition-overlays/i);
   assert.match(gallery, /gallery-artwork-matte/);
@@ -302,7 +337,7 @@ test("anchors every Swikipedia caption and vertically centers full-width artwork
     [1280, 480],
   ];
 
-  assert.equal(paintings.length, 300);
+  assert.equal(paintings.length, 1_024);
   for (const [viewportWidth, viewportHeight] of viewports) {
     const metrics = resolveGalleryLayoutMetrics(viewportHeight);
     assert.ok(metrics.headerSafe > 0);
@@ -1196,7 +1231,7 @@ test("resumes the Posterjo service-worker archive after a transient file failure
   }
 });
 
-test("bundles an exact high-resolution local fallback for every painting", async () => {
+test("bundles an exact high-resolution local fallback for the offline core", async () => {
   const [paintings, manifestSource, builtManifestSource, publicEntries, builtEntries] = await Promise.all([
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
     readFile(new URL("../public/artworks/manifest.json", import.meta.url), "utf8"),
@@ -1209,7 +1244,7 @@ test("bundles an exact high-resolution local fallback for every painting", async
   );
   const manifest = JSON.parse(manifestSource);
   const builtManifest = JSON.parse(builtManifestSource);
-  const expectedFiles = rows.map((row) => `${row[0]}.webp`).sort();
+  const expectedFiles = rows.filter((row) => row[9]).map((row) => `${row[0]}.webp`).sort();
   const publicFiles = publicEntries.filter((name) => /^Q\d+\.webp$/.test(name)).sort();
   const builtFiles = builtEntries.filter((name) => /^Q\d+\.webp$/.test(name)).sort();
 

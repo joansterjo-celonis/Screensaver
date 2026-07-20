@@ -13,6 +13,7 @@ export type ArtworkSeed = {
   license: string;
   licenseUrl: string;
   descriptionUrl: string;
+  localFallback: boolean;
 };
 
 export type GalleryArtwork = ArtworkSeed & {
@@ -57,6 +58,21 @@ export function commonsRedirect(fileName: string, width = 1600) {
   return `https://commons.wikimedia.org/wiki/Special:Redirect/file/${encodeURIComponent(fileName)}?width=${width}`;
 }
 
+export function commonsArtworkUrl(seed: ArtworkSeed) {
+  const landscape = seed.width >= seed.height;
+  const sourceShort = Math.min(seed.width, seed.height);
+  const sourceLong = Math.max(seed.width, seed.height);
+  const aspectRatio = sourceLong / sourceShort;
+  const longEdgeCap = aspectRatio > 6 ? 8_192 : 4_096;
+  let targetShort = Math.min(sourceShort, 2_160);
+  let targetLong = Math.max(1, Math.round(sourceLong * targetShort / sourceShort));
+  if (targetLong > longEdgeCap) {
+    targetLong = longEdgeCap;
+    targetShort = Math.max(1, Math.round(sourceShort * longEdgeCap / sourceLong));
+  }
+  return commonsRedirect(seed.fallbackFile, landscape ? targetLong : targetShort);
+}
+
 export function publicAssetUrl(relativePath: string) {
   return `${import.meta.env.BASE_URL}${relativePath.replace(/^\/+/, "")}`;
 }
@@ -68,7 +84,9 @@ export function localArtworkUrl(qid: string) {
 export function fallbackArtwork(seed: ArtworkSeed): GalleryArtwork {
   return {
     ...seed,
-    imageUrl: localArtworkUrl(seed.qid),
+    imageUrl: seed.localFallback
+      ? localArtworkUrl(seed.qid)
+      : commonsArtworkUrl(seed),
     articleUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(seed.articleTitle.replace(/ /g, "_"))}`,
     description: `${seed.title} is a work by ${seed.artist}, presented from a verified public-domain collection sourced through Wikidata and Wikimedia Commons.`,
   };

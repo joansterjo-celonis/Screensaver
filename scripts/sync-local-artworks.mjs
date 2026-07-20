@@ -32,6 +32,7 @@ const ARTWORK_DIR = join(REPO_ROOT, "public", "artworks");
 const MANIFEST_PATH = join(ARTWORK_DIR, "manifest.json");
 
 const EXPECTED_RECORDS = 300;
+const EXPECTED_CATALOG_RECORDS = 1_024;
 const ARCHIVE_VERSION = "wikimedia-2026-07-17-4k1";
 const SHORT_EDGE_TARGET = 2_160;
 const STANDARD_LONG_EDGE_CAP = 4_096;
@@ -152,22 +153,40 @@ async function loadPaintingRecords() {
     );
   }
 
-  if (!Array.isArray(tuples) || tuples.length !== EXPECTED_RECORDS) {
+  if (!Array.isArray(tuples) || tuples.length !== EXPECTED_CATALOG_RECORDS) {
     throw new PipelineError(
-      `Expected exactly ${EXPECTED_RECORDS} painting tuples, found ${tuples?.length ?? "invalid data"}`,
+      `Expected exactly ${EXPECTED_CATALOG_RECORDS} painting tuples, found ${tuples?.length ?? "invalid data"}`,
     );
   }
 
-  const records = tuples.map((tuple, index) => {
-    if (!Array.isArray(tuple) || tuple.length !== 8) {
+  const catalog = tuples.map((tuple, index) => {
+    if (!Array.isArray(tuple) || tuple.length !== 10) {
       throw new PipelineError(
-        `Painting tuple ${index + 1} must contain exactly 8 fields`,
+        `Painting tuple ${index + 1} must contain exactly 10 fields`,
       );
     }
 
-    const [qid, articleTitle, title, artist, year, fallbackFile, width, height] =
-      tuple;
-    const stringFields = { qid, articleTitle, title, artist, year, fallbackFile };
+    const [
+      qid,
+      articleTitle,
+      title,
+      artist,
+      year,
+      fallbackFile,
+      width,
+      height,
+      licenseUrl,
+      localFallback,
+    ] = tuple;
+    const stringFields = {
+      qid,
+      articleTitle,
+      title,
+      artist,
+      year,
+      fallbackFile,
+      licenseUrl,
+    };
     for (const [field, value] of Object.entries(stringFields)) {
       if (typeof value !== "string" || value.trim() === "") {
         throw new PipelineError(
@@ -177,6 +196,11 @@ async function loadPaintingRecords() {
     }
     if (!/^Q\d+$/u.test(qid)) {
       throw new PipelineError(`Painting tuple ${index + 1} has invalid QID ${qid}`);
+    }
+    if (typeof localFallback !== "boolean") {
+      throw new PipelineError(
+        `Painting tuple ${index + 1} has invalid localFallback`,
+      );
     }
     if (
       !Number.isSafeInteger(width) ||
@@ -198,12 +222,20 @@ async function loadPaintingRecords() {
       fallbackFile,
       width,
       height,
+      localFallback,
     };
   });
 
-  assertUnique(records, "qid", "QID");
-  assertUnique(records, "articleTitle", "article title", normaliseKey);
-  assertUnique(records, "fallbackFile", "Commons filename", normaliseKey);
+  assertUnique(catalog, "qid", "QID");
+  assertUnique(catalog, "articleTitle", "article title", normaliseKey);
+  assertUnique(catalog, "fallbackFile", "Commons filename", normaliseKey);
+  const records = catalog.filter((record) => record.localFallback);
+  if (records.length !== EXPECTED_RECORDS) {
+    throw new PipelineError(
+      `Expected exactly ${EXPECTED_RECORDS} local fallback records, found ${records.length}`,
+    );
+  }
+
   return records;
 }
 
