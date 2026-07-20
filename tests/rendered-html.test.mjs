@@ -4,6 +4,8 @@ import { access, readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import { createContext, runInContext } from "node:vm";
 
+const EXPECTED_PAINTING_COUNT = 2_048;
+
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
@@ -50,7 +52,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
 
   assert.match(page, /<FrameApp \/>/);
   assert.match(layout, /title: "Always-On Frame"/);
-  assert.match(layout, /1,024 verified public-domain paintings/);
+  assert.match(layout, /2,048 verified public-domain paintings/);
   assert.match(frame, /Signal Field/);
   assert.match(frame, /Swikipedia/);
   assert.match(frame, /Posterjo/);
@@ -67,7 +69,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(frame, /paused=\{indexOpen\}/);
   assert.match(frame, /createPageLoadSeed\(\)/);
   assert.match(frame, /shuffleSeed=\{shuffleSeed\}/);
-  assert.match(frame, /PLATE 003 \/ 1024/);
+  assert.match(frame, /PLATE 003 \/ 2048/);
   assert.match(signal, /requestAnimationFrame/);
   assert.match(signal, /cancelAnimationFrame/);
   assert.match(signal, /getBoundingClientRect/);
@@ -115,10 +117,10 @@ test("ships the expanded artwork and signal libraries", async () => {
 
   const inventory = JSON.parse(inventorySource);
   const overrides = JSON.parse(overridesSource);
-  assert.equal(paintingRows.length, 1_024, `expected exactly 1,024 paintings, found ${paintingRows.length}`);
-  assert.equal(new Set(paintingRows.map((row) => row[0])).size, 1_024, "painting QIDs must be unique");
-  assert.equal(new Set(paintingRows.map((row) => row[1])).size, 1_024, "Wikipedia articles must be unique");
-  assert.equal(new Set(paintingRows.map((row) => row[5])).size, 1_024, "Commons files must be unique");
+  assert.equal(paintingRows.length, EXPECTED_PAINTING_COUNT, `expected exactly 2,048 paintings, found ${paintingRows.length}`);
+  assert.equal(new Set(paintingRows.map((row) => row[0])).size, EXPECTED_PAINTING_COUNT, "painting QIDs must be unique");
+  assert.equal(new Set(paintingRows.map((row) => row[1])).size, EXPECTED_PAINTING_COUNT, "Wikipedia articles must be unique");
+  assert.equal(new Set(paintingRows.map((row) => row[5])).size, EXPECTED_PAINTING_COUNT, "Commons files must be unique");
   assert.equal(paintingRows.filter((row) => row[9]).length, 300, "exactly 300 paintings must have local fallbacks");
   for (const [index, row] of paintingRows.entries()) {
     assert.equal(row.length, 10, `${row[0]} must use the complete catalog tuple`);
@@ -131,8 +133,8 @@ test("ships the expanded artwork and signal libraries", async () => {
       assert.ok(Math.min(row[6], row[7]) >= 2_160, `${row[0]} addition must have a 2160px short edge`);
     }
   }
-  assert.equal(inventory.count, 1_024);
-  assert.equal(inventory.records.length, 1_024);
+  assert.equal(inventory.count, EXPECTED_PAINTING_COUNT);
+  assert.equal(inventory.records.length, EXPECTED_PAINTING_COUNT);
   assert.equal(inventory.policy.minimumAddedShortEdge, 2_160);
   assert.equal(inventory.policy.minimumAddedPixels, 6_000_000);
   assert.equal(inventory.policy.maximumWorksPerArtist, 8);
@@ -337,7 +339,7 @@ test("anchors every Swikipedia caption and vertically centers full-width artwork
     [1280, 480],
   ];
 
-  assert.equal(paintings.length, 1_024);
+  assert.equal(paintings.length, EXPECTED_PAINTING_COUNT);
   for (const [viewportWidth, viewportHeight] of viewports) {
     const metrics = resolveGalleryLayoutMetrics(viewportHeight);
     assert.ok(metrics.headerSafe > 0);
@@ -372,6 +374,169 @@ test("anchors every Swikipedia caption and vertically centers full-width artwork
       }
     }
   }
+});
+
+test("prioritizes randomized Swikipedia decks for the viewport orientation", async () => {
+  const [galleryDeckModule, shuffleModule] = await Promise.all([
+    import(new URL("../app/modes/gallery-deck.ts", import.meta.url).href),
+    import(new URL("../app/shuffle.ts", import.meta.url).href),
+  ]);
+  const {
+    advanceGalleryDeckPosition,
+    currentGalleryDeckQid,
+    galleryDeckWindowQids,
+    orderGalleryDeckForViewport,
+    reorientGalleryDeckRemainder,
+    resolveGalleryViewportOrientation,
+    retreatGalleryDeckPosition,
+  } = galleryDeckModule.default ?? galleryDeckModule;
+  const { shuffledCycle } = shuffleModule.default ?? shuffleModule;
+  const artworks = [
+    { qid: "portrait-a", width: 800, height: 1_200 },
+    { qid: "portrait-b", width: 900, height: 1_600 },
+    { qid: "portrait-c", width: 1_000, height: 1_400 },
+    { qid: "landscape-a", width: 1_200, height: 800 },
+    { qid: "landscape-b", width: 1_600, height: 900 },
+    { qid: "landscape-c", width: 1_400, height: 1_000 },
+    { qid: "square-a", width: 1_000, height: 1_000 },
+    { qid: "square-b", width: 800, height: 800 },
+  ];
+  const qids = [...artworks.map(({ qid }) => qid), "unmeasured"];
+  const expectedQids = [...qids].sort();
+  const orientationByQid = new Map(
+    artworks.map(({ qid, width, height }) => [
+      qid,
+      height > width ? "portrait" : width > height ? "landscape" : "neutral",
+    ]),
+  );
+  const bucketFor = (qid) => orientationByQid.get(qid) ?? "neutral";
+
+  assert.equal(resolveGalleryViewportOrientation(1_080, 1_920), "portrait");
+  assert.equal(resolveGalleryViewportOrientation(1_920, 1_080), "landscape");
+  assert.equal(resolveGalleryViewportOrientation(1_200, 1_200), "landscape");
+  assert.equal(
+    resolveGalleryViewportOrientation(1_200, 1_200, "portrait"),
+    "portrait",
+    "a square viewport must retain its previous orientation",
+  );
+
+  for (const viewportOrientation of ["portrait", "landscape"]) {
+    const oppositeOrientation = viewportOrientation === "portrait"
+      ? "landscape"
+      : "portrait";
+    const decks = [];
+
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      const randomized = shuffledCycle(
+        qids,
+        "gallery:orientation-contract",
+        cycle,
+      );
+      const randomizedSnapshot = [...randomized];
+      const deck = orderGalleryDeckForViewport(
+        randomized,
+        artworks,
+        viewportOrientation,
+      );
+      const expectedBucketOrder = [
+        ...randomized.filter((qid) => bucketFor(qid) === viewportOrientation),
+        ...randomized.filter((qid) => bucketFor(qid) === "neutral"),
+        ...randomized.filter((qid) => bucketFor(qid) === oppositeOrientation),
+      ];
+
+      assert.deepEqual(randomized, randomizedSnapshot, "orientation ordering must not mutate the shuffled cycle");
+      assert.deepEqual(deck, expectedBucketOrder, "bucket ordering must retain randomized order within each orientation");
+      assert.equal(new Set(deck).size, qids.length, "every ordered cycle must remain unique");
+      assert.deepEqual([...deck].sort(), expectedQids, "every ordered cycle must retain the full catalog");
+      assert.deepEqual(
+        orderGalleryDeckForViewport(randomized, artworks, viewportOrientation),
+        deck,
+        "the same shuffled cycle and viewport must produce the same deck",
+      );
+
+      if (cycle > 0) {
+        assert.notDeepEqual(deck, decks[cycle - 1], "successive cycles must retain their reshuffle");
+        assert.notEqual(
+          deck[0],
+          decks[cycle - 1].at(-1),
+          "orientation partitioning must not reintroduce a cycle-boundary repeat",
+        );
+      }
+      decks.push(deck);
+    }
+  }
+
+  const createDeck = (cycle, orientation) => orderGalleryDeckForViewport(
+    shuffledCycle(qids, "gallery:rotation-contract", cycle),
+    artworks,
+    orientation,
+  );
+  let position = {
+    cycle: 0,
+    index: 0,
+    deck: createDeck(0, "portrait"),
+    history: [],
+    orientation: "portrait",
+  };
+  const shown = [currentGalleryDeckQid(position)];
+  for (let step = 0; step < qids.length * 4 && shown.length < qids.length; step += 1) {
+    const orientation = step % 2 === 0 ? "landscape" : "portrait";
+    const visitedPrefix = position.deck.slice(0, position.index + 1);
+    const previousQid = currentGalleryDeckQid(position);
+    position = reorientGalleryDeckRemainder(position, orientation, artworks);
+    const currentQid = currentGalleryDeckQid(position);
+
+    assert.deepEqual(
+      position.deck.slice(0, visitedPrefix.length),
+      visitedPrefix,
+      "rotation must never reorder the already visited prefix",
+    );
+    if (currentQid !== previousQid) {
+      assert.ok(!shown.includes(currentQid), "rotation must not replay a consumed bucket head");
+      shown.push(currentQid);
+    }
+  }
+  assert.deepEqual(
+    [...shown].sort(),
+    expectedQids,
+    "alternating viewport orientations must eventually consume every work exactly once",
+  );
+
+  const boundaryFactory = (cycle, orientation) => [
+    `${orientation}-${cycle}-first`,
+    `${orientation}-${cycle}-tail`,
+  ];
+  const cycleZero = {
+    cycle: 0,
+    index: 1,
+    deck: boundaryFactory(0, "portrait"),
+    history: [],
+    orientation: "portrait",
+  };
+  assert.equal(
+    galleryDeckWindowQids(cycleZero, boundaryFactory).nextQid,
+    "portrait-1-first",
+    "the forward metadata/preload slot at a boundary must target cycle + 1 index zero",
+  );
+
+  const cycleOne = advanceGalleryDeckPosition(cycleZero, boundaryFactory);
+  assert.equal(cycleOne.cycle, 1);
+  assert.equal(cycleOne.index, 0);
+  assert.equal(currentGalleryDeckQid(cycleOne), "portrait-1-first");
+  assert.equal(
+    galleryDeckWindowQids(cycleOne, boundaryFactory).previousQid,
+    "portrait-0-tail",
+    "the backward metadata/preload slot must retain the actual prior-cycle tail",
+  );
+
+  const returned = retreatGalleryDeckPosition(cycleOne, boundaryFactory);
+  assert.equal(returned.cycle, 0);
+  assert.equal(returned.index, 1);
+  assert.equal(
+    currentGalleryDeckQid(returned),
+    "portrait-0-tail",
+    "previous at a cycle boundary must return to the work that was actually shown last",
+  );
 });
 
 test("keeps Signal Field geometry deterministic across display shapes", async () => {

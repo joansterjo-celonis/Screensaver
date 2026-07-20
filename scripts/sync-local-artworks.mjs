@@ -32,7 +32,7 @@ const ARTWORK_DIR = join(REPO_ROOT, "public", "artworks");
 const MANIFEST_PATH = join(ARTWORK_DIR, "manifest.json");
 
 const EXPECTED_RECORDS = 300;
-const EXPECTED_CATALOG_RECORDS = 1_024;
+const EXPECTED_CATALOG_RECORDS = 2_048;
 const ARCHIVE_VERSION = "wikimedia-2026-07-17-4k1";
 const SHORT_EDGE_TARGET = 2_160;
 const STANDARD_LONG_EDGE_CAP = 4_096;

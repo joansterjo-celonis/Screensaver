@@ -174,7 +174,7 @@ function GalleryPreview() {
       />
       <div className="gallery-preview-wash" />
       <div className="gallery-preview-label">
-        <span>PLATE 003 / 1024</span>
+        <span>PLATE 003 / 2048</span>
         <strong>Lady with an Ermine</strong>
         <small>Leonardo da Vinci · c. 1489–1491</small>
       </div>

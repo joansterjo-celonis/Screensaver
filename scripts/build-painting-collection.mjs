@@ -12,13 +12,14 @@ const INVENTORY_FILE = join(REPO_ROOT, "scripts", "data", "painting-inventory.js
 const OVERRIDES_FILE = join(REPO_ROOT, "scripts", "data", "painting-overrides.json");
 
 const PRESERVED_RECORDS = 300;
-const DEFAULT_TARGET_RECORDS = 1_024;
-const DEFAULT_CANDIDATE_LIMIT = 7_000;
+const DEFAULT_TARGET_RECORDS = 2_048;
+const DEFAULT_CANDIDATE_LIMIT = 20_000;
 const MIN_ADDED_SHORT_EDGE = 2_160;
 const MIN_ADDED_PIXELS = 6_000_000;
 const MAX_WORKS_PER_ARTIST = 8;
 const API_BATCH_SIZE = 50;
 const API_CONCURRENCY = 2;
+const WIKIDATA_ENTITY_MAX_LAG = 10;
 const REQUEST_SPACING_MS = 180;
 const FETCH_TIMEOUT_MS = 90_000;
 const MAX_RETRIES = 4;
@@ -88,7 +89,25 @@ async function requestJson(url, { body, context }) {
           },
         );
       }
-      return await response.json();
+      const data = await response.json();
+      if (data?.error) {
+        const code = String(data.error.code ?? "unknown");
+        const retryable =
+          code === "internal_api_error" ||
+          code.startsWith("internal_api_error_") ||
+          ["maxlag", "ratelimited", "readonly"].includes(code);
+        throw new CatalogError(
+          `${context} returned API error ${code}: ${data.error.info ?? "unknown error"}`,
+          {
+            retryable,
+            retryAfterMs: Math.max(
+              parseRetryAfter(response.headers.get("retry-after")),
+              code === "maxlag" ? 5_000 : 0,
+            ),
+          },
+        );
+      }
+      return data;
     } catch (error) {
       lastError = error;
       const retryable = error instanceof CatalogError ? error.retryable : true;
@@ -496,7 +515,7 @@ async function fetchEntities(ids, props, label) {
         body: new URLSearchParams({
           action: "wbgetentities",
           format: "json",
-          maxlag: "5",
+          maxlag: String(WIKIDATA_ENTITY_MAX_LAG),
           props,
           languages: "en",
           languagefallback: "1",
@@ -729,7 +748,7 @@ function parseIntegerArgument(arguments_, name, fallback, minimum, maximum) {
 function printHelp() {
   console.log(`Usage:
   node scripts/build-painting-collection.mjs
-  node scripts/build-painting-collection.mjs --target 1024 --candidate-limit 7000
+  node scripts/build-painting-collection.mjs --target 2048 --candidate-limit 20000
 
 Discovers English-Wikipedia painting records, validates their Wikimedia Commons
 public-domain metadata and source resolution, preserves the original 300 records,

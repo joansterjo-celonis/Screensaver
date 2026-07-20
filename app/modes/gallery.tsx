@@ -21,6 +21,17 @@ import {
   type GalleryArtwork,
 } from "../data/artworks";
 import { shuffledCycle } from "../shuffle";
+import {
+  advanceGalleryDeckPosition,
+  currentGalleryDeckQid,
+  galleryDeckWindowQids,
+  orderGalleryDeckForViewport,
+  reorientGalleryDeckRemainder,
+  resolveGalleryViewportOrientation,
+  retreatGalleryDeckPosition,
+  type GalleryDeckPosition,
+  type GalleryViewportOrientation,
+} from "./gallery-deck";
 import { resolveGalleryArtPlacement } from "./gallery-layout";
 
 const CACHE_KEY = "always-on-frame.gallery.v4";
@@ -55,6 +66,11 @@ type VisibleCopySource = "loading" | "commons" | "local" | "unavailable";
 type VisibleCopyState = {
   key: string;
   source: VisibleCopySource;
+};
+
+type GalleryDeckState = GalleryDeckPosition & {
+  viewportMeasured: boolean;
+  timerRevision: number;
 };
 
 function resolveAlias(title: string, aliases: Map<string, string>) {
@@ -175,10 +191,17 @@ export function GalleryMode({
     [],
   );
   const [artworks, setArtworks] = useState<GalleryArtwork[]>(fallbackCollection);
-  const [deckPosition, setDeckPosition] = useState({ cycle: 0, index: 0 });
+  const [deckState, setDeckState] = useState<GalleryDeckState>({
+    cycle: 0,
+    index: 0,
+    deck: [],
+    history: [],
+    orientation: "landscape",
+    viewportMeasured: false,
+    timerRevision: 0,
+  });
   const [nextAt, setNextAt] = useState(() => Date.now() + CYCLE_TIME);
   const [remaining, setRemaining] = useState(CYCLE_TIME);
-  const [timerReset, setTimerReset] = useState(0);
   const [failedRemoteRequests, setFailedRemoteRequests] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -187,6 +210,7 @@ export function GalleryMode({
     source: "loading",
   });
   const metadataRequestsRef = useRef(new Set<string>());
+  const timerGenerationRef = useRef(0);
 
   useEffect(() => {
     let cacheHydration = 0;
@@ -199,16 +223,71 @@ export function GalleryMode({
     return () => window.clearTimeout(cacheHydration);
   }, []);
 
-  const artworkDeck = useMemo(
-    () => shuffledCycle(
-      ARTWORK_QIDS,
-      `${shuffleSeed}:gallery`,
-      deckPosition.cycle,
-      (qid) => qid,
-    ),
-    [deckPosition.cycle, shuffleSeed],
+  const buildArtworkDeck = useCallback(
+    (cycle: number, viewportOrientation: GalleryViewportOrientation) =>
+      orderGalleryDeckForViewport(
+        shuffledCycle(
+          ARTWORK_QIDS,
+          `${shuffleSeed}:gallery`,
+          cycle,
+          (qid) => qid,
+        ),
+        ARTWORK_SEEDS,
+        viewportOrientation,
+      ),
+    [shuffleSeed],
   );
-  const orderedArtworks = useMemo(() => {
+
+  useLayoutEffect(() => {
+    const updateViewportOrientation = () => {
+      setDeckState((state) => {
+        const viewportOrientation = resolveGalleryViewportOrientation(
+          window.innerWidth,
+          window.innerHeight,
+          state.orientation,
+        );
+
+        if (!state.viewportMeasured) {
+          return {
+            ...state,
+            deck: [...buildArtworkDeck(state.cycle, viewportOrientation)],
+            index: 0,
+            orientation: viewportOrientation,
+            viewportMeasured: true,
+          };
+        }
+        if (viewportOrientation === state.orientation) return state;
+
+        const previousQid = currentGalleryDeckQid(state);
+        const nextPosition = reorientGalleryDeckRemainder(
+          state,
+          viewportOrientation,
+          ARTWORK_SEEDS,
+        );
+        const artworkChanged =
+          currentGalleryDeckQid(nextPosition) !== previousQid;
+
+        return {
+          ...state,
+          ...nextPosition,
+          timerRevision: artworkChanged
+            ? state.timerRevision + 1
+            : state.timerRevision,
+        };
+      });
+    };
+
+    updateViewportOrientation();
+    window.addEventListener("resize", updateViewportOrientation);
+    window.addEventListener("orientationchange", updateViewportOrientation);
+    return () => {
+      window.removeEventListener("resize", updateViewportOrientation);
+      window.removeEventListener("orientationchange", updateViewportOrientation);
+    };
+  }, [buildArtworkDeck]);
+
+  const artworkDeck = deckState.deck;
+  const artworksByQid = useMemo(() => {
     const artworksByQid = new Map(
       fallbackCollection.map((artwork) => [artwork.qid, artwork]),
     );
@@ -217,38 +296,53 @@ export function GalleryMode({
         artworksByQid.set(artwork.qid, artwork);
       }
     }
-    return artworkDeck.flatMap((qid) => {
+    return artworksByQid;
+  }, [artworks, fallbackCollection]);
+  const orderedArtworks = useMemo(
+    () => artworkDeck.flatMap((qid) => {
       const artwork = artworksByQid.get(qid);
       return artwork ? [artwork] : [];
-    });
-  }, [artworkDeck, artworks, fallbackCollection]);
+    }),
+    [artworkDeck, artworksByQid],
+  );
 
   const advance = useCallback(() => {
-    const collectionSize = Math.max(1, orderedArtworks.length);
-    setDeckPosition((position) => position.index + 1 >= collectionSize
-      ? { cycle: position.cycle + 1, index: 0 }
-      : { ...position, index: position.index + 1 });
-  }, [orderedArtworks.length]);
+    setDeckState((state) => {
+      if (!state.viewportMeasured) return state;
+      const nextPosition = advanceGalleryDeckPosition(state, buildArtworkDeck);
+      return { ...state, ...nextPosition };
+    });
+  }, [buildArtworkDeck]);
 
-  useEffect(() => {
-    if (paused) return;
+  useLayoutEffect(() => {
+    if (paused || !deckState.viewportMeasured) return;
+    const generation = timerGenerationRef.current + 1;
+    timerGenerationRef.current = generation;
     let timeout = 0;
-    let disposed = false;
     const schedule = () => {
       const target = Date.now() + CYCLE_TIME;
       setNextAt(target);
+      setRemaining(CYCLE_TIME);
       timeout = window.setTimeout(() => {
-        if (disposed) return;
+        if (timerGenerationRef.current !== generation) return;
         advance();
-        schedule();
       }, CYCLE_TIME);
     };
     schedule();
     return () => {
-      disposed = true;
+      if (timerGenerationRef.current === generation) {
+        timerGenerationRef.current += 1;
+      }
       window.clearTimeout(timeout);
     };
-  }, [advance, paused, timerReset]);
+  }, [
+    advance,
+    deckState.cycle,
+    deckState.index,
+    deckState.timerRevision,
+    deckState.viewportMeasured,
+    paused,
+  ]);
 
   useEffect(() => {
     if (paused) return;
@@ -262,22 +356,28 @@ export function GalleryMode({
   }, [nextAt, paused]);
 
   const activeIndex = orderedArtworks.length
-    ? deckPosition.index % orderedArtworks.length
+    ? deckState.index % orderedArtworks.length
     : 0;
   const current = orderedArtworks[activeIndex] ?? fallbackCollection[0];
   const isVerticalArtwork = current.height / current.width >= 1.3;
+  const deckWindow = useMemo(
+    () => deckState.viewportMeasured
+      ? galleryDeckWindowQids(deckState, buildArtworkDeck)
+      : { previousQid: undefined, currentQid: undefined, nextQid: undefined },
+    [buildArtworkDeck, deckState],
+  );
   const metadataWindowQids = useMemo(() => {
-    if (!artworkDeck.length) return [];
-    return [-1, 0, 1].map(
-      (offset) => artworkDeck[
-        (activeIndex + offset + artworkDeck.length) % artworkDeck.length
-      ],
-    );
-  }, [activeIndex, artworkDeck]);
+    if (!deckState.viewportMeasured) return [];
+    return [...new Set([
+      deckWindow.previousQid,
+      deckWindow.currentQid,
+      deckWindow.nextQid,
+    ].filter((qid): qid is string => Boolean(qid)))];
+  }, [deckState.viewportMeasured, deckWindow]);
   const metadataWindowKey = metadataWindowQids.join("|");
 
   useEffect(() => {
-    if (paused) return;
+    if (paused || !deckState.viewportMeasured) return;
     const metadataRequests = metadataRequestsRef.current;
     const qids = metadataWindowKey.split("|").filter(
       (qid) => qid && !metadataRequests.has(qid),
@@ -309,7 +409,7 @@ export function GalleryMode({
         for (const qid of qids) metadataRequests.delete(qid);
       }
     };
-  }, [metadataWindowKey, paused]);
+  }, [deckState.viewportMeasured, metadataWindowKey, paused]);
 
   const recoveryUrl = current.localFallback
     ? localArtworkUrl(current.qid)
@@ -361,12 +461,14 @@ export function GalleryMode({
   }, [current.height, current.width]);
 
   useEffect(() => {
-    if (paused) return;
-    if (orderedArtworks.length < 2) return;
-    for (const offset of [-1, 1]) {
-      const adjacent = orderedArtworks[
-        (activeIndex + offset + orderedArtworks.length) % orderedArtworks.length
-      ];
+    if (paused || !deckState.viewportMeasured) return;
+    const adjacentQids = new Set([
+      deckWindow.previousQid,
+      deckWindow.nextQid,
+    ]);
+    adjacentQids.delete(undefined);
+    for (const qid of adjacentQids) {
+      const adjacent = qid ? artworksByQid.get(qid) : undefined;
       if (!adjacent) continue;
       const preloader = new Image();
       preloader.decoding = "async";
@@ -379,21 +481,27 @@ export function GalleryMode({
       };
       preloader.src = adjacent.imageUrl;
     }
-  }, [activeIndex, orderedArtworks, paused]);
+  }, [
+    artworksByQid,
+    deckState.viewportMeasured,
+    deckWindow.nextQid,
+    deckWindow.previousQid,
+    paused,
+  ]);
 
   const navigateManually = useCallback((direction: -1 | 1) => {
-    const collectionSize = Math.max(1, orderedArtworks.length);
-    setDeckPosition((position) => {
-      if (direction > 0 && position.index + 1 >= collectionSize) {
-        return { cycle: position.cycle + 1, index: 0 };
-      }
+    setDeckState((state) => {
+      if (!state.viewportMeasured) return state;
+      const nextPosition = direction > 0
+        ? advanceGalleryDeckPosition(state, buildArtworkDeck)
+        : retreatGalleryDeckPosition(state, buildArtworkDeck);
       return {
-        ...position,
-        index: (position.index + direction + collectionSize) % collectionSize,
+        ...state,
+        ...nextPosition,
+        timerRevision: state.timerRevision + 1,
       };
     });
-    setTimerReset((value) => value + 1);
-  }, [orderedArtworks.length]);
+  }, [buildArtworkDeck]);
 
   return (
     <section
@@ -445,49 +553,53 @@ export function GalleryMode({
 
       <figure className="gallery-plate">
         <div className="gallery-image-stage">
-          <img
-            key={`backdrop-${current.articleTitle}`}
-            className="gallery-backdrop"
-            src={imageSource}
-            alt=""
-            aria-hidden="true"
-          />
+          {deckState.viewportMeasured && (
+            <img
+              key={`backdrop-${current.articleTitle}`}
+              className="gallery-backdrop"
+              src={imageSource}
+              alt=""
+              aria-hidden="true"
+            />
+          )}
           <div className="gallery-shade" aria-hidden="true" />
           <div className="gallery-artwork-matte">
-            <img
-              key={visibleCopyKey}
-              className="gallery-artwork"
-              src={imageSource}
-              alt={`${current.title} by ${current.artist}, ${current.year}`}
-              decoding="async"
-              fetchPriority="high"
-              onLoad={(event) => {
-                const renderedSource = classifyArtworkCopySource(
-                  event.currentTarget.currentSrc,
-                  window.location.href,
-                );
-                setVisibleCopy({
-                  key: visibleCopyKey,
-                  source: renderedSource ?? "unavailable",
-                });
-              }}
-              onError={(event) => {
-                const failedSource = classifyArtworkCopySource(
-                  event.currentTarget.currentSrc || imageSource,
-                  window.location.href,
-                );
-                if (failedSource !== "local" && imageSource === current.imageUrl) {
-                  setFailedRemoteRequests((failed) => {
-                    if (failed.has(remoteRequestKey)) return failed;
-                    const next = new Set(failed);
-                    next.add(remoteRequestKey);
-                    return next;
+            {deckState.viewportMeasured && (
+              <img
+                key={visibleCopyKey}
+                className="gallery-artwork"
+                src={imageSource}
+                alt={`${current.title} by ${current.artist}, ${current.year}`}
+                decoding="async"
+                fetchPriority="high"
+                onLoad={(event) => {
+                  const renderedSource = classifyArtworkCopySource(
+                    event.currentTarget.currentSrc,
+                    window.location.href,
+                  );
+                  setVisibleCopy({
+                    key: visibleCopyKey,
+                    source: renderedSource ?? "unavailable",
                   });
-                  return;
-                }
-                setVisibleCopy({ key: visibleCopyKey, source: "unavailable" });
-              }}
-            />
+                }}
+                onError={(event) => {
+                  const failedSource = classifyArtworkCopySource(
+                    event.currentTarget.currentSrc || imageSource,
+                    window.location.href,
+                  );
+                  if (failedSource !== "local" && imageSource === current.imageUrl) {
+                    setFailedRemoteRequests((failed) => {
+                      if (failed.has(remoteRequestKey)) return failed;
+                      const next = new Set(failed);
+                      next.add(remoteRequestKey);
+                      return next;
+                    });
+                    return;
+                  }
+                  setVisibleCopy({ key: visibleCopyKey, source: "unavailable" });
+                }}
+              />
+            )}
           </div>
         </div>
 
