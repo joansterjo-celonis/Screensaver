@@ -32,6 +32,14 @@ export interface ComposedFlipDotField extends FlipDotFieldSpec {
   active: readonly boolean[];
 }
 
+export interface ExpandedFlipDotField {
+  columns: number;
+  rows: number;
+  offsetX: number;
+  offsetY: number;
+  active: readonly boolean[];
+}
+
 type SevenSegmentName = "a" | "b" | "c" | "d" | "e" | "f" | "g";
 
 const NORMAL_SEVEN_SEGMENT_CELLS: Readonly<Record<SevenSegmentName, readonly [number, number][]>> = {
@@ -117,6 +125,35 @@ export const FLIP_DOT_FIELD_SPECS: Readonly<Record<FlipDotFieldVariant, FlipDotF
 
 function createPlane(columns: number, rows: number) {
   return Array.from({ length: columns * rows }, () => false);
+}
+
+export function expandFlipDotField(
+  field: ComposedFlipDotField,
+  availableColumns: number,
+  availableRows: number,
+): ExpandedFlipDotField {
+  const columnCapacity = Number.isFinite(availableColumns)
+    ? Math.floor(availableColumns)
+    : field.columns;
+  const rowCapacity = Number.isFinite(availableRows)
+    ? Math.floor(availableRows)
+    : field.rows;
+  const extraColumns = Math.max(0, columnCapacity - field.columns);
+  const extraRows = Math.max(0, rowCapacity - field.rows);
+  const columns = field.columns + Math.floor(extraColumns / 2) * 2;
+  const rows = field.rows + Math.floor(extraRows / 2) * 2;
+  const offsetX = (columns - field.columns) / 2;
+  const offsetY = (rows - field.rows) / 2;
+  const plane = createPlane(columns, rows);
+
+  for (let row = 0; row < field.rows; row += 1) {
+    for (let column = 0; column < field.columns; column += 1) {
+      const sourceIndex = row * field.columns + column;
+      plane[(row + offsetY) * columns + column + offsetX] = Boolean(field.active[sourceIndex]);
+    }
+  }
+
+  return { columns, rows, offsetX, offsetY, active: plane };
 }
 
 function stampPattern(

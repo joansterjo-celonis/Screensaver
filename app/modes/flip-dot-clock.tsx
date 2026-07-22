@@ -12,6 +12,19 @@ import {
   type KeyboardEvent,
 } from "react";
 import {
+  CloudFogIcon,
+  CloudLightningIcon,
+  CloudMoonIcon,
+  CloudRainIcon,
+  CloudSlashIcon,
+  CloudSnowIcon,
+  CloudSunIcon,
+  CloudIcon,
+  MoonStarsIcon,
+  SunIcon,
+  type Icon,
+} from "@phosphor-icons/react";
+import {
   DEFAULT_WEATHER_LOCATION,
   WEATHER_PRESETS,
   buildForecastUrl,
@@ -31,6 +44,7 @@ import {
 } from "./flip-dot-glyphs";
 import {
   composeFlipDotField,
+  expandFlipDotField,
   formatFlipDotTemperature,
   type ComposedFlipDotField,
   type FlipDotFieldVariant,
@@ -66,7 +80,14 @@ type DotFieldStyle = CSSProperties & {
   "--dot-gap": string;
 };
 type LoadState = "idle" | "loading" | "ready" | "refreshing" | "stale" | "error";
+type BoardSweep = "idle" | "minute" | "hour";
 type ThemeSelectorStyle = CSSProperties & { "--theme-angle": string };
+
+interface DotFieldMetrics {
+  dotSize: number;
+  availableColumns: number;
+  availableRows: number;
+}
 
 interface CachedWeather {
   fetchedAt: number;
@@ -170,13 +191,19 @@ function UnifiedFlipDotField({
   field,
   label,
   ready,
+  sweep,
 }: {
   field: ComposedFlipDotField;
   label: string;
   ready: boolean;
+  sweep: BoardSweep;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const [dotSize, setDotSize] = useState(0);
+  const [metrics, setMetrics] = useState<DotFieldMetrics>({
+    dotSize: 0,
+    availableColumns: field.columns,
+    availableRows: field.rows,
+  });
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -186,11 +213,31 @@ function UnifiedFlipDotField({
     const measure = () => {
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(() => {
-        const bounds = stage.getBoundingClientRect();
-        const widthFit = bounds.width / (field.columns + (field.columns - 1) * gapRatio);
-        const heightFit = bounds.height / (field.rows + (field.rows - 1) * gapRatio);
-        const nextSize = Math.max(0.75, Math.floor(Math.min(widthFit, heightFit) * 2) / 2);
-        setDotSize((current) => Math.abs(current - nextSize) < 0.2 ? current : nextSize);
+        const width = stage.clientWidth;
+        const height = stage.clientHeight;
+        if (width <= 0 || height <= 0) return;
+        const widthFit = width / (field.columns + (field.columns - 1) * gapRatio);
+        const heightFit = height / (field.rows + (field.rows - 1) * gapRatio);
+        const rawSize = Math.min(widthFit, heightFit);
+        const pixelStep = 1 / Math.max(1, window.devicePixelRatio || 1);
+        const snappedSize = Math.floor(rawSize / pixelStep) * pixelStep;
+        const nextSize = snappedSize > 0 ? snappedSize : rawSize;
+        const nextGap = nextSize * gapRatio;
+        const availableColumns = Math.max(
+          field.columns,
+          Math.floor((width + nextGap + Number.EPSILON) / (nextSize + nextGap)),
+        );
+        const availableRows = Math.max(
+          field.rows,
+          Math.floor((height + nextGap + Number.EPSILON) / (nextSize + nextGap)),
+        );
+        setMetrics((current) => (
+          Math.abs(current.dotSize - nextSize) < 0.2 &&
+          current.availableColumns === availableColumns &&
+          current.availableRows === availableRows
+            ? current
+            : { dotSize: nextSize, availableColumns, availableRows }
+        ));
       });
     };
     measure();
@@ -204,10 +251,15 @@ function UnifiedFlipDotField({
     };
   }, [field.columns, field.rows]);
 
-  const resolvedDotSize = dotSize || 4;
+  const displayField = useMemo(() => expandFlipDotField(
+    field,
+    metrics.availableColumns,
+    metrics.availableRows,
+  ), [field, metrics.availableColumns, metrics.availableRows]);
+  const resolvedDotSize = metrics.dotSize || 4;
   const style = {
-    "--field-columns": field.columns,
-    "--field-rows": field.rows,
+    "--field-columns": displayField.columns,
+    "--field-rows": displayField.rows,
     "--dot-size": `${resolvedDotSize}px`,
     "--dot-gap": `${resolvedDotSize * 0.16}px`,
   } as DotFieldStyle;
@@ -218,34 +270,99 @@ function UnifiedFlipDotField({
         className="flip-dot-field"
         data-layout={field.variant}
         data-digit-weight={field.digitWeight}
-        data-measured={dotSize > 0 ? "true" : "false"}
+        data-measured={metrics.dotSize > 0 ? "true" : "false"}
+        data-core-columns={field.columns}
+        data-core-rows={field.rows}
+        data-display-columns={displayField.columns}
+        data-display-rows={displayField.rows}
+        data-core-offset-x={displayField.offsetX}
+        data-core-offset-y={displayField.offsetY}
+        data-sweep={sweep}
         style={style}
         role="img"
         aria-label={label}
       >
-        {field.active.map((active, index) => (
-          <FlipDot
-            active={ready && active}
-            columns={field.columns}
-            index={index}
-            key={index}
-          />
-        ))}
+        {displayField.active.map((active, index) => {
+          const row = Math.floor(index / displayField.columns);
+          const column = index % displayField.columns;
+          const coreColumn = column - displayField.offsetX;
+          const coreRow = row - displayField.offsetY;
+          return (
+            <FlipDot
+              active={ready && active}
+              columns={displayField.columns}
+              index={index}
+              key={`${coreColumn}:${coreRow}`}
+            />
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function FlatWeatherIcon({ icon }: { icon: WeatherIconName }) {
+const WEATHER_ICONS: Readonly<Record<WeatherIconName, Icon>> = {
+  "clear-day": SunIcon,
+  "clear-night": MoonStarsIcon,
+  "partly-cloudy-day": CloudSunIcon,
+  "partly-cloudy-night": CloudMoonIcon,
+  cloudy: CloudIcon,
+  fog: CloudFogIcon,
+  drizzle: CloudRainIcon,
+  rain: CloudRainIcon,
+  snow: CloudSnowIcon,
+  storm: CloudLightningIcon,
+  unknown: CloudSlashIcon,
+};
+
+function WeatherStatusIcon({ icon }: { icon: WeatherIconName }) {
+  const WeatherIcon = WEATHER_ICONS[icon];
   return (
     <span className="flip-weather-icon" data-icon={icon} aria-hidden="true">
-      <span className="flip-weather-icon__sun" />
-      <span className="flip-weather-icon__moon" />
-      <span className="flip-weather-icon__cloud" />
-      <span className="flip-weather-icon__precipitation" />
-      <span className="flip-weather-icon__bolt" />
-      <span className="flip-weather-icon__unknown">?</span>
+      <WeatherIcon className="flip-weather-icon__glyph" weight="duotone" focusable="false" />
     </span>
+  );
+}
+
+function SecondSweep({
+  now,
+  paused,
+  reducedMotion,
+}: {
+  now: Date | null;
+  paused: boolean;
+  reducedMotion: boolean;
+}) {
+  const cursorRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const cursor = cursorRef.current;
+    if (!cursor || reducedMotion) return;
+    const sweep = cursor.animate(
+      [{ left: "0%" }, { left: "calc(100% - 2px)" }],
+      { duration: 60_000, easing: "linear", iterations: Infinity },
+    );
+    sweep.currentTime = Date.now() % 60_000;
+    if (paused) sweep.pause();
+    return () => sweep.cancel();
+  }, [paused, reducedMotion]);
+
+  const reducedPosition = now
+    ? ((now.getSeconds() + now.getMilliseconds() / 1000) / 60) * 100
+    : 0;
+
+  return (
+    <div className="flip-clock-frequency-band" aria-hidden="true">
+      <span className="flip-clock-second-track">
+        <i
+          ref={cursorRef}
+          style={reducedMotion ? { left: `calc(${reducedPosition}% - 1px)` } : undefined}
+        />
+      </span>
+      <span className="flip-clock-second-scale">
+        <b>00</b><b>15</b><b>30</b><b>45</b><b>60</b>
+      </span>
+    </div>
   );
 }
 
@@ -455,6 +572,8 @@ export function FlipDotClock({
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [statusMessage, setStatusMessage] = useState("Loading current conditions");
   const [now, setNow] = useState<Date | null>(null);
+  const [boardSweep, setBoardSweep] = useState<BoardSweep>("idle");
+  const previousMinuteRef = useRef<string | null>(null);
   const [dotsReady, setDotsReady] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -494,7 +613,7 @@ export function FlipDotClock({
     let currentVariant: FlipDotFieldVariant = "landscape";
     const updateVariant = () => {
       const bounds = mode.getBoundingClientRect();
-      const nextVariant: FlipDotFieldVariant = bounds.height > bounds.width * 1.3
+      const nextVariant: FlipDotFieldVariant = bounds.height > bounds.width
         ? "portrait"
         : "landscape";
       if (nextVariant !== currentVariant) {
@@ -696,6 +815,28 @@ export function FlipDotClock({
     : { label: "Weather unavailable", icon: "unknown" as const };
   const colonVisible = reducedMotion || !now || now.getSeconds() % 2 === 0;
   const [hours = "--", minutes = "--"] = clock.hoursMinutes.split(":");
+  const minuteKey = clock.hoursMinutes === "--:--" ? null : clock.hoursMinutes;
+  useEffect(() => {
+    if (!minuteKey) return;
+    const previousMinute = previousMinuteRef.current;
+    previousMinuteRef.current = minuteKey;
+    if (reducedMotion) {
+      const resetTimer = window.setTimeout(() => setBoardSweep("idle"), 0);
+      return () => window.clearTimeout(resetTimer);
+    }
+    if (previousMinute === null || previousMinute === minuteKey) return;
+
+    const nextSweep: BoardSweep = minuteKey.endsWith(":00") ? "hour" : "minute";
+    const startTimer = window.setTimeout(() => setBoardSweep(nextSweep), 0);
+    const resetTimer = window.setTimeout(
+      () => setBoardSweep("idle"),
+      nextSweep === "hour" ? 2_100 : 1_350,
+    );
+    return () => {
+      window.clearTimeout(startTimer);
+      window.clearTimeout(resetTimer);
+    };
+  }, [minuteKey, reducedMotion]);
   const temperatureText = formatFlipDotTemperature(weather?.temperature);
   const stale = loadState === "stale" || (
     fetchedAt > 0 &&
@@ -706,9 +847,9 @@ export function FlipDotClock({
     variant: fieldVariant,
     hours,
     minutes,
-    separatorOn: colonVisible,
+    separatorOn: boardSweep !== "idle" || colonVisible,
     digitWeight,
-  }), [colonVisible, digitWeight, fieldVariant, hours, minutes]);
+  }), [boardSweep, colonVisible, digitWeight, fieldVariant, hours, minutes]);
   const fieldLabel = `${clock.hoursMinutes}, ${clock.date}, local time in ${location.name}`;
   const syncLabel = loadState === "loading" || loadState === "refreshing"
     ? "SYNC"
@@ -737,10 +878,7 @@ export function FlipDotClock({
             <span>FDP–01</span>
             <strong>MECHANICAL TIME / WEATHER</strong>
           </div>
-          <div className="flip-clock-frequency-band" aria-hidden="true">
-            <span>02</span><span>08</span><span>16</span><span>32</span><span>64</span>
-            <i />
-          </div>
+          <SecondSweep now={now} paused={paused} reducedMotion={reducedMotion} />
           <div className="flip-clock-appearance-controls" role="group" aria-label="Flip-dot appearance controls">
             <ThemeSelector themeId={themeId} onSelect={chooseTheme} />
             <WeightSelector weight={digitWeight} onSelect={chooseDigitWeight} />
@@ -769,6 +907,7 @@ export function FlipDotClock({
             field={flipField}
             label={fieldLabel}
             ready={dotsReady}
+            sweep={boardSweep}
           />
         </div>
 
@@ -781,7 +920,7 @@ export function FlipDotClock({
 
           <section className="flip-clock-weather-panel" aria-label={`Current conditions: ${descriptor.label}`}>
             <div className="flip-clock-weather-primary">
-              <FlatWeatherIcon icon={descriptor.icon} />
+              <WeatherStatusIcon icon={descriptor.icon} />
               <div className="flip-clock-weather-reading">
                 <div>
                   <small>CURRENT / {location.name}</small>

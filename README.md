@@ -49,7 +49,7 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 
 | Field | What fills the frame |
 | --- | --- |
-| `01` **Flip Dot Weather** | A single mechanical 24-hour hours-and-minutes field with a separate flat-icon weather instrument for any searchable city or postcode. Four saved pigment/chassis themes and NORMAL/BOLD numeral weights tune the hardware without changing its rotor geometry. |
+| `01` **Flip Dot Weather** | A single mechanical 24-hour hours-and-minutes field with a separate duotone weather instrument for any searchable city or postcode. Four saved pigment/chassis themes and NORMAL/BOLD numeral weights tune the hardware without changing its rotor geometry. |
 | `02` **Swikipedia** | A slow gallery spanning six centuries and 2,048 verified public-domain paintings. Each work arrives with its title, artist, date, and a concise Wikipedia description. |
 | `03` **Posterjo** | Joan Sterjo's local high-resolution artwork archive: 269 compositions presented edge to edge with restrained titles and source metadata. |
 
@@ -80,7 +80,7 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 
 ## Flip Dot Weather
 
-The first field is a browser-built mechanical board, not an image or video loop. Its 24-hour hours-and-minutes display is stamped into one uninterrupted field of identically sized DOM/CSS rotors: 43×19 in landscape and 27×42 in tall portrait. There is no seconds readout; the separator alone pulses once per second when motion is enabled. The saved NORMAL/BOLD control thickens the numeral strokes by activating more rotors, never by enlarging individual dots. The portrait composition stacks hours above minutes so a 9:16 frame remains legible and physical instead of shrinking a landscape dashboard. Temperature, the readable flat weather icon, and local date remain in the external instrument rails, leaving the recessed dot cavity as one clean tactile surface. The selected location’s IANA timezone drives the 24-hour clock and local date.
+The first field is a browser-built mechanical board, not an image or video loop. The centered clock core is 43×19 in landscape and 27×42 in tall portrait. The live panel surrounds that core with as many identically sized inactive DOM/CSS rotors as the viewport can hold, so its gutters remain physical instead of becoming empty black bands. There is no numeric seconds readout: a thin 60-second rail sweeps continuously above the board, while the clock separator pulses once per second when motion is enabled. Every minute boundary sends a coordinated physical turnover across the complete rotor face; the top of each hour gets a longer double-turn sequence. The saved NORMAL/BOLD control thickens the numeral strokes by activating more rotors, never by enlarging individual dots. The portrait composition stacks hours above minutes so a 9:16 frame remains legible and physical instead of shrinking a landscape dashboard. Temperature, the readable duotone weather symbol, and local date remain in the external instrument rails, leaving the recessed dot cavity as one clean tactile surface. The selected location’s IANA timezone drives the 24-hour clock and local date.
 
 Tap the city name to search by city or postcode. Searches return up to six matches from the Open-Meteo Geocoding API; the five built-in presets remain available as a quick start. A selection is saved in browser storage and is restored on the next visit. The app does not request the device’s physical location.
 
@@ -94,9 +94,11 @@ The interface type is bundled with the app through Fontsource, so it makes no ru
 | **Rajdhani** | Condensed headings, city names, and condition labels | [Rajdhani on Google Fonts](https://fonts.google.com/specimen/Rajdhani) · SIL OFL 1.1 |
 | **IBM Plex Mono** | Board labels, controls, status, and technical data | [IBM Plex Mono on Google Fonts](https://fonts.google.com/specimen/IBM+Plex+Mono) · SIL OFL 1.1 |
 
+Weather symbols use [Phosphor Icons](https://phosphoricons.com/) through [`@phosphor-icons/react`](https://github.com/phosphor-icons/react), © Phosphor Icons, under the MIT License. The selected SVG components are bundled locally and make no runtime request; the complete licence text is retained in [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
+
 ### Weather data, attribution, and API use
 
-- Live values come from the [Open-Meteo Forecast API](https://open-meteo.com/en/docs). Its “current” conditions are model-derived 15-minute data, not guaranteed readings from a nearby physical station. This interface rounds values for display and maps WMO weather codes to its own local labels and CSS-rendered flat instrument icons.
+- Live values come from the [Open-Meteo Forecast API](https://open-meteo.com/en/docs). Its “current” conditions are model-derived 15-minute data, not guaranteed readings from a nearby physical station. This interface rounds values for display and maps WMO weather codes to its own local labels and locally bundled Phosphor SVG instrument icons.
 - Location search uses the [Open-Meteo Geocoding API](https://open-meteo.com/en/docs/geocoding-api), whose location database comes from [GeoNames](https://www.geonames.org/). Both providers are credited beside the weather board.
 - Open-Meteo API data are offered under [CC BY 4.0](https://open-meteo.com/en/license), which requires attribution, a licence link, and disclosure of modifications. Open-Meteo does not guarantee data accuracy, completeness, availability, or uninterrupted service.
 - This static client calls Open-Meteo’s public HTTPS endpoints directly and contains no API key. Under the current [Open-Meteo terms](https://open-meteo.com/en/terms), the free endpoints are limited to non-commercial use and fewer than 10,000 calls per day, 5,000 per hour, and 600 per minute. Review those terms before deploying a fork.

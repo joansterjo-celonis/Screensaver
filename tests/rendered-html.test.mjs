@@ -74,8 +74,15 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(frame, /paused=\{indexOpen\}/);
   assert.match(frame, /createPageLoadSeed\(\)/);
   assert.match(frame, /shuffleSeed=\{shuffleSeed\}/);
-  assert.match(frame, /PLATE 003 \/ 2048/);
-  assert.match(frame, /<FlipDotText/);
+  assert.match(frame, /function TypographyPreview/);
+  assert.match(frame, /metric: "24:00"/);
+  assert.match(frame, /metric: "2,048"/);
+  assert.match(frame, /metric: "269"/);
+  assert.match(frame, /status: "LOCAL DATA"/);
+  assert.match(frame, /status: "PUBLIC DOMAIN"/);
+  assert.match(frame, /status: "ARTIST EDITION"/);
+  assert.match(frame, /data-mode=\{mode\.id\}/);
+  assert.doesNotMatch(frame, /<img\b|localArtworkUrl|posterjoArtworkUrl|POSTERJO_ARTWORKS|FlipDotText/);
   assert.match(clock, /export function FlipDotClock/);
   assert.match(clock, /export function FlipDotText/);
   assert.match(clock, /className="flip-dot__face flip-dot__face--off"/);
@@ -343,7 +350,7 @@ test("ships the expanded artwork libraries and weather frame", async () => {
   assert.match(artworks, /LOCAL_ARTWORK_ARCHIVE_VERSION = "wikimedia-2026-07-17-4k1"/);
   assert.match(artworks, /seed\.localFallback[\s\S]*?localArtworkUrl\(seed\.qid\)[\s\S]*?commonsArtworkUrl\(seed\)/);
   assert.match(artworks, /import\.meta\.env\.BASE_URL/);
-  assert.match(frame, /localArtworkUrl\("Q474338"\)/);
+  assert.doesNotMatch(frame, /localArtworkUrl\("Q474338"\)/);
   assert.match(frame, /component: FlipDotClock/);
   assert.match(clock, /DEFAULT_WEATHER_LOCATION/);
   assert.match(clock, /WEATHER_PRESETS/);
@@ -416,6 +423,17 @@ test("ships the expanded artwork libraries and weather frame", async () => {
   assert.doesNotMatch(styles, /\.composition-/);
   assert.match(styles, /\.mode-list\s*\{[\s\S]*?grid-template-rows: repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(styles, /@media \(min-aspect-ratio: 4 \/ 3\)[\s\S]*?\.mode-list\s*\{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+  assert.match(styles, /--font-display: "Oxanium Variable", var\(--font-mono\)/);
+  assert.match(styles, /\.mode-card\s*\{[\s\S]*?font-family: var\(--font-display\);/);
+  assert.match(styles, /\.type-preview-main strong\s*\{[\s\S]*?font: 800 clamp\(38px, 24cqw, 156px\)\/0\.78 var\(--font-display\)/);
+  assert.match(styles, /\.mode-card-copy strong\s*\{[\s\S]*?font-family: var\(--font-display\);[\s\S]*?font-weight: 700/);
+  assert.match(styles, /\.mode-card\[data-mode="gallery"\]\s*\{[\s\S]*?--card-preview: #d9cebb;[\s\S]*?--card-copy: #c9bda9;/);
+  assert.match(styles, /\.mode-card\[data-mode="posterjo"\]\s*\{[\s\S]*?--card-preview: #e34c82;[\s\S]*?--card-copy: #cf3f73;/);
+  assert.match(styles, /\.mode-card-copy\s*\{[\s\S]*?background: var\(--card-copy\);/);
+  assert.match(styles, /\.type-preview-tags\s*\{[\s\S]*?flex-wrap: wrap;[\s\S]*?row-gap: 4px;/);
+  assert.match(styles, /@media \(max-width: 420px\)[\s\S]*?grid-template-columns: minmax\(116px, 40%\) minmax\(0, 1fr\);[\s\S]*?font-size: clamp\(24px, 20cqw, 34px\);/);
+  assert.doesNotMatch(styles, /\.type-preview--(?:gallery|posterjo) \.type-preview-main strong\s*\{[\s\S]*?font-family:/);
+  assert.doesNotMatch(styles, /\.(?:gallery|posterjo|clock)-preview(?:\s|\{|__|-wash|-label)/);
 });
 
 test("keeps Posterjo local, cover-fitted and richly footered", async () => {
@@ -770,6 +788,7 @@ test("composes one equal-pitch flip-dot field for landscape and portrait", async
     LARGE_FLIP_DOT_DIGITS_BOLD,
     LARGE_FLIP_DOT_DIGITS_BY_WEIGHT,
     composeFlipDotField,
+    expandFlipDotField,
     formatFlipDotTemperature,
   } = layoutModule.default ?? layoutModule;
 
@@ -844,6 +863,54 @@ test("composes one equal-pitch flip-dot field for landscape and portrait", async
       }
     }
   }
+
+  const expansionCases = [
+    { variant: "landscape", capacity: [64, 40], dimensions: [63, 39], offset: [10, 10] },
+    { variant: "portrait", capacity: [40, 61], dimensions: [39, 60], offset: [6, 9] },
+  ];
+  for (const { variant, capacity, dimensions, offset } of expansionCases) {
+    const core = composeFlipDotField({
+      variant,
+      hours: "12",
+      minutes: "48",
+      separatorOn: true,
+      digitWeight: "bold",
+    });
+    const expanded = expandFlipDotField(core, ...capacity);
+    assert.deepEqual([expanded.columns, expanded.rows], dimensions);
+    assert.deepEqual([expanded.offsetX, expanded.offsetY], offset);
+    assert.equal(2 * expanded.offsetX + core.columns, expanded.columns);
+    assert.equal(2 * expanded.offsetY + core.rows, expanded.rows);
+    assert.equal(expanded.active.length, expanded.columns * expanded.rows);
+    assert.equal(expanded.active.filter(Boolean).length, core.active.filter(Boolean).length);
+
+    for (let row = 0; row < expanded.rows; row += 1) {
+      for (let column = 0; column < expanded.columns; column += 1) {
+        const insideCore =
+          column >= expanded.offsetX && column < expanded.offsetX + core.columns &&
+          row >= expanded.offsetY && row < expanded.offsetY + core.rows;
+        const actual = expanded.active[row * expanded.columns + column];
+        if (!insideCore) {
+          assert.equal(actual, false, `${variant}: every gutter cell must be a real off rotor`);
+        } else {
+          const sourceIndex = (row - expanded.offsetY) * core.columns + column - expanded.offsetX;
+          assert.equal(actual, core.active[sourceIndex]);
+        }
+      }
+    }
+  }
+
+  const minimumCore = composeFlipDotField({
+    variant: "landscape",
+    hours: "12",
+    minutes: "48",
+    separatorOn: true,
+  });
+  const clampedExpansion = expandFlipDotField(minimumCore, 1, Number.NaN);
+  assert.deepEqual(
+    [clampedExpansion.columns, clampedExpansion.rows, clampedExpansion.offsetX, clampedExpansion.offsetY],
+    [43, 19, 0, 0],
+  );
 
   const colonOn = composeFlipDotField({
     variant: "landscape",
@@ -953,24 +1020,100 @@ test("renders the live clock through one shared-size mechanical grid", async () 
   const source = `${clock}\n${layout}\n${globalStyles}\n${clockStyles}`;
 
   assert.equal(clock.match(/<UnifiedFlipDotField/g)?.length, 1);
-  assert.match(clock, /field\.active\.map\(\(active, index\) =>/);
-  assert.match(clock, /key=\{index\}/);
+  assert.match(clock, /displayField\.active\.map\(\(active, index\) =>/);
+  assert.match(clock, /key=\{`\$\{coreColumn\}:\$\{coreRow\}`\}/);
   assert.match(clock, /data-layout=\{field\.variant\}/);
   assert.match(clock, /data-digit-weight=\{field\.digitWeight\}/);
+  assert.match(clock, /data-core-columns=\{field\.columns\}/);
+  assert.match(clock, /data-display-columns=\{displayField\.columns\}/);
+  assert.match(clock, /stage\.clientWidth/);
+  assert.match(clock, /stage\.clientHeight/);
+  assert.match(clock, /bounds\.height > bounds\.width\s*\? "portrait"\s*:\s*"landscape"/);
+  assert.match(clock, /expandFlipDotField\(/);
   assert.match(clockStyles, /\.flip-dot-field\s*\{[\s\S]*?grid-template-columns: repeat\(var\(--field-columns\), var\(--dot-size\)\);/);
   assert.match(clockStyles, /\.flip-dot-field \.flip-dot\s*\{\s*width: var\(--dot-size\);\s*height: var\(--dot-size\);/);
   assert.doesNotMatch(source, /flip-dot-matrix--(?:time|seconds|temperature)|flip-dot-weather-icon/);
   assert.doesNotMatch(clock, /<FlipDotText[\s\S]*?className="flip-dot-matrix--(?:time|seconds|temperature)"/);
   assert.doesNotMatch(layout, /weatherDotPattern|weatherIcon|\bseconds\s*:/);
   assert.doesNotMatch(clock, /clock\.seconds|second:\s*["']2-digit["']|and \$\{clock\.seconds\} seconds/);
-  assert.equal(clock.match(/getSeconds\(\)/g)?.length, 1);
+  assert.equal(clock.match(/getSeconds\(\)/g)?.length, 2);
   assert.match(clock, /const colonVisible = [^;]*getSeconds\(\) % 2 === 0/);
   assert.match(clock, /className="flip-clock-weather-panel"/);
-  assert.match(clock, /function FlatWeatherIcon/);
+  assert.match(clock, /function WeatherStatusIcon/);
+  assert.match(clock, /const WEATHER_ICONS: Readonly<Record<WeatherIconName, Icon>>/);
+  assert.match(clock, /CloudSunIcon/);
+  assert.match(clock, /CloudMoonIcon/);
+  assert.match(clock, /CloudLightningIcon/);
+  assert.match(clock, /CloudSlashIcon/);
+  assert.match(clock, /weight="duotone" focusable="false"/);
   assert.match(clock, /className="flip-weather-icon" data-icon=\{icon\}/);
   assert.match(clockStyles, /\.flip-clock-weather-panel\s*\{[\s\S]*?grid-template-columns:/);
-  assert.match(clockStyles, /\.flip-weather-icon\[data-icon="clear-day"\]/);
-  assert.match(clockStyles, /\.flip-weather-icon\[data-icon="unknown"\]/);
+  assert.match(clockStyles, /--weather-temperature-size: clamp\(40px, 3\.5vw, 60px\)/);
+  assert.match(clockStyles, /--weather-stat-size: clamp\(15px, 1\.2vw, 20px\)/);
+  assert.match(clockStyles, /@media \(max-aspect-ratio: 1 \/ 1\)[\s\S]*?\.flip-clock-frequency-band\s*\{[\s\S]*?grid-column: 1 \/ -1;[\s\S]*?grid-row: 2;/);
+  assert.doesNotMatch(clockStyles, /@media \(max-aspect-ratio: 10 \/ 13\)/);
+  assert.match(clockStyles, /\.flip-weather-icon__glyph path\[opacity="0\.2"\]/);
+  assert.match(globalStyles, /\.flip-clock-screw--sw,\s*\.flip-clock-screw--se \{ bottom: clamp\(15px, 1\.35vmin, 20px\); \}/);
+  assert.match(globalStyles, /\.flip-clock-screw--nw,\s*\.flip-clock-screw--sw \{ left: clamp\(14px, 1\.2vmin, 18px\); \}/);
+  assert.match(globalStyles, /\.flip-clock-screw--ne,\s*\.flip-clock-screw--se \{ right: clamp\(14px, 1\.2vmin, 18px\); \}/);
+  assert.doesNotMatch(clock, /function FlatWeatherIcon|flip-weather-icon__(?:sun|moon|cloud|precipitation|bolt|unknown)/);
+  assert.doesNotMatch(clockStyles, /flip-weather-icon__(?:sun|moon|cloud|precipitation|bolt|unknown)/);
+});
+
+test("runs a continuous seconds rail and physical minute-boundary face sweeps", async () => {
+  const [clock, clockStyles, readme] = await Promise.all([
+    readFile(new URL("../app/modes/flip-dot-clock.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/flip-clock.css", import.meta.url), "utf8"),
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+  ]);
+  const sweepEffect = clock.slice(
+    clock.indexOf("const minuteKey ="),
+    clock.indexOf("const temperatureText ="),
+  );
+
+  assert.match(clock, /function SecondSweep/);
+  assert.match(clock, /cursor\.animate\([\s\S]*?left: "0%"[\s\S]*?left: "calc\(100% - 2px\)"/);
+  assert.match(clock, /duration: 60_000, easing: "linear", iterations: Infinity/);
+  assert.match(clock, /sweep\.currentTime = Date\.now\(\) % 60_000/);
+  assert.match(clock, /return \(\) => sweep\.cancel\(\)/);
+  assert.match(clock, /<b>00<\/b><b>15<\/b><b>30<\/b><b>45<\/b><b>60<\/b>/);
+  assert.doesNotMatch(clock, /BAND \/ WX|88 — 108/);
+
+  assert.match(sweepEffect, /clock\.hoursMinutes === "--:--" \? null : clock\.hoursMinutes/);
+  assert.match(sweepEffect, /minuteKey\.endsWith\(":00"\) \? "hour" : "minute"/);
+  assert.match(sweepEffect, /nextSweep === "hour" \? 2_100 : 1_350/);
+  assert.match(sweepEffect, /\}, \[minuteKey, reducedMotion\]\);/);
+  assert.doesNotMatch(sweepEffect, /\[minuteKey,[^\]]*now/);
+  assert.match(clock, /separatorOn: boardSweep !== "idle" \|\| colonVisible/);
+  assert.match(clock, /data-sweep=\{sweep\}/);
+
+  assert.match(clockStyles, /\.flip-dot-field\[data-sweep="minute"\] \.flip-dot\[data-on="false"\]/);
+  assert.match(clockStyles, /\.flip-dot-field\[data-sweep="minute"\] \.flip-dot\[data-on="true"\]/);
+  assert.match(clockStyles, /\.flip-dot-field\[data-sweep="hour"\] \.flip-dot\[data-on="false"\]/);
+  assert.match(clockStyles, /\.flip-dot-field\[data-sweep="hour"\] \.flip-dot\[data-on="true"\]/);
+  assert.match(clockStyles, /@keyframes flip-board-minute-off[\s\S]*?rotateX\(360deg\)/);
+  assert.match(clockStyles, /@keyframes flip-board-hour-off[\s\S]*?rotateX\(720deg\)/);
+  assert.match(clockStyles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.flip-dot-field\[data-sweep\] \.flip-dot__rotor\s*\{\s*animation: none;/);
+  assert.match(readme, /thin 60-second rail sweeps continuously/i);
+  assert.match(readme, /top of each hour gets a longer double-turn sequence/i);
+});
+
+test("bundles and credits the polished duotone weather icon set", async () => {
+  const [packageSource, packageLockSource, readme, notices] = await Promise.all([
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../package-lock.json", import.meta.url), "utf8"),
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+    readFile(new URL("../THIRD_PARTY_NOTICES.md", import.meta.url), "utf8"),
+  ]);
+  const packageJson = JSON.parse(packageSource);
+  const packageLock = JSON.parse(packageLockSource);
+
+  assert.equal(packageJson.dependencies?.["@phosphor-icons/react"], "2.1.10");
+  assert.equal(packageLock.packages?.["node_modules/@phosphor-icons/react"]?.license, "MIT");
+  assert.match(readme, /Weather symbols use \[Phosphor Icons\]/);
+  assert.match(readme, /locally bundled Phosphor SVG instrument icons/);
+  assert.match(notices, /Copyright \(c\) 2020 Phosphor Icons/);
+  assert.match(notices, /Permission is hereby granted, free of charge/);
 });
 
 test("persists normal or bold numeral weight without changing rotor size", async () => {
@@ -1013,13 +1156,13 @@ test("persists normal or bold numeral weight without changing rotor size", async
   assert.match(clock, /aria-pressed=\{weight === "bold"\}/);
   assert.match(weightSelectorSource, /ArrowRight/);
   assert.match(weightSelectorSource, /ArrowLeft/);
-  assert.match(clock, /\[colonVisible, digitWeight, fieldVariant, hours, minutes\]/);
+  assert.match(clock, /\[boardSweep, colonVisible, digitWeight, fieldVariant, hours, minutes\]/);
   assert.match(clockStyles, /\.flip-clock-weight-selector\[data-weight="bold"\]/);
   assert.doesNotMatch(
     clockStyles,
     /\.flip-dot-field[^\{]*(?:normal|bold|weight)[^\{]*\{[^}]*(?:--dot-size|width|height|scale)/i,
   );
-  assert.match(readme, /There is no seconds readout/i);
+  assert.match(readme, /There is no numeric seconds readout/i);
   assert.match(readme, /NORMAL\/BOLD[\s\S]*activating more rotors, never by enlarging individual dots/i);
   assert.match(readme, /numeral weight[\s\S]*cached on-device/i);
   assert.doesNotMatch(readme, /Time, seconds|including seconds|weather dot matrices|dot icons/i);

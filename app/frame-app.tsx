@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- Wikimedia Commons images are dynamic cross-origin assets. */
-
 import {
   Component,
   useCallback,
@@ -12,14 +10,10 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
-import { localArtworkUrl, publicAssetUrl } from "./data/artworks";
-import {
-  POSTERJO_ARTWORKS,
-  posterjoArtworkUrl,
-} from "./data/posterjo";
+import { publicAssetUrl } from "./data/artworks";
 import { GalleryMode } from "./modes/gallery";
 import { PosterjoMode } from "./modes/posterjo";
-import { FlipDotClock, FlipDotText } from "./modes/flip-dot-clock";
+import { FlipDotClock } from "./modes/flip-dot-clock";
 import { createPageLoadSeed } from "./shuffle";
 
 type ModeId = "clock" | "gallery" | "posterjo";
@@ -29,7 +23,13 @@ type ModeDefinition = {
   name: string;
   description: string;
   component: ComponentType<{ paused?: boolean; shuffleSeed: string }>;
-  preview: ComponentType;
+  poster: {
+    metric: string;
+    label: string;
+    kicker: string;
+    status: string;
+    tags: readonly string[];
+  };
 };
 
 type WakeLockHandle = {
@@ -51,25 +51,43 @@ const MODES: ModeDefinition[] = [
     id: "clock",
     number: "01",
     name: "Flip Dot Weather",
-    description: "A mechanical clock and live weather board for any city.",
+    description: "24-hour mechanical time, live conditions, and selectable cities.",
     component: FlipDotClock,
-    preview: ClockPreview,
+    poster: {
+      metric: "24:00",
+      label: "MECHANICAL TIME",
+      kicker: "LIVE WEATHER / ANY CITY",
+      status: "LOCAL DATA",
+      tags: ["TACTILE", "24 HOUR", "LIVE"],
+    },
   },
   {
     id: "gallery",
     number: "02",
     name: "Swikipedia",
-    description: "A slow public-domain gallery spanning six centuries.",
+    description: "2,048 verified public-domain works across six centuries.",
     component: GalleryMode,
-    preview: GalleryPreview,
+    poster: {
+      metric: "2,048",
+      label: "PAINTINGS",
+      kicker: "SIX CENTURIES / ONE SLOW GALLERY",
+      status: "PUBLIC DOMAIN",
+      tags: ["1400—2026", "5 MIN EACH", "VERIFIED"],
+    },
   },
   {
     id: "posterjo",
     number: "03",
     name: "Posterjo",
-    description: "Joan Sterjo’s 4K artwork archive, framed edge to edge.",
+    description: "269 original Joan Sterjo works from a local 4K archive.",
     component: PosterjoMode,
-    preview: PosterjoPreview,
+    poster: {
+      metric: "269",
+      label: "ARTWORKS",
+      kicker: "JOAN STERJO / LOCAL 4K ARCHIVE",
+      status: "ARTIST EDITION",
+      tags: ["ORIGINALS", "FULL BLEED", "4K"],
+    },
   },
 ];
 
@@ -147,56 +165,20 @@ function useWakeLock(active: boolean) {
   return { state, request };
 }
 
-function ClockPreview() {
+function TypographyPreview({ mode }: { mode: ModeDefinition }) {
   return (
-    <div className="clock-preview" aria-hidden="true">
-      <div className="clock-preview-heading">
-        <span>FDP–01</span>
-        <span>BERLIN / LIVE</span>
+    <div className={`type-preview type-preview--${mode.id}`} aria-hidden="true">
+      <header className="type-preview-header">
+        <span>FIELD / {mode.number}</span>
+        <em>{mode.poster.status}</em>
+      </header>
+      <div className="type-preview-main">
+        <strong>{mode.poster.metric}</strong>
+        <span>{mode.poster.label}</span>
+        <p>{mode.poster.kicker}</p>
       </div>
-      <div className="clock-preview-panel">
-        <FlipDotText
-          className="flip-dot-matrix--preview"
-          ready
-          text="12:48"
-        />
-        <div className="clock-preview-weather">
-          <span className="clock-preview-sun" />
-          <strong>21°</strong>
-        </div>
-      </div>
-      <div className="clock-preview-type">MECHANICAL TIME / CURRENT WEATHER</div>
-    </div>
-  );
-}
-
-function GalleryPreview() {
-  return (
-    <div className="gallery-preview" aria-hidden="true">
-      <img
-        src={localArtworkUrl("Q474338")}
-        alt=""
-      />
-      <div className="gallery-preview-wash" />
-      <div className="gallery-preview-label">
-        <span>PLATE 003 / 2048</span>
-        <strong>Lady with an Ermine</strong>
-        <small>Leonardo da Vinci · c. 1489–1491</small>
-      </div>
-    </div>
-  );
-}
-
-function PosterjoPreview() {
-  const artwork = POSTERJO_ARTWORKS[0];
-
-  return (
-    <div className="posterjo-preview" aria-hidden="true">
-      {artwork && <img src={posterjoArtworkUrl(artwork)} alt="" />}
-      <div className="posterjo-preview-wash" />
-      <div className="posterjo-preview-label">
-        <span>POSTERJO / 4K</span>
-        <strong>{artwork?.title ?? "Posterjo"}</strong>
+      <div className="type-preview-tags">
+        {mode.poster.tags.map((tag) => <span key={tag}>{tag}</span>)}
       </div>
     </div>
   );
@@ -231,10 +213,10 @@ function ModeIndex({
 
       <div className="mode-list">
         {MODES.map((mode) => {
-          const Preview = mode.preview;
           return (
             <button
               className={`mode-card ${activeMode === mode.id ? "is-current" : ""}`}
+              data-mode={mode.id}
               data-testid={`mode-${mode.id}`}
               key={mode.id}
               type="button"
@@ -242,7 +224,7 @@ function ModeIndex({
               onClick={() => onSelect(mode.id)}
             >
               <div className="mode-card-preview">
-                <Preview />
+                <TypographyPreview mode={mode} />
               </div>
               <div className="mode-card-copy">
                 <span className="mode-number">/{mode.number}</span>
