@@ -40,11 +40,13 @@ test("server-renders the always-on frame shell", async () => {
 });
 
 test("keeps the product modes explicit and the starter removed", async () => {
-  const [page, layout, frame, signal, gallery, posterjo, packageJson] = await Promise.all([
+  const [page, layout, frame, clock, glyphs, weatherData, gallery, posterjo, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/flip-dot-clock.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/flip-dot-glyphs.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/weather-data.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/gallery.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/posterjo.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -52,17 +54,20 @@ test("keeps the product modes explicit and the starter removed", async () => {
 
   assert.match(page, /<FrameApp \/>/);
   assert.match(layout, /title: "Always-On Frame"/);
+  assert.match(layout, /physical flip-dot clock with selectable live weather/i);
   assert.match(layout, /2,048 verified public-domain paintings/);
-  assert.match(frame, /Signal Field/);
+  assert.match(frame, /Flip Dot Weather/);
   assert.match(frame, /Swikipedia/);
   assert.match(frame, /Posterjo/);
-  assert.match(frame, /type ModeId = [^;]*"posterjo"/);
+  assert.match(frame, /type ModeId = [^;]*"clock"[^;]*"posterjo"/);
+  assert.match(frame, /id: "clock"/);
   assert.match(frame, /id: "posterjo"/);
   assert.match(frame, /1–3 SELECT/);
   assert.match(
     frame,
-    /if \(key === "3"\)\s*(?:\{\s*)?selectMode\("posterjo"\)/,
+    /if \(key === "1"\)\s*(?:\{\s*)?selectMode\("clock"\)/,
   );
+  assert.match(frame, /stored === "signal" \? "clock" : stored/);
   assert.doesNotMatch(layout, /editorial compositions|Composition Atlas/i);
   assert.doesNotMatch(frame, /Composition Atlas|selectMode\("compositions"\)/);
   assert.match(frame, /inert=\{indexOpen\}/);
@@ -70,11 +75,15 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(frame, /createPageLoadSeed\(\)/);
   assert.match(frame, /shuffleSeed=\{shuffleSeed\}/);
   assert.match(frame, /PLATE 003 \/ 2048/);
-  assert.match(signal, /requestAnimationFrame/);
-  assert.match(signal, /cancelAnimationFrame/);
-  assert.match(signal, /getBoundingClientRect/);
-  assert.match(signal, /ResizeObserver/);
-  assert.match(signal, /MAX_CANVAS_PIXELS/);
+  assert.match(frame, /<FlipDotText/);
+  assert.match(clock, /export function FlipDotClock/);
+  assert.match(clock, /export function FlipDotText/);
+  assert.match(clock, /className="flip-dot__face flip-dot__face--off"/);
+  assert.match(clock, /className="flip-dot__face flip-dot__face--on"/);
+  assert.match(clock, /className="flip-dot__edge"/);
+  assert.match(glyphs, /export const FLIP_DOT_GLYPHS/);
+  assert.match(weatherData, /export function buildForecastUrl/);
+  assert.match(weatherData, /export function parseForecastResponse/);
   assert.equal(JSON.parse(packageJson).dependencies.geist, "^1.7.2");
   assert.match(gallery, /5 \* 60 \* 1000/);
   assert.match(gallery, /clearTimeout/);
@@ -94,16 +103,26 @@ test("keeps the product modes explicit and the starter removed", async () => {
   await assert.rejects(
     access(new URL("../app/modes/compositions.tsx", import.meta.url)),
   );
+  for (const oldSignalFile of [
+    "../app/modes/signal-field.tsx",
+    "../app/modes/signal-library.ts",
+    "../app/modes/signal-grid.ts",
+  ]) {
+    await assert.rejects(
+      access(new URL(oldSignalFile, import.meta.url)),
+      `${oldSignalFile} must be removed after Flip Dot Weather replaces the legacy mode`,
+    );
+  }
 });
 
-test("ships the expanded artwork and signal libraries", async () => {
-  const [paintings, inventorySource, overridesSource, artworks, frame, signal, gallery, styles, serviceWorker] = await Promise.all([
+test("ships the expanded artwork libraries and weather frame", async () => {
+  const [paintings, inventorySource, overridesSource, artworks, frame, clock, gallery, styles, serviceWorker] = await Promise.all([
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
     readFile(new URL("../scripts/data/painting-inventory.json", import.meta.url), "utf8"),
     readFile(new URL("../scripts/data/painting-overrides.json", import.meta.url), "utf8"),
     readFile(new URL("../app/data/artworks.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/flip-dot-clock.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/gallery.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
@@ -113,8 +132,6 @@ test("ships the expanded artwork and signal libraries", async () => {
   const paintingRows = paintingRowLines.map((line) =>
     JSON.parse(line.trim().replace(/,$/, "")),
   );
-  const signalRows = signal.match(/^\s*\{ id: "[^"]+".+draw: [a-zA-Z]+ \},?$/gm) ?? [];
-
   const inventory = JSON.parse(inventorySource);
   const overrides = JSON.parse(overridesSource);
   assert.equal(paintingRows.length, EXPECTED_PAINTING_COUNT, `expected exactly 2,048 paintings, found ${paintingRows.length}`);
@@ -154,13 +171,15 @@ test("ships the expanded artwork and signal libraries", async () => {
     assert.equal(record.artist, row[3]);
     assert.equal(record.year, row[4]);
   }
-  assert.ok(signalRows.length >= 18, `expected at least 18 signal scenes, found ${signalRows.length}`);
   assert.match(paintings, /Copyrighted=False and public domain\/CC0/);
   assert.match(artworks, /ARTWORK_DATASET_VERSION/);
   assert.match(artworks, /LOCAL_ARTWORK_ARCHIVE_VERSION = "wikimedia-2026-07-17-4k1"/);
   assert.match(artworks, /seed\.localFallback[\s\S]*?localArtworkUrl\(seed\.qid\)[\s\S]*?commonsArtworkUrl\(seed\)/);
   assert.match(artworks, /import\.meta\.env\.BASE_URL/);
   assert.match(frame, /localArtworkUrl\("Q474338"\)/);
+  assert.match(frame, /component: FlipDotClock/);
+  assert.match(clock, /DEFAULT_WEATHER_LOCATION/);
+  assert.match(clock, /WEATHER_PRESETS/);
   assert.match(frame, /serviceWorker[\s\S]*?register\(publicAssetUrl\("sw\.js"\), \{ scope: import\.meta\.env\.BASE_URL \}\)/);
   assert.match(gallery, /const metadataWindowQids = useMemo/);
   assert.match(gallery, /fetchGallery\(seeds, controller\.signal\)/);
@@ -194,9 +213,15 @@ test("ships the expanded artwork and signal libraries", async () => {
   assert.doesNotMatch(styles, /calc\(100s?vh \* 9 \/ 16\)|calc\(100vw \* 16 \/ 9\)/);
   assert.doesNotMatch(styles, /min-width: 280px/);
   assert.match(styles, /@media \(min-aspect-ratio: 4 \/ 3\)/);
+  const landscapeMediaStart = styles.indexOf("@media (min-aspect-ratio: 4 / 3)");
+  const landscapeMediaEnd = styles.indexOf("@media ", landscapeMediaStart + 1);
+  const landscapeMedia = styles.slice(
+    landscapeMediaStart,
+    landscapeMediaEnd < 0 ? styles.length : landscapeMediaEnd,
+  );
   assert.doesNotMatch(
-    styles,
-    /@media \(min-aspect-ratio: 4 \/ 3\)[\s\S]*?\.gallery-caption\s*\{[\s\S]*?position:/,
+    landscapeMedia,
+    /\.gallery-caption\s*\{[^}]*\bposition:/,
     "caption anchoring must not change with artwork or viewport aspect ratio",
   );
   assert.match(styles, /safe-area-inset-left/);
@@ -539,322 +564,346 @@ test("prioritizes randomized Swikipedia decks for the viewport orientation", asy
   );
 });
 
-test("keeps Signal Field geometry deterministic across display shapes", async () => {
-  const signalGridModule = await import(
-    new URL("../app/modes/signal-grid.ts", import.meta.url).href
+test("ships complete deterministic flip-dot glyph and weather-icon matrices", async () => {
+  const glyphModule = await import(
+    new URL("../app/modes/flip-dot-glyphs.ts", import.meta.url).href
   );
   const {
-    buildCellFlipPlan,
-    cellFlipProgress,
-    classifySignalViewport,
-    fitCellGrid,
-    quantizeSignalCellState,
-    quantizeSignalTime,
-    resolveBackingStore,
-    resolveSignalHeaderLayout,
-    resolveSignalLayout,
-    signalConfidence,
-    signalWeight,
-  } = signalGridModule.default ?? signalGridModule;
-  const viewports = [
-    { width: 3440, height: 1440, profile: "wide" },
-    { width: 1920, height: 1080, profile: "standard" },
-    { width: 1080, height: 1920, profile: "portrait" },
-    { width: 1280, height: 480, profile: "short" },
+    FLIP_DOT_GLYPHS,
+    flipDotGlyph,
+    normalizeFlipDotText,
+    weatherDotPattern,
+  } = glyphModule.default ?? glyphModule;
+  const requiredCharacters = [
+    " ", "-", ".", ":", "°", "?",
+    ..."0123456789",
+    ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
   ];
-  const epsilon = 0.000_001;
 
-  for (const viewport of viewports) {
-    const { width, height, profile } = viewport;
-    assert.equal(classifySignalViewport(width, height), profile);
-    const layout = resolveSignalLayout(width, height);
-    assert.equal(layout.profile, profile);
-    assert.equal(layout.viewportWidth, width);
-    assert.equal(layout.viewportHeight, height);
-    assert.equal(layout.shortAxisCells, 48);
-    assert.equal(Math.min(layout.columns, layout.rows), 48);
-    for (const value of [
-      layout.cellSize,
-      layout.gridWidth,
-      layout.gridHeight,
-      layout.originX,
-      layout.originY,
-      layout.bounds.x,
-      layout.bounds.y,
-      layout.bounds.width,
-      layout.bounds.height,
-    ]) {
-      assert.ok(Number.isFinite(value), `${width}×${height} layout values must be finite`);
-    }
-    assert.ok(layout.cellSize > 0);
-    assert.ok(layout.columns >= 48 && layout.rows >= 48);
-    assert.ok(Math.abs(layout.gridWidth - layout.columns * layout.cellSize) <= epsilon);
-    assert.ok(Math.abs(layout.gridHeight - layout.rows * layout.cellSize) <= epsilon);
-    assert.ok(
-      Math.abs(Math.min(layout.gridWidth, layout.gridHeight) - Math.min(width, height)) <= epsilon,
-    );
-    assert.ok(Math.abs(layout.originX * 2 + layout.gridWidth - width) <= epsilon);
-    assert.ok(Math.abs(layout.originY * 2 + layout.gridHeight - height) <= epsilon);
-    assert.ok(layout.originX >= -epsilon && layout.originY >= -epsilon);
-    assert.ok(layout.originX + layout.gridWidth <= width + epsilon);
-    assert.ok(layout.originY + layout.gridHeight <= height + epsilon);
-    assert.ok(layout.bounds.width > 0 && layout.bounds.height > 0);
-    assert.ok(layout.bounds.x >= -epsilon && layout.bounds.y >= -epsilon);
-    assert.ok(layout.bounds.x + layout.bounds.width <= width + epsilon);
-    assert.ok(layout.bounds.y + layout.bounds.height <= height + epsilon);
-
-    const singleHeader = resolveSignalHeaderLayout(
-      layout,
-      layout.cellSize * 8,
-      layout.cellSize * 10,
-    );
-    assert.equal(singleHeader.mode, "single-row");
-    assert.ok(singleHeader.left.x < singleHeader.right.x);
-    assert.ok(singleHeader.rule.y1 > singleHeader.left.y);
-    assert.ok(singleHeader.contentTop > singleHeader.rule.y1);
-    const stackedHeader = resolveSignalHeaderLayout(
-      layout,
-      singleHeader.availableWidth * 0.72,
-      singleHeader.availableWidth * 0.72,
-    );
-    assert.equal(stackedHeader.mode, "stacked");
-    assert.ok(stackedHeader.right.y > stackedHeader.left.y);
-    assert.ok(stackedHeader.rule.y1 > stackedHeader.right.y);
-    assert.ok(stackedHeader.contentTop > stackedHeader.rule.y1);
-
-    for (const column of [0, Math.floor(layout.columns / 2), layout.columns]) {
-      const snappedX = layout.originX + column * layout.cellSize;
-      assert.ok(Number.isFinite(snappedX));
-      assert.ok(snappedX >= -epsilon && snappedX <= width + epsilon);
-    }
-    for (const row of [0, Math.floor(layout.rows / 2), layout.rows]) {
-      const snappedY = layout.originY + row * layout.cellSize;
-      assert.ok(Number.isFinite(snappedY));
-      assert.ok(snappedY >= -epsilon && snappedY <= height + epsilon);
-    }
-
-    for (const [columns, rows] of [[26, 42], [12, 8]]) {
-      const fitted = fitCellGrid(layout, columns, rows);
-      assert.equal(fitted.columns, columns);
-      assert.equal(fitted.rows, rows);
-      assert.ok(Number.isInteger(fitted.column) && Number.isInteger(fitted.row));
-      for (const value of [
-        fitted.x,
-        fitted.y,
-        fitted.width,
-        fitted.height,
-        fitted.cellSize,
-      ]) {
-        assert.ok(Number.isFinite(value), `${columns}×${rows} fitted values must be finite`);
-      }
-      assert.ok(fitted.cellSize > 0 && fitted.width > 0 && fitted.height > 0);
-      assert.ok(Math.abs(fitted.width / columns - fitted.cellSize) <= epsilon);
-      assert.ok(Math.abs(fitted.height / rows - fitted.cellSize) <= epsilon);
-      assert.ok(Math.abs(fitted.x - (layout.originX + fitted.column * layout.cellSize)) <= epsilon);
-      assert.ok(Math.abs(fitted.y - (layout.originY + fitted.row * layout.cellSize)) <= epsilon);
-      assert.ok(fitted.x >= layout.bounds.x - epsilon);
-      assert.ok(fitted.y >= layout.bounds.y - epsilon);
-      assert.ok(fitted.x + fitted.width <= layout.bounds.x + layout.bounds.width + epsilon);
-      assert.ok(fitted.y + fitted.height <= layout.bounds.y + layout.bounds.height + epsilon);
-      const horizontalSlack = layout.bounds.width - fitted.width;
-      const verticalSlack = layout.bounds.height - fitted.height;
-      assert.ok(
-        Math.abs((fitted.x - layout.bounds.x) * 2 - horizontalSlack) <= layout.cellSize + epsilon,
-        `${columns}×${rows} grid must remain horizontally centered on ${width}×${height}`,
-      );
-      assert.ok(
-        Math.abs((fitted.y - layout.bounds.y) * 2 - verticalSlack) <= layout.cellSize + epsilon,
-        `${columns}×${rows} grid must remain vertically centered on ${width}×${height}`,
-      );
-    }
-
-    const backing = resolveBackingStore(width, height, 2, 2_200_000);
-    assert.ok(Number.isInteger(backing.width) && backing.width > 0);
-    assert.ok(Number.isInteger(backing.height) && backing.height > 0);
-    assert.ok(Number.isFinite(backing.ratio) && backing.ratio > 0);
-    assert.equal(backing.pixelCount, backing.width * backing.height);
-    assert.ok(
-      backing.pixelCount <= 2_200_000,
-      `${width}×${height} backing store exceeds the strict pixel budget`,
-    );
-
-    const flipPlan = buildCellFlipPlan(width, height, 73, 240);
-    assert.deepEqual(flipPlan, buildCellFlipPlan(width, height, 73, 240));
-    assert.notDeepEqual(
-      flipPlan.map((cell) => cell.id),
-      buildCellFlipPlan(width, height, 74, 240).map((cell) => cell.id),
-    );
-    assert.ok(flipPlan.length > 1 && flipPlan.length <= 240);
-    assert.equal(new Set(flipPlan.map((cell) => cell.id)).size, flipPlan.length);
-    assert.equal(new Set(flipPlan.map((cell) => cell.order)).size, flipPlan.length);
-    for (const [index, cell] of flipPlan.entries()) {
-      assert.ok(Number.isInteger(cell.column) && Number.isInteger(cell.row));
-      for (const value of [cell.x, cell.y, cell.width, cell.height, cell.order, cell.threshold]) {
-        assert.ok(Number.isFinite(value), `${cell.id} transition geometry must be finite`);
-      }
-      assert.equal(cell.order, index);
-      assert.ok(cell.width > 0 && cell.height > 0);
-      assert.ok(Math.abs(cell.width - cell.height) <= epsilon);
-      const widthInMasterCells = cell.width / layout.cellSize;
-      const columnOnMasterGrid = (cell.x - layout.originX) / layout.cellSize;
-      const rowOnMasterGrid = (cell.y - layout.originY) / layout.cellSize;
-      assert.ok(
-        Math.abs(widthInMasterCells - Math.round(widthInMasterCells)) <= epsilon,
-        `${cell.id} width must remain an integer multiple of the shared grid`,
-      );
-      assert.ok(
-        Math.abs(columnOnMasterGrid - Math.round(columnOnMasterGrid)) <= epsilon,
-        `${cell.id} x coordinate must align to the shared grid`,
-      );
-      assert.ok(
-        Math.abs(rowOnMasterGrid - Math.round(rowOnMasterGrid)) <= epsilon,
-        `${cell.id} y coordinate must align to the shared grid`,
-      );
-      assert.ok(cell.x >= layout.originX - layout.cellSize - epsilon);
-      assert.ok(cell.y >= layout.originY - layout.cellSize - epsilon);
-      assert.ok(cell.x <= layout.originX + layout.gridWidth + layout.cellSize + epsilon);
-      assert.ok(cell.y <= layout.originY + layout.gridHeight + layout.cellSize + epsilon);
-      assert.ok(cell.x < width && cell.x + cell.width > 0);
-      assert.ok(cell.y < height && cell.y + cell.height > 0);
-      assert.ok(cell.threshold >= 0 && cell.threshold <= 1);
-      assert.equal(cellFlipProgress(0, cell), 0);
-      assert.equal(cellFlipProgress(1, cell), 1);
-      const early = cellFlipProgress(0.25, cell);
-      const middle = cellFlipProgress(0.5, cell);
-      const late = cellFlipProgress(0.75, cell);
-      assert.ok(early >= 0 && early <= middle && middle <= late && late <= 1);
-    }
-    assert.ok(Math.min(...flipPlan.map((cell) => cell.x)) <= 0);
-    assert.ok(Math.min(...flipPlan.map((cell) => cell.y)) <= 0);
-    assert.ok(Math.max(...flipPlan.map((cell) => cell.x + cell.width)) >= width);
-    assert.ok(Math.max(...flipPlan.map((cell) => cell.y + cell.height)) >= height);
-    const middleStates = flipPlan.map((cell) => cellFlipProgress(0.5, cell));
-    assert.deepEqual(new Set(middleStates), new Set([0, 1]));
-  }
-
-  assert.equal(quantizeSignalTime(0), 0);
-  assert.equal(quantizeSignalTime(1), 0);
-  assert.equal(quantizeSignalTime(159), 0);
-  assert.equal(quantizeSignalTime(160), 160);
-  assert.equal(quantizeSignalTime(319), 160);
-  assert.equal(quantizeSignalTime(320), 320);
-  assert.equal(quantizeSignalTime(Number.NaN), 0);
-  assert.equal(quantizeSignalTime(-1), 0);
-  let previousConfidence = 1;
-  for (const time of [0, 160, 320, 800, 1_600]) {
-    const confidence = signalConfidence(time, 1_600);
-    assert.ok(Number.isFinite(confidence) && confidence >= 0 && confidence <= 1);
-    assert.ok(confidence <= previousConfidence);
-    previousConfidence = confidence;
-    for (const role of ["primary", "secondary", "tertiary"]) {
-      const weight = signalWeight(confidence, role);
-      assert.ok(Number.isFinite(weight) && weight >= 100 && weight <= 900);
+  assert.deepEqual(Object.keys(FLIP_DOT_GLYPHS).sort(), requiredCharacters.sort());
+  for (const character of requiredCharacters) {
+    const pattern = FLIP_DOT_GLYPHS[character];
+    assert.equal(pattern.length, 7, `${JSON.stringify(character)} must be seven dots tall`);
+    for (const row of pattern) {
+      assert.equal(row.length, 5, `${JSON.stringify(character)} must be five dots wide`);
+      assert.match(row, /^[01]{5}$/);
     }
   }
-  for (const role of ["primary", "secondary", "tertiary"]) {
-    assert.ok(signalWeight(0, role) < signalWeight(1, role));
+  assert.equal(normalizeFlipDotText("München 21°c"), "MUNCHEN 21°C");
+  assert.equal(normalizeFlipDotText("A/B!"), "A B ");
+  assert.equal(flipDotGlyph("☃"), FLIP_DOT_GLYPHS["?"]);
+
+  const weatherIcons = [
+    "clear-day",
+    "clear-night",
+    "partly-cloudy-day",
+    "partly-cloudy-night",
+    "cloudy",
+    "fog",
+    "drizzle",
+    "rain",
+    "snow",
+    "storm",
+    "unknown",
+  ];
+  for (const icon of weatherIcons) {
+    const pattern = weatherDotPattern(icon);
+    assert.equal(pattern.length, 9, `${icon} must be nine dots tall`);
+    for (const row of pattern) {
+      assert.equal(row.length, 9, `${icon} must be nine dots wide`);
+      assert.match(row, /^[01]{9}$/);
+    }
   }
-  assert.deepEqual(
-    [0, 0.2, 0.5, 0.9].map((level) => quantizeSignalCellState(level)),
-    ["off", "low", "mid", "on"],
-  );
-  assert.equal(quantizeSignalCellState(0.5, true), "pattern");
-  assert.equal(quantizeSignalCellState(0, true), "outline");
-  assert.equal(quantizeSignalCellState(0.7, false, -0.4), "outline");
-  assert.equal(quantizeSignalCellState(0.4, false, 0.4), "pattern");
+  assert.equal(weatherDotPattern("not-a-weather-icon"), weatherDotPattern("unknown"));
 });
 
-test("shuffles every Signal Field scene once per cycle", async () => {
-  const [{ shuffledCycle }, signalLibrary, signalField] = await Promise.all([
-    import(new URL("../app/shuffle.ts", import.meta.url).href),
-    readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
+test("builds static-client Open-Meteo URLs without credentials", async () => {
+  const weatherModule = await import(
+    new URL("../app/modes/weather-data.ts", import.meta.url).href
+  );
+  const { buildForecastUrl, buildGeocodingUrl } = weatherModule.default ?? weatherModule;
+  const location = {
+    id: "test-location",
+    name: "São Paulo",
+    admin: "São Paulo",
+    country: "Brazil",
+    countryCode: "BR",
+    latitude: -23.55052,
+    longitude: -46.633308,
+    timezone: "America/Sao_Paulo",
+  };
+  const forecast = new URL(buildForecastUrl(location));
+
+  assert.equal(forecast.protocol, "https:");
+  assert.equal(forecast.host, "api.open-meteo.com");
+  assert.equal(forecast.pathname, "/v1/forecast");
+  assert.equal(forecast.searchParams.get("latitude"), String(location.latitude));
+  assert.equal(forecast.searchParams.get("longitude"), String(location.longitude));
+  assert.deepEqual(forecast.searchParams.get("current")?.split(","), [
+    "temperature_2m",
+    "relative_humidity_2m",
+    "apparent_temperature",
+    "is_day",
+    "precipitation",
+    "weather_code",
+    "wind_speed_10m",
+    "wind_direction_10m",
   ]);
-  const SIGNAL_SCENE_COUNT = 18;
-  const shuffleSeed = "signal:page-load";
-  const sceneIndices = Array.from({ length: SIGNAL_SCENE_COUNT }, (_, index) => index);
-  const cycles = Array.from({ length: 4 }, (_, cycle) =>
-    shuffledCycle(sceneIndices, shuffleSeed, cycle),
-  );
+  assert.equal(forecast.searchParams.get("daily"), "temperature_2m_max,temperature_2m_min");
+  assert.equal(forecast.searchParams.get("temperature_unit"), "celsius");
+  assert.equal(forecast.searchParams.get("wind_speed_unit"), "kmh");
+  assert.equal(forecast.searchParams.get("precipitation_unit"), "mm");
+  assert.equal(forecast.searchParams.get("timezone"), "auto");
+  assert.equal(forecast.searchParams.get("forecast_days"), "1");
+  assert.equal(forecast.searchParams.has("apikey"), false);
 
-  for (const [cycle, order] of cycles.entries()) {
-    assert.equal(order.length, SIGNAL_SCENE_COUNT);
-    assert.equal(new Set(order).size, SIGNAL_SCENE_COUNT, `signal cycle ${cycle} must not repeat`);
-    assert.deepEqual(
-      [...order].sort((left, right) => left - right),
-      Array.from({ length: SIGNAL_SCENE_COUNT }, (_, index) => index),
-    );
-    if (cycle > 0) {
-      assert.notDeepEqual(order, cycles[cycle - 1], "successive Signal Field cycles must reshuffle");
-      assert.notEqual(order[0], cycles[cycle - 1].at(-1), "Signal Field must not repeat at a cycle boundary");
+  const geocoding = new URL(buildGeocodingUrl("  São Paulo & region  ", 99));
+  assert.equal(geocoding.protocol, "https:");
+  assert.equal(geocoding.host, "geocoding-api.open-meteo.com");
+  assert.equal(geocoding.pathname, "/v1/search");
+  assert.equal(geocoding.searchParams.get("name"), "São Paulo & region");
+  assert.equal(geocoding.searchParams.get("count"), "10");
+  assert.equal(geocoding.searchParams.get("language"), "en");
+  assert.equal(geocoding.searchParams.get("format"), "json");
+  assert.equal(geocoding.searchParams.has("apikey"), false);
+  assert.equal(new URL(buildGeocodingUrl("Berlin", -5)).searchParams.get("count"), "1");
+});
+
+test("parses Open-Meteo location and current-weather payloads defensively", async () => {
+  const weatherModule = await import(
+    new URL("../app/modes/weather-data.ts", import.meta.url).href
+  );
+  const { parseForecastResponse, parseGeocodingResponse } = weatherModule.default ?? weatherModule;
+  const locations = parseGeocodingResponse({
+    results: [
+      {
+        id: 2950159,
+        name: " Berlin ",
+        admin1: "Berlin",
+        country: "Germany",
+        country_code: "DE",
+        latitude: 52.52437,
+        longitude: 13.41053,
+        timezone: "Europe/Berlin",
+      },
+      { name: "Outside", latitude: 91, longitude: 0, timezone: "UTC" },
+      {
+        name: "Fallback country",
+        country_code: "FR",
+        latitude: 48.85,
+        longitude: 2.35,
+        timezone: "Europe/Paris",
+      },
+      null,
+    ],
+  });
+
+  assert.deepEqual(locations, [
+    {
+      id: "2950159",
+      name: "Berlin",
+      admin: "Berlin",
+      country: "Germany",
+      countryCode: "DE",
+      latitude: 52.52437,
+      longitude: 13.41053,
+      timezone: "Europe/Berlin",
+    },
+    {
+      id: "48.85:2.35:2",
+      name: "Fallback country",
+      admin: "",
+      country: "FR",
+      countryCode: "FR",
+      latitude: 48.85,
+      longitude: 2.35,
+      timezone: "Europe/Paris",
+    },
+  ]);
+  assert.deepEqual(parseGeocodingResponse({}), []);
+  assert.deepEqual(parseGeocodingResponse({ results: "not-an-array" }), []);
+
+  const payload = {
+    timezone: "Europe/Berlin",
+    timezone_abbreviation: "CEST",
+    current_units: {
+      temperature_2m: "°C",
+      relative_humidity_2m: "%",
+      precipitation: "mm",
+      wind_speed_10m: "km/h",
+    },
+    current: {
+      time: "2026-07-22T14:45",
+      temperature_2m: 24.6,
+      apparent_temperature: 25.2,
+      relative_humidity_2m: 61,
+      precipitation: 0.1,
+      weather_code: 2,
+      is_day: 1,
+      wind_speed_10m: 12.4,
+      wind_direction_10m: 225,
+    },
+    daily: {
+      temperature_2m_max: [27.1],
+      temperature_2m_min: [16.2],
+    },
+  };
+  assert.deepEqual(parseForecastResponse(payload), {
+    observedAt: "2026-07-22T14:45",
+    timezone: "Europe/Berlin",
+    timezoneAbbreviation: "CEST",
+    temperature: 24.6,
+    apparentTemperature: 25.2,
+    relativeHumidity: 61,
+    precipitation: 0.1,
+    weatherCode: 2,
+    isDay: true,
+    windSpeed: 12.4,
+    windDirection: 225,
+    temperatureMax: 27.1,
+    temperatureMin: 16.2,
+    units: {
+      temperature: "°C",
+      humidity: "%",
+      precipitation: "mm",
+      windSpeed: "km/h",
+    },
+  });
+  assert.equal(parseForecastResponse({}), null);
+  assert.equal(parseForecastResponse({ ...payload, current: { ...payload.current, temperature_2m: null } }), null);
+
+  const fallbackUnits = parseForecastResponse({
+    ...payload,
+    current_units: undefined,
+    daily: undefined,
+  });
+  assert.deepEqual(fallbackUnits?.units, {
+    temperature: "°C",
+    humidity: "%",
+    precipitation: "mm",
+    windSpeed: "km/h",
+  });
+  assert.equal(fallbackUnits?.temperatureMax, null);
+  assert.equal(fallbackUnits?.temperatureMin, null);
+});
+
+test("maps every documented WMO current-weather code and wind direction", async () => {
+  const weatherModule = await import(
+    new URL("../app/modes/weather-data.ts", import.meta.url).href
+  );
+  const { weatherDescriptor, windCompass } = weatherModule.default ?? weatherModule;
+  const groups = [
+    { codes: [3], label: "Overcast", icon: "cloudy" },
+    { codes: [45, 48], label: "Fog", icon: "fog" },
+    { codes: [51, 53, 55, 56, 57], label: "Drizzle", icon: "drizzle" },
+    { codes: [61, 63, 65, 66, 67, 80, 81, 82], label: "Rain", icon: "rain" },
+    { codes: [71, 73, 75, 77, 85, 86], label: "Snow", icon: "snow" },
+    { codes: [95, 96, 99], label: "Thunderstorm", icon: "storm" },
+  ];
+  const coveredCodes = new Set([0, 1, 2]);
+
+  assert.deepEqual(weatherDescriptor(0, true), { label: "Clear", icon: "clear-day" });
+  assert.deepEqual(weatherDescriptor(0, false), { label: "Clear night", icon: "clear-night" });
+  assert.deepEqual(weatherDescriptor(1, true), { label: "Mainly clear", icon: "partly-cloudy-day" });
+  assert.deepEqual(weatherDescriptor(1, false), { label: "Mainly clear", icon: "partly-cloudy-night" });
+  assert.deepEqual(weatherDescriptor(2, true), { label: "Partly cloudy", icon: "partly-cloudy-day" });
+  assert.deepEqual(weatherDescriptor(2, false), { label: "Partly cloudy", icon: "partly-cloudy-night" });
+
+  for (const { codes, label, icon } of groups) {
+    for (const code of codes) {
+      coveredCodes.add(code);
+      assert.deepEqual(weatherDescriptor(code, true), { label, icon });
+      assert.deepEqual(weatherDescriptor(code, false), { label, icon });
     }
   }
+  assert.equal(coveredCodes.size, 28, "the complete Open-Meteo WMO table must stay covered");
+  assert.deepEqual(weatherDescriptor(-1, true), {
+    label: "Conditions unavailable",
+    icon: "unknown",
+  });
+  assert.deepEqual(weatherDescriptor(100, false), {
+    label: "Conditions unavailable",
+    icon: "unknown",
+  });
 
-  assert.match(signalLibrary, /export function resolveSignalSceneIndex\(/);
-  assert.match(signalLibrary, /shuffledCycle\(SIGNAL_SCENE_INDICES, shuffleSeed, cycleIndex\)/);
-  assert.match(
-    signalLibrary,
-    /const logicalIndex = rawIndex \+ offset;[\s\S]*?resolveSignalSceneIndex\(logicalIndex, options\.shuffleSeed\)[\s\S]*?resolveSignalSceneIndex\(logicalIndex \+ 1, options\.shuffleSeed\)/,
-    "current and next Signal scenes must resolve independent logical deck positions",
-  );
-  assert.match(signalField, /shuffleSeed: signalShuffleSeed/);
-});
-
-test("keeps Signal Field manually navigable, accessible and pause-safe", async () => {
-  const signalField = await readFile(
-    new URL("../app/modes/signal-field.tsx", import.meta.url),
-    "utf8",
-  );
-
-  assert.match(signalField, /const navigateManually = useCallback/);
-  assert.match(signalField, /event\.key !== "ArrowLeft" && event\.key !== "ArrowRight"/);
-  assert.match(
-    signalField,
-    /navigateManually\(event\.key === "ArrowLeft" \? -1 : 1\)/,
-  );
-  assert.match(signalField, /on(?:Click|PointerUp)=\{/);
-  assert.match(signalField, /event\.currentTarget\.getBoundingClientRect\(\)/);
-  assert.match(
-    signalField,
-    /event\.clientX\s*<\s*bounds\.left\s*\+\s*bounds\.width\s*\/\s*2\s*\?\s*-1\s*:\s*1/,
-    "the left and right halves must move to the previous and next scene",
-  );
-
-  assert.match(signalField, /aria-describedby="signal-field-navigation-help"/);
-  assert.match(signalField, /aria-keyshortcuts="ArrowLeft ArrowRight"/);
-  assert.match(signalField, /className="signal-scene-hud"/);
-  assert.match(signalField, /role="group" aria-label="Signal scene navigation"/);
-  assert.match(signalField, /aria-label="Show previous Signal Field scene"/);
-  assert.match(signalField, /aria-label="Show next Signal Field scene"/);
-  assert.match(signalField, /aria-live="polite"/);
-  assert.match(signalField, /FRAME \{String\(sceneView\.deckPosition\)/);
-  assert.match(
-    signalField,
-    /left half for the previous scene[\s\S]*?right half for[\s\S]*?the next scene[\s\S]*?left and right arrow keys/i,
-  );
-
-  assert.match(signalField, /const accumulatedPlayheadRef = useRef\(0\)/);
-  assert.match(signalField, /const runningSinceRef = useRef<number \| null>\(null\)/);
-  assert.match(signalField, /if \(paused\) return;/);
-  assert.match(
-    signalField,
-    /accumulatedPlayheadRef\.current = currentPlayhead\([\s\S]*?runningSinceRef\.current,[\s\S]*?now,[\s\S]*?\);[\s\S]*?runningSinceRef\.current = null;/,
-    "pausing must bank elapsed time before stopping the running clock",
-  );
-  assert.doesNotMatch(
-    signalField,
-    /accumulatedPlayheadRef\.current\s*=\s*0\b/,
-    "pausing must not reset the Signal Field playhead",
+  assert.deepEqual(
+    [0, 45, 90, 135, 180, 225, 270, 315, 360, -45].map(windCompass),
+    ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N", "NW"],
   );
 });
 
-test("ships the local cyberpunk type system, industrial palette and drawing primitives", async () => {
-  const [layout, packageSource, packageLockSource, signalField, signalLibrary, styles] = await Promise.all([
+test("keeps Flip Dot Weather cached, abortable, pause-safe and accessible", async () => {
+  const [clock, weatherData] = await Promise.all([
+    readFile(new URL("../app/modes/flip-dot-clock.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/weather-data.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(clock, /LOCATION_STORAGE_KEY = "always-on-frame\.weather-location\.v1"/);
+  assert.match(clock, /WEATHER_CACHE_KEY = "always-on-frame\.weather-cache\.v1"/);
+  assert.match(clock, /WEATHER_REFRESH_MS = 15 \* 60 \* 1000/);
+  assert.match(clock, /WEATHER_STALE_MS = 30 \* 60 \* 1000/);
+  assert.match(clock, /readStoredJson\(LOCATION_STORAGE_KEY\)/);
+  assert.match(clock, /isCachedWeather\(storedWeather\) && storedWeather\.locationId === nextLocation\.id/);
+  assert.match(clock, /storeJson\(WEATHER_CACHE_KEY,[\s\S]*?fetchedAt: nextFetchedAt,[\s\S]*?locationId: location\.id,[\s\S]*?snapshot/);
+  assert.match(clock, /Showing saved conditions while refreshing/);
+  assert.match(clock, /showing the last saved conditions/);
+
+  assert.match(clock, /if \(!preferencesReady \|\| paused\) return;/);
+  assert.match(clock, /const controller = new AbortController\(\)/);
+  assert.match(clock, /fetch\(buildForecastUrl\(location\), \{[\s\S]*?signal: controller\.signal/);
+  assert.match(clock, /window\.setInterval\(\(\) => void refresh\(\), WEATHER_REFRESH_MS\)/);
+  assert.match(clock, /document\.addEventListener\("visibilitychange", handleVisibility\)/);
+  assert.match(clock, /controller\.abort\(\);[\s\S]*?window\.clearInterval\(refreshTimer\);[\s\S]*?document\.removeEventListener\("visibilitychange", handleVisibility\)/);
+  assert.match(clock, /if \(paused\) return;[\s\S]*?setNow\(new Date\(\)\)/);
+  assert.match(clock, /searchControllerRef\.current\?\.abort\(\)/);
+  assert.match(clock, /useEffect\(\(\) => \(\) => searchControllerRef\.current\?\.abort\(\), \[\]\)/);
+  assert.match(clock, /normalizedQuery\.length < 3/);
+  assert.match(clock, /fetch\(buildGeocodingUrl\(normalizedQuery\), \{[\s\S]*?signal: controller\.signal/);
+
+  assert.match(clock, /aria-label=\{`Flip-dot clock and weather for \$\{location\.name\}`\}/);
+  assert.match(clock, /role="dialog"/);
+  assert.match(clock, /aria-modal="true"/);
+  assert.match(clock, /<form onSubmit=\{runLocationSearch\} className="flip-clock-search" role="search">/);
+  assert.match(clock, /htmlFor="flip-clock-location-search"/);
+  assert.match(clock, /id="flip-clock-search-status"[\s\S]*?aria-live="polite"/);
+  assert.match(clock, /aria-label="Location search results"/);
+  assert.match(clock, /WEATHER_PRESETS\.map/);
+  assert.match(clock, /href="https:\/\/open-meteo\.com\/"/);
+  assert.match(clock, /Weather data by Open–Meteo/);
+  assert.match(clock, /href="https:\/\/www\.geonames\.org\/"/);
+  assert.match(clock, /Location data by GeoNames/);
+  assert.doesNotMatch(`${clock}\n${weatherData}`, /\bapikey\b/i);
+});
+
+test("renders physical front, back and edge surfaces for every flip dot", async () => {
+  const [clock, glyphs, styles] = await Promise.all([
+    readFile(new URL("../app/modes/flip-dot-clock.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/flip-dot-glyphs.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(clock, /active=\{ready && cell === "1"\}/);
+  assert.match(clock, /className="flip-dot__rotor"/);
+  assert.match(clock, /className="flip-dot__edge"/);
+  assert.match(clock, /className="flip-dot__face flip-dot__face--off"/);
+  assert.match(clock, /className="flip-dot__face flip-dot__face--on"/);
+  assert.match(styles, /\.flip-dot\s*\{[\s\S]*?perspective: calc\(var\(--dot-size\) \* 8\.5\);/);
+  assert.match(styles, /\.flip-dot__rotor\s*\{[\s\S]*?transform-style: preserve-3d;[\s\S]*?transition: transform 430ms/);
+  assert.match(styles, /\.flip-dot\[data-on="true"\] \.flip-dot__rotor\s*\{\s*transform: rotateX\(180deg\);/);
+  assert.match(styles, /\.flip-dot__face\s*\{[\s\S]*?backface-visibility: hidden;/);
+  assert.match(styles, /\.flip-dot__face--off\s*\{[\s\S]*?transform: translateZ\(calc\(var\(--dot-depth\) \/ 2\)\);/);
+  assert.match(styles, /\.flip-dot__face--on\s*\{[\s\S]*?transform: rotateX\(180deg\) translateZ\(calc\(var\(--dot-depth\) \/ 2\)\);/);
+  assert.match(styles, /\.flip-dot__edge\s*\{[\s\S]*?transform: translateY\(-50%\) rotateX\(90deg\);/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.flip-dot__rotor\s*\{[\s\S]*?transition-duration: 0s;/);
+  assert.doesNotMatch(glyphs, /\bfetch\s*\(|\bXMLHttpRequest\b|https?:\/\//i);
+});
+
+test("ships the free local type system used by Flip Dot Weather", async () => {
+  const [layout, packageSource, packageLockSource, clock, styles] = await Promise.all([
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../package-lock.json", import.meta.url), "utf8"),
-    readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/flip-dot-clock.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   const packageJson = JSON.parse(packageSource);
@@ -871,254 +920,17 @@ test("ships the local cyberpunk type system, industrial palette and drawing prim
       layout.includes(`"${packageName}/`),
       `${packageName} must be imported so its local font files ship with the app`,
     );
-    assert.ok(signalField.includes(`"${family}"`), `${family} must be assigned to canvas typography`);
+    assert.ok(
+      clock.includes(`"${family}"`) || styles.includes(`"${family}"`),
+      `${family} must be assigned to Flip Dot Weather typography`,
+    );
     assert.equal(
       packageLock.packages?.[`node_modules/${packageName}`]?.license,
       "OFL-1.1",
       `${family} must retain its free SIL Open Font License metadata`,
     );
   }
-
-  const paletteSource = signalLibrary.match(
-    /export const SIGNAL_PALETTE = Object\.freeze\(\{([\s\S]*?)\}\);/,
-  )?.[1];
-  assert.ok(paletteSource, "Signal Field must expose its industrial palette");
-  const paletteColor = (name) => {
-    const value = paletteSource.match(new RegExp(`\\b${name}:\\s*"(#[0-9a-f]{6})"`, "i"))?.[1];
-    assert.ok(value, `Signal palette must include ${name}`);
-    return [1, 3, 5].map((offset) => Number.parseInt(value.slice(offset, offset + 2), 16));
-  };
-  const [magentaRed, magentaGreen, magentaBlue] = paletteColor("magenta");
-  const [orangeRed, orangeGreen, orangeBlue] = paletteColor("orange");
-  assert.ok(
-    magentaRed >= 200 && magentaGreen <= 100 && magentaBlue >= 80,
-    "the magenta accent must be chromatic rather than muted frame pink",
-  );
-  assert.ok(
-    orangeRed >= 220 && orangeGreen >= 45 && orangeGreen <= 180 && orangeBlue <= 90,
-    "the orange accent must remain a vivid industrial orange",
-  );
-
-  const cyberStart = signalLibrary.indexOf("type CyberPanel");
-  const cyberEnd = signalLibrary.indexOf("const INTERNAL_SCENES", cyberStart);
-  assert.ok(cyberStart >= 0 && cyberEnd > cyberStart, "cyberpunk scene primitives must remain shared");
-  const cyberSource = signalLibrary.slice(cyberStart, cyberEnd);
-  for (const primitive of [
-    "cyberPanel",
-    "drawBarcode",
-    "drawCyberStar",
-    "drawReticle",
-    "drawPerspectiveCage",
-    "drawWireBust",
-    "drawMechanicalHand",
-    "drawCyberFinish",
-  ]) {
-    assert.match(
-      cyberSource,
-      new RegExp(`\\bfunction\\s+${primitive}\\s*\\(`),
-      `missing shared cyber primitive: ${primitive}`,
-    );
-  }
-  assert.match(signalLibrary, /INTERNAL_SCENES\[safeIndex\]\.draw\(frame\);[\s\S]*?drawCyberFinish\(frame,/);
-  assert.match(signalLibrary, /\bMAGENTA\b/);
-  assert.match(signalLibrary, /\bORANGE\b/);
-  assert.match(styles, /\.signal-vignette\s*\{/);
-  assert.match(styles, /\.signal-switch-flash\s*\{/);
-  assert.match(styles, /@keyframes signal-switch-flash/);
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
-});
-
-test("keeps Signal Field on its discrete grid, typography and transition language", async () => {
-  const [signalField, signalLibrary, frame, styles] = await Promise.all([
-    readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
-  ]);
-
-  const variableFace = [...styles.matchAll(/@font-face\s*\{([^}]+)\}/g)]
-    .map((match) => match[1])
-    .find((face) => /font-weight:\s*100\s+900\s*;/.test(face));
-  assert.ok(variableFace, "Signal Field must declare a 100–900 variable font face");
-  const variableFontSource = variableFace.match(
-    /src:\s*url\(\s*["']?([^"')]+\.woff2(?:[?#][^"')]*)?)/i,
-  )?.[1];
-  assert.ok(variableFontSource, "the variable font face must load a local WOFF2 asset");
-  assert.doesNotMatch(variableFontSource, /^(?:https?:|data:)/i);
-  assert.doesNotMatch(variableFontSource, /(?:^|\/)\.\.(?:\/|$)/);
-  const variableFontPath = variableFontSource.split(/[?#]/, 1)[0];
-  const variableFontUrl = variableFontPath.startsWith("/")
-    ? new URL(`../public/${variableFontPath.slice(1)}`, import.meta.url)
-    : new URL(variableFontPath, new URL("../app/globals.css", import.meta.url));
-  await access(variableFontUrl);
-  const variableFontFamily = variableFace.match(/font-family:\s*["']([^"']+)["']\s*;/)?.[1];
-  assert.ok(variableFontFamily, "the variable face must have an explicit family name");
-  assert.match(signalLibrary, /\bSIGNAL_FONT_FAMILY\b/);
-  assert.ok(
-    signalLibrary.includes(variableFontFamily),
-    "canvas typography must select the locally declared variable family",
-  );
-  assert.match(signalField, /document\.fonts\.load\(/);
-  assert.match(signalField, /document\.fonts\.ready/);
-  for (const face of [
-    "GeistSans",
-    "GeistMono",
-    "GeistPixelSquare",
-    "GeistPixelGrid",
-    "GeistPixelCircle",
-    "GeistPixelTriangle",
-    "GeistPixelLine",
-  ]) {
-    assert.ok(signalField.includes(face), `Signal Field must load ${face}`);
-  }
-  assert.match(signalField, /configureSignalFontFamilies\(SIGNAL_FONT_MAP\)/);
-  assert.doesNotMatch(signalLibrary, /#e34c82|rgba\(227,\s*76,\s*130/);
-  assert.match(signalLibrary, /"pixel-square"/);
-  assert.match(signalLibrary, /"pixel-grid"/);
-  assert.match(signalLibrary, /"pixel-circle"/);
-  assert.match(signalLibrary, /"pixel-triangle"/);
-  assert.match(signalLibrary, /"pixel-line"/);
-  assert.match(signalLibrary, /activeSignalTime/);
-  assert.match(signalLibrary, /trackedText/);
-
-  assert.match(signalLibrary, /\bSIGNAL_STATE_INTERVAL\s*=\s*160\b/);
-  for (const helper of ["drawSignalCells", "drawDotMatrixValue", "drawCellStrip"]) {
-    assert.match(
-      signalLibrary,
-      new RegExp(`\\b(?:function\\s+|const\\s+)${helper}\\b`),
-      `${helper} must make state changes out of discrete cells`,
-    );
-  }
-  assert.match(signalLibrary, /quantizeSignalCellState/);
-  assert.match(signalLibrary, /resolveSignalHeaderLayout/);
-  assert.match(signalLibrary, /state\?: SignalCellState/);
-  for (const state of ["off", "low", "mid", "on", "pattern", "outline"]) {
-    assert.ok(signalLibrary.includes(`"${state}"`), `missing Signal cell state: ${state}`);
-  }
-  assert.ok(
-    (signalLibrary.match(/drawSignalCircle\(/g)?.length ?? 0) >= 3,
-    "semantic circle instruments must use shared ratio-safe circle geometry",
-  );
-  assert.ok(
-    (signalLibrary.match(/drawSignalEllipse\(/g)?.length ?? 0) >= 2,
-    "planetary paths must use shared ratio-safe ellipse geometry",
-  );
-  for (const marker of [
-    "ACQUISITION / LOCK",
-    "AMPLITUDE MATRIX / 43",
-    "GENERATION DELTA",
-    "ESCAPEMENT / COHERENCE",
-  ]) {
-    assert.ok(signalLibrary.includes(marker), `missing targeted Signal Field marker: ${marker}`);
-  }
-
-  assert.match(signalLibrary, /\bbuildCellFlipPlan\b/);
-  assert.match(signalLibrary, /\.drawImage\(/);
-  const sharedGridCalls = signalLibrary.match(/^\s*drawSharedGrid\(frame\b/gm) ?? [];
-  assert.ok(
-    sharedGridCalls.length >= 18,
-    `all 18 Signal Field scenes must draw the shared grid; found ${sharedGridCalls.length} calls`,
-  );
-  assert.match(signalLibrary, /\bTRANSITION_PIXEL_BUDGET\s*=\s*2_200_000\b/);
-  assert.match(
-    signalLibrary,
-    /const transitionBufferCache = new WeakMap<CanvasRenderingContext2D, TransitionBuffer>\(\);/,
-  );
-  assert.equal(
-    signalLibrary.match(/\bbuildCellFlipPlan\(/g)?.length,
-    1,
-    "the flip plan must be built once in the cached transition buffer",
-  );
-  assert.match(
-    signalLibrary,
-    /flipPlan:\s*buildCellFlipPlan\(width,\s*height,\s*seed\)[\s\S]*?transitionBufferCache\.set\(context,\s*result\)/,
-  );
-  assert.match(signalLibrary, /for \(const cell of buffer\.flipPlan\)/);
-  assert.match(
-    signalLibrary,
-    /const switchesOff = cellFlipProgress\([\s\S]*?const switchesOn = cellFlipProgress\(/,
-  );
-  assert.match(
-    signalLibrary,
-    /if \(switchesOff === 0\) continue;[\s\S]*?fillRect\([\s\S]*?if \(switchesOn === 0\) continue;[\s\S]*?drawImage\(/,
-  );
-  assert.match(
-    signalLibrary,
-    /resolveBackingStore\([\s\S]*?TRANSITION_PIXEL_BUDGET,[\s\S]*?\)\.ratio/,
-  );
-  assert.match(
-    signalLibrary,
-    /drawScene\([\s\S]*?context,[\s\S]*?width,[\s\S]*?height,[\s\S]*?info\.sceneIndex,[\s\S]*?localTime,[\s\S]*?duration,[\s\S]*?Boolean\(options\.reducedMotion\),[\s\S]*?\)/,
-  );
-  assert.match(
-    signalLibrary,
-    /drawScene\(bufferContext,\s*width,\s*height,\s*sceneIndex,\s*0,\s*duration,\s*true\)/,
-  );
-  assert.match(signalLibrary, /activeSignalStateProgress = completePropagation[\s\S]*?\? 1/);
-  assert.match(signalLibrary, /function propagatedStateTick\(/);
-  assert.match(signalLibrary, /signalConfidence\(safeTime,\s*sceneDurationMs\)/);
-  assert.doesNotMatch(signalLibrary, /\bsmoothStep\b/);
-  assert.doesNotMatch(signalLibrary, /\.clip\(/);
-  assert.doesNotMatch(signalLibrary, /\bdrawTransitionBoundary\b/);
-  assert.doesNotMatch(signalLibrary, /\browProgress\b/);
-
-  const sceneTableStart = signalLibrary.indexOf("const INTERNAL_SCENES");
-  const sceneTableEnd = signalLibrary.indexOf("export const SIGNAL_SCENES", sceneTableStart);
-  assert.ok(sceneTableStart >= 0 && sceneTableEnd > sceneTableStart, "signal scene table must remain explicit");
-  const sceneIds = [...signalLibrary
-    .slice(sceneTableStart, sceneTableEnd)
-    .matchAll(/\bid:\s*"([^"]+)"/g)]
-    .map((match) => match[1]);
-  assert.deepEqual(sceneIds, [
-    "orbital-telemetry",
-    "constellation-mesh",
-    "glyph-cascade",
-    "barcode-cathedral",
-    "cellular-atlas",
-    "packet-river",
-    "seismic-field",
-    "clockwork-rings",
-    "vector-scope",
-    "memory-map",
-    "waveform-stack",
-    "data-loom",
-    "hex-field",
-    "satellite-topology",
-    "archive-index",
-    "raster-portrait",
-    "checker-error",
-    "deep-scan",
-  ]);
-  for (const [id, label] of [
-    ["orbital-telemetry", "Industrial ID"],
-    ["constellation-mesh", "Lab Registry"],
-    ["vector-scope", "Neural Relic"],
-    ["raster-portrait", "Void Mesh"],
-    ["deep-scan", "Machine Protocol"],
-  ]) {
-    assert.match(
-      signalLibrary.slice(sceneTableStart, sceneTableEnd),
-      new RegExp(`id:\\s*"${id}"[^\\n{}]*label:\\s*"${label}"`),
-      `${id} must keep its ID while presenting the upgraded ${label} scene`,
-    );
-  }
-
-  const lifeStart = signalLibrary.indexOf("function cellularAtlas");
-  const lifeEnd = signalLibrary.indexOf("function packetRiver", lifeStart);
-  const lifeScene = signalLibrary.slice(lifeStart, lifeEnd);
-  assert.ok(lifeScene.indexOf("chrome(frame") < lifeScene.indexOf("signalContent(frame"));
-  assert.doesNotMatch(lifeScene, /const firstRow = 3/);
-  assert.match(lifeScene, /"pattern"|quantizeSignalCellState/);
-  const voidStart = signalLibrary.indexOf("function deepScan");
-  const voidEnd = signalLibrary.indexOf("const INTERNAL_SCENES", voidStart);
-  const voidScene = signalLibrary.slice(voidStart, voidEnd);
-  assert.match(voidScene, /"VOID"/);
-  assert.match(voidScene, /drawDotMatrixValue/);
-
-  const signalPreviewStar = styles.match(/\.signal-preview-star\s*\{([^}]*)\}/)?.[1] ?? "";
-  assert.doesNotMatch(signalPreviewStar, /\banimation\s*:/);
-  assert.doesNotMatch(styles, /@keyframes\s+rotor\b/);
-  assert.doesNotMatch(frame, /signal-preview-rotor/);
+  assert.doesNotMatch(layout, /https?:\/\/(?:fonts\.googleapis|fonts\.gstatic)\.com/i);
 });
 
 test("warms the complete local archive and labels the copy that actually rendered", async () => {

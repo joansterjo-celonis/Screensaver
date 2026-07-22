@@ -19,10 +19,10 @@ import {
 } from "./data/posterjo";
 import { GalleryMode } from "./modes/gallery";
 import { PosterjoMode } from "./modes/posterjo";
-import { SignalField } from "./modes/signal-field";
+import { FlipDotClock, FlipDotText } from "./modes/flip-dot-clock";
 import { createPageLoadSeed } from "./shuffle";
 
-type ModeId = "signal" | "gallery" | "posterjo";
+type ModeId = "clock" | "gallery" | "posterjo";
 type ModeDefinition = {
   id: ModeId;
   number: string;
@@ -48,12 +48,12 @@ const POSTERJO_ARCHIVE_CACHE_MESSAGE = "CACHE_POSTERJO_ARCHIVE";
 
 const MODES: ModeDefinition[] = [
   {
-    id: "signal",
+    id: "clock",
     number: "01",
-    name: "Signal Field",
-    description: "Generative glyphs, telemetry and typographic systems.",
-    component: SignalField,
-    preview: SignalPreview,
+    name: "Flip Dot Weather",
+    description: "A mechanical clock and live weather board for any city.",
+    component: FlipDotClock,
+    preview: ClockPreview,
   },
   {
     id: "gallery",
@@ -92,7 +92,7 @@ class ModeBoundary extends Component<
       return (
         <div className="mode-fallback" role="status">
           <span>FRAME RECOVERY</span>
-          <strong>Signal interrupted.</strong>
+          <strong>Display interrupted.</strong>
           <small>Open the index to restart a display mode.</small>
         </div>
       );
@@ -147,20 +147,25 @@ function useWakeLock(active: boolean) {
   return { state, request };
 }
 
-function SignalPreview() {
+function ClockPreview() {
   return (
-    <div className="signal-preview" aria-hidden="true">
-      <div className="signal-preview-heading">
-        <span>BMS / FRAME</span>
-        <span>ORBITAL–07</span>
+    <div className="clock-preview" aria-hidden="true">
+      <div className="clock-preview-heading">
+        <span>FDP–01</span>
+        <span>BERLIN / LIVE</span>
       </div>
-      <div className="signal-preview-star">✣</div>
-      <div className="signal-preview-cells">
-        {Array.from({ length: 80 }, (_, index) => (
-          <i key={index} className={(index * 7 + 3) % 11 < 5 ? "is-on" : ""} />
-        ))}
+      <div className="clock-preview-panel">
+        <FlipDotText
+          className="flip-dot-matrix--preview"
+          ready
+          text="12:48"
+        />
+        <div className="clock-preview-weather">
+          <span className="clock-preview-sun" />
+          <strong>21°</strong>
+        </div>
       </div>
-      <div className="signal-preview-type">A7 / FIELD</div>
+      <div className="clock-preview-type">MECHANICAL TIME / CURRENT WEATHER</div>
     </div>
   );
 }
@@ -233,7 +238,7 @@ function ModeIndex({
               data-testid={`mode-${mode.id}`}
               key={mode.id}
               type="button"
-              autoFocus={activeMode ? activeMode === mode.id : mode.id === "signal"}
+              autoFocus={activeMode ? activeMode === mode.id : mode.id === "clock"}
               onClick={() => onSelect(mode.id)}
             >
               <div className="mode-card-preview">
@@ -284,9 +289,11 @@ export default function FrameApp() {
     const hydrationTimer = window.setTimeout(() => {
       setShuffleSeed(createPageLoadSeed());
       try {
-        const stored = window.localStorage.getItem(STORAGE_KEY) as ModeId | null;
-        if (stored && MODES.some((mode) => mode.id === stored)) {
-          setActiveMode(stored);
+        const stored = window.localStorage.getItem(STORAGE_KEY) as ModeId | "signal" | null;
+        const migratedMode = stored === "signal" ? "clock" : stored;
+        if (migratedMode && MODES.some((mode) => mode.id === migratedMode)) {
+          setActiveMode(migratedMode);
+          if (stored === "signal") window.localStorage.setItem(STORAGE_KEY, "clock");
           setIndexOpen(false);
         }
       } catch {
@@ -384,7 +391,16 @@ export default function FrameApp() {
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const key = event.key.toLocaleLowerCase();
-      if (key === "1") selectMode("signal");
+      if (event.defaultPrevented) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          "input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='dialog']",
+        )
+      ) {
+        return;
+      }
+      if (key === "1") selectMode("clock");
       if (key === "2") selectMode("gallery");
       if (key === "3") selectMode("posterjo");
       if (key === "i" || key === "escape") setIndexOpen((open) => !open);

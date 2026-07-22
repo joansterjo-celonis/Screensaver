@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://joansterjo-celonis.github.io/Screensaver/"),
   title: "Always-On Frame",
   description:
-    "A living display of generative signal scenes, 2,048 verified public-domain paintings, and Joan Sterjo’s Posterjo artwork archive.",
+    "A physical flip-dot clock with selectable live weather, 2,048 verified public-domain paintings, and Joan Sterjo’s Posterjo archive.",
   applicationName: "Always-On Frame",
   appleWebApp: {
     capable: true,
@@ -21,14 +21,14 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Always-On Frame",
     description:
-      "Generative signal scenes, 2,048 verified public-domain paintings, and Joan Sterjo’s Posterjo artwork archive.",
+      "A physical flip-dot clock with selectable live weather, 2,048 verified public-domain paintings, and Joan Sterjo’s Posterjo archive.",
     type: "website",
     images: [
       {
-        url: "https://joansterjo-celonis.github.io/Screensaver/og-posterjo.png",
-        width: 1731,
-        height: 909,
-        alt: "Always-On Frame — generative typography, public-domain painting, and Posterjo artwork",
+        url: "https://joansterjo-celonis.github.io/Screensaver/og-flip-dot.png",
+        width: 1200,
+        height: 630,
+        alt: "Always-On Frame — flip-dot clock and weather, public-domain painting, and Posterjo artwork",
       },
     ],
   },
@@ -36,8 +36,8 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Always-On Frame",
     description:
-      "Generative signal scenes, 2,048 verified public-domain paintings, and Joan Sterjo’s Posterjo artwork archive.",
-    images: ["https://joansterjo-celonis.github.io/Screensaver/og-posterjo.png"],
+      "A physical flip-dot clock with selectable live weather, 2,048 verified public-domain paintings, and Joan Sterjo’s Posterjo archive.",
+    images: ["https://joansterjo-celonis.github.io/Screensaver/og-flip-dot.png"],
   },
 };
 

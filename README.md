@@ -27,16 +27,16 @@
 </div>
 
 <a href="https://joansterjo-celonis.github.io/Screensaver/">
-  <img src="./public/og-posterjo.png" alt="Always-On Frame combining generative signal graphics, a Renaissance portrait, and a Posterjo artwork">
+  <img src="./public/og-flip-dot.png" alt="A physical Always-On Frame flip-dot clock and weather board">
 </a>
 
 <br>
 
-Always-On Frame is a quiet alternative to the blank screen: three slow, edge-to-edge visual programs wrapped in an interface that gets out of the way. Pick a field, enter fullscreen, and leave it running. The chosen mode stays with the device, controls fade when idle, and every new session reshuffles the program.
+Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge display programs wrapped in an interface that gets out of the way. Pick a field, enter fullscreen, and leave it running. The chosen mode stays with the device, controls fade when idle, and each new session reshuffles the artwork galleries.
 
 <table>
   <tr>
-    <td align="center" width="25%"><strong>18</strong><br><sub>GENERATIVE SCENES</sub></td>
+    <td align="center" width="25%"><strong>15 MIN</strong><br><sub>WEATHER REFRESH</sub></td>
     <td align="center" width="25%"><strong>2,048</strong><br><sub>PUBLIC-DOMAIN PAINTINGS</sub></td>
     <td align="center" width="25%"><strong>269</strong><br><sub>POSTERJO ARTWORKS</sub></td>
     <td align="center" width="25%"><strong>5 MIN</strong><br><sub>GALLERY CADENCE</sub></td>
@@ -47,7 +47,7 @@ Always-On Frame is a quiet alternative to the blank screen: three slow, edge-to-
 
 | Field | What fills the frame |
 | --- | --- |
-| `01` **Signal Field** | Eighteen shuffled cyberpunk transmissions built from industrial panels, wireframe figures, reticles, barcodes, telemetry, scanlines, and deliberate glitches. Five hero frames—Industrial ID, Lab Registry, Neural Relic, Void Mesh, and Machine Protocol—push the system into a richer graphic language while preserving the full scene library. |
+| `01` **Flip Dot Weather** | A mechanical flip-dot clock and live weather board for any searchable city or postcode. It shows local time, current conditions, feels-like temperature, daily high/low, humidity, and wind through locally rendered flip-dot glyphs and icons. |
 | `02` **Swikipedia** | A slow gallery spanning six centuries and 2,048 verified public-domain paintings. Each work arrives with its title, artist, date, and a concise Wikipedia description. |
 | `03` **Posterjo** | Joan Sterjo's local high-resolution artwork archive: 269 compositions presented edge to edge with restrained titles and source metadata. |
 
@@ -56,32 +56,48 @@ Always-On Frame is a quiet alternative to the blank screen: three slow, edge-to-
 | | |
 | --- | --- |
 | **Stay awake** | When supported, the frame requests Screen Wake Lock after interaction; fullscreen stays one key away. |
-| **Keep going** | A service worker progressively caches artwork and preserves successful downloads. Swikipedia ships its 300-work core as local WebPs; Posterjo warming begins only when selected. |
+| **Keep going** | A service worker progressively caches artwork and preserves successful downloads. Swikipedia ships its 300-work core as local WebPs; Posterjo warming begins only when selected. Flip Dot Weather keeps its selected location and latest successful matching forecast on-device. |
 | **Fit the room** | The frame adapts from portrait tablets to landscape TVs, respects safe areas, and keeps artwork composition-aware. |
-| **Disappear quietly** | Controls auto-hide, rotations pause behind the index without losing their playhead, and gallery works advance on an unhurried five-minute clock. |
-| **Recover gracefully** | Each display mode has its own error boundary, and hidden tabs stop spending frames on animation. |
-| **Remember the ritual** | The current mode and refreshed gallery copy are cached on-device; reopening the frame returns to where it belongs. |
+| **Disappear quietly** | Controls auto-hide, weather refreshes every 15 minutes while active, and gallery works keep their unhurried five-minute clock. Opening the index pauses the display beneath it. |
+| **Recover gracefully** | Each display mode has its own error boundary. If live weather cannot refresh, the last matching snapshot remains visible as `SAVED`; without one, the board stays usable as a local clock and marks conditions `OFFLINE`. |
+| **Remember the ritual** | The current mode, selected weather location, latest successful weather snapshot, and refreshed gallery copy are cached on-device; reopening the frame returns to where it belongs. |
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
-| <kbd>1</kbd> · <kbd>2</kbd> · <kbd>3</kbd> | Open Signal Field, Swikipedia, or Posterjo |
-| <kbd>I</kbd> or <kbd>Esc</kbd> | Toggle the frame index |
+| <kbd>1</kbd> · <kbd>2</kbd> · <kbd>3</kbd> | Open Flip Dot Weather, Swikipedia, or Posterjo |
+| <kbd>I</kbd> or <kbd>Esc</kbd> | Toggle the frame index; <kbd>Esc</kbd> closes the location picker first when it is open |
 | <kbd>F</kbd> | Enter fullscreen |
-| <kbd>←</kbd> · <kbd>→</kbd> | Step through Signal Field scenes or either artwork gallery |
-| Tap/click the left or right half | Previous or next scene/artwork |
-| Signal Field <kbd>PREV</kbd> · <kbd>NEXT</kbd> | Switch frames from the on-screen scene HUD |
+| <kbd>←</kbd> · <kbd>→</kbd> | Step through either artwork gallery |
+| Tap/click the left or right half of a gallery | Show the previous or next artwork |
+| Flip Dot Weather city / `CHANGE` | Open the location picker; search a city or postcode with at least three characters |
+| Location picker `QUICK SELECT` | Choose Berlin, London, New York, Tokyo, or Sydney without searching |
 
-## Signal Field type
+## Flip Dot Weather
 
-Signal Field’s display system is bundled with the app through Fontsource, so it makes no runtime font request. All three families are free to use under the [SIL Open Font License 1.1](https://openfontlicense.org/open-font-license-official-text/).
+The first field is a browser-built mechanical board, not an image or video loop. Its 5×7 clock alphabet and 9×9 weather symbols are defined as local dot matrices and rendered with DOM and CSS, so the clock face, labels, and fallback icons do not require a glyph or image service. The selected location’s IANA timezone drives the 24-hour clock, including seconds and local date.
+
+Tap the city name to search by city or postcode. Searches return up to six matches from the Open-Meteo Geocoding API; the five built-in presets remain available as a quick start. A selection is saved in browser storage and is restored on the next visit. The app does not request the device’s physical location.
+
+Current conditions load when the mode becomes active, refresh every 15 minutes, and refresh after returning to a visible tab when the prior update is at least 15 minutes old. The latest successful response is stored only for the matching selected location. A failed request leaves saved conditions on screen with a `SAVED` indicator; snapshots older than 30 minutes are also marked `SAVED`. When no usable snapshot exists, weather values show placeholders with an `OFFLINE` indicator while the local clock continues to run.
+
+The interface type is bundled with the app through Fontsource, so it makes no runtime font request. All three families are free to use under the [SIL Open Font License 1.1](https://openfontlicense.org/open-font-license-official-text/).
 
 | Typeface | Role | Attribution |
 | --- | --- | --- |
-| **Oxanium Variable** | Wide hero titles and frame identities | [Oxanium on Google Fonts](https://fonts.google.com/specimen/Oxanium) · SIL OFL 1.1 |
-| **Rajdhani** | Condensed interface labels and scene navigation | [Rajdhani on Google Fonts](https://fonts.google.com/specimen/Rajdhani) · SIL OFL 1.1 |
-| **IBM Plex Mono** | Telemetry, codes, counters, and technical metadata | [IBM Plex Mono on Google Fonts](https://fonts.google.com/specimen/IBM+Plex+Mono) · SIL OFL 1.1 |
+| **Oxanium Variable** | Manufacturer marks, date, and weather readouts | [Oxanium on Google Fonts](https://fonts.google.com/specimen/Oxanium) · SIL OFL 1.1 |
+| **Rajdhani** | Condensed headings, city names, and condition labels | [Rajdhani on Google Fonts](https://fonts.google.com/specimen/Rajdhani) · SIL OFL 1.1 |
+| **IBM Plex Mono** | Board labels, controls, status, and technical data | [IBM Plex Mono on Google Fonts](https://fonts.google.com/specimen/IBM+Plex+Mono) · SIL OFL 1.1 |
+
+### Weather data, attribution, and API use
+
+- Live values come from the [Open-Meteo Forecast API](https://open-meteo.com/en/docs). Its “current” conditions are model-derived 15-minute data, not guaranteed readings from a nearby physical station. This interface rounds values for display and maps WMO weather codes to its own local labels and dot icons.
+- Location search uses the [Open-Meteo Geocoding API](https://open-meteo.com/en/docs/geocoding-api), whose location database comes from [GeoNames](https://www.geonames.org/). Both providers are credited beside the weather board.
+- Open-Meteo API data are offered under [CC BY 4.0](https://open-meteo.com/en/license), which requires attribution, a licence link, and disclosure of modifications. Open-Meteo does not guarantee data accuracy, completeness, availability, or uninterrupted service.
+- This static client calls Open-Meteo’s public HTTPS endpoints directly and contains no API key. Under the current [Open-Meteo terms](https://open-meteo.com/en/terms), the free endpoints are limited to non-commercial use and fewer than 10,000 calls per day, 5,000 per hour, and 600 per minute. Review those terms before deploying a fork.
+- Commercial use requires an appropriate [Open-Meteo API plan](https://open-meteo.com/en/pricing). Never place a paid API key in this public browser bundle: GitHub Pages cannot keep secrets, so a commercial deployment needs a protected server-side integration for the customer endpoint.
+- Search text, selected coordinates, and ordinary request metadata are sent from the browser to Open-Meteo when those APIs are used. The locally stored selection and weather snapshot remain in that browser unless the user clears site data.
 
 ## Run it locally
 
@@ -138,7 +154,12 @@ The Posterjo snapshot contains 269 local artwork attachments from 241 ordered so
 ```text
 app/
 ├── frame-app.tsx          mode index, wake lock, persistence, controls
-├── modes/                 Signal Field, Swikipedia, Posterjo
+├── modes/
+│   ├── flip-dot-clock.tsx clock, location picker, refresh and saved fallback
+│   ├── flip-dot-glyphs.ts local clock alphabet and weather dot matrices
+│   ├── weather-data.ts    Open-Meteo requests, response parsing, WMO mapping
+│   ├── gallery.tsx        Swikipedia display
+│   └── posterjo.tsx       Posterjo display
 └── data/                  generated catalogs and artwork URL helpers
 public/
 ├── artworks/              300-work offline painting core
