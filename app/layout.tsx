@@ -5,6 +5,7 @@ import "@fontsource/rajdhani/latin-700.css";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./globals.css";
+import "./flip-clock.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://joansterjo-celonis.github.io/Screensaver/"),
@@ -25,10 +26,10 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "https://joansterjo-celonis.github.io/Screensaver/og-flip-dot.png",
+        url: "https://joansterjo-celonis.github.io/Screensaver/og-always-on-frame.png",
         width: 1200,
         height: 630,
-        alt: "Always-On Frame — flip-dot clock and weather, public-domain painting, and Posterjo artwork",
+        alt: "Always-On Frame — Flip Dot Weather, Swikipedia, and Posterjo displayed in one tactile frame",
       },
     ],
   },
@@ -37,7 +38,7 @@ export const metadata: Metadata = {
     title: "Always-On Frame",
     description:
       "A physical flip-dot clock with selectable live weather, 2,048 verified public-domain paintings, and Joan Sterjo’s Posterjo archive.",
-    images: ["https://joansterjo-celonis.github.io/Screensaver/og-flip-dot.png"],
+    images: ["https://joansterjo-celonis.github.io/Screensaver/og-always-on-frame.png"],
   },
 };
 

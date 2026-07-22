@@ -25,9 +25,14 @@ import {
 import {
   flipDotGlyph,
   normalizeFlipDotText,
-  weatherDotPattern,
   type DotPattern,
 } from "./flip-dot-glyphs";
+import {
+  composeFlipDotField,
+  formatFlipDotTemperature,
+  type ComposedFlipDotField,
+  type FlipDotFieldVariant,
+} from "./flip-dot-layout";
 
 const LOCATION_STORAGE_KEY = "always-on-frame.weather-location.v1";
 const WEATHER_CACHE_KEY = "always-on-frame.weather-cache.v1";
@@ -35,6 +40,12 @@ const WEATHER_REFRESH_MS = 15 * 60 * 1000;
 const WEATHER_STALE_MS = 30 * 60 * 1000;
 
 type DotCellStyle = CSSProperties & { "--flip-delay": string };
+type DotFieldStyle = CSSProperties & {
+  "--field-columns": number;
+  "--field-rows": number;
+  "--dot-size": string;
+  "--dot-gap": string;
+};
 type LoadState = "idle" | "loading" | "ready" | "refreshing" | "stale" | "error";
 
 interface CachedWeather {
@@ -135,24 +146,71 @@ export function FlipDotText({
   );
 }
 
-function FlipDotWeatherIcon({
-  icon,
+function UnifiedFlipDotField({
+  field,
   label,
   ready,
 }: {
-  icon: ReturnType<typeof weatherDescriptor>["icon"];
+  field: ComposedFlipDotField;
   label: string;
   ready: boolean;
 }) {
-  const pattern = weatherDotPattern(icon);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [dotSize, setDotSize] = useState(0);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    let frame = 0;
+    const gapRatio = 0.16;
+    const measure = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const bounds = stage.getBoundingClientRect();
+        const widthFit = bounds.width / (field.columns + (field.columns - 1) * gapRatio);
+        const heightFit = bounds.height / (field.rows + (field.rows - 1) * gapRatio);
+        const nextSize = Math.max(0.75, Math.floor(Math.min(widthFit, heightFit) * 2) / 2);
+        setDotSize((current) => Math.abs(current - nextSize) < 0.2 ? current : nextSize);
+      });
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(stage);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [field.columns, field.rows]);
+
+  const resolvedDotSize = dotSize || 4;
+  const style = {
+    "--field-columns": field.columns,
+    "--field-rows": field.rows,
+    "--dot-size": `${resolvedDotSize}px`,
+    "--dot-gap": `${resolvedDotSize * 0.16}px`,
+  } as DotFieldStyle;
+
   return (
-    <div
-      className="flip-dot-weather-icon"
-      style={{ "--matrix-columns": pattern[0]?.length ?? 9 } as CSSProperties}
-      role="img"
-      aria-label={label}
-    >
-      <PatternDots pattern={pattern} ready={ready} groupIndex={4} />
+    <div ref={stageRef} className="flip-dot-field-stage">
+      <div
+        className="flip-dot-field"
+        data-layout={field.variant}
+        data-measured={dotSize > 0 ? "true" : "false"}
+        style={style}
+        role="img"
+        aria-label={label}
+      >
+        {field.active.map((active, index) => (
+          <FlipDot
+            active={ready && active}
+            columns={field.columns}
+            index={index}
+            key={index}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -288,6 +346,8 @@ export function FlipDotClock({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const locationButtonRef = useRef<HTMLButtonElement>(null);
   const pickerRef = useRef<HTMLElement>(null);
+  const modeRef = useRef<HTMLElement>(null);
+  const [fieldVariant, setFieldVariant] = useState<FlipDotFieldVariant>("landscape");
 
   useEffect(() => {
     const animationFrame = window.requestAnimationFrame(() => setDotsReady(true));
@@ -306,6 +366,30 @@ export function FlipDotClock({
       } else {
         motionPreference.removeListener(updateMotionPreference);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const mode = modeRef.current;
+    if (!mode) return;
+    let currentVariant: FlipDotFieldVariant = "landscape";
+    const updateVariant = () => {
+      const bounds = mode.getBoundingClientRect();
+      const nextVariant: FlipDotFieldVariant = bounds.height > bounds.width * 1.3
+        ? "portrait"
+        : "landscape";
+      if (nextVariant !== currentVariant) {
+        currentVariant = nextVariant;
+        setFieldVariant(nextVariant);
+      }
+    };
+    updateVariant();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateVariant);
+    observer?.observe(mode);
+    window.addEventListener("resize", updateVariant);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateVariant);
     };
   }, []);
 
@@ -478,20 +562,38 @@ export function FlipDotClock({
     ? weatherDescriptor(weather.weatherCode, weather.isDay)
     : { label: "Weather unavailable", icon: "unknown" as const };
   const colonVisible = reducedMotion || !now || now.getSeconds() % 2 === 0;
-  const clockText = colonVisible
-    ? clock.hoursMinutes
-    : clock.hoursMinutes.replace(":", " ");
-  const temperatureText = weather
-    ? `${rounded(weather.temperature).padStart(3, " ")}°`
-    : " --°";
+  const [hours = "--", minutes = "--"] = clock.hoursMinutes.split(":");
+  const temperatureText = formatFlipDotTemperature(weather?.temperature);
   const stale = loadState === "stale" || (
     fetchedAt > 0 &&
     now !== null &&
     now.getTime() - fetchedAt > WEATHER_STALE_MS
   );
+  const flipField = useMemo(() => composeFlipDotField({
+    variant: fieldVariant,
+    hours,
+    minutes,
+    seconds: clock.seconds,
+    separatorOn: colonVisible,
+    temperature: temperatureText,
+    weatherIcon: descriptor.icon,
+  }), [clock.seconds, colonVisible, descriptor.icon, fieldVariant, hours, minutes, temperatureText]);
+  const fieldLabel = `${clock.hoursMinutes} and ${clock.seconds} seconds, ${clock.date}, ${descriptor.label}, ${temperatureText} Celsius in ${location.name}`;
+  const syncLabel = loadState === "loading" || loadState === "refreshing"
+    ? "SYNC"
+    : stale
+      ? "SAVED"
+      : loadState === "error"
+        ? "OFFLINE"
+        : "LIVE";
 
   return (
-    <section className="flip-clock-mode" aria-label={`Flip-dot clock and weather for ${location.name}`}>
+    <section
+      ref={modeRef}
+      className="flip-clock-mode"
+      data-layout={fieldVariant}
+      aria-label={`Flip-dot clock and weather for ${location.name}`}
+    >
       <div className="flip-clock-cabinet">
         {(["nw", "ne", "sw", "se"] as const).map((position) => (
           <span className={`flip-clock-screw flip-clock-screw--${position}`} key={position} aria-hidden="true" />
@@ -502,6 +604,10 @@ export function FlipDotClock({
             <span>FDP–01</span>
             <strong>MECHANICAL TIME / WEATHER</strong>
           </div>
+          <div className="flip-clock-frequency-band" aria-hidden="true">
+            <span>02</span><span>08</span><span>16</span><span>32</span><span>64</span>
+            <i />
+          </div>
           <button
             ref={locationButtonRef}
             className="flip-clock-location-button"
@@ -509,93 +615,61 @@ export function FlipDotClock({
             onClick={() => setPickerOpen(true)}
             aria-haspopup="dialog"
           >
-            <span className="flip-clock-location-marker" aria-hidden="true" />
-            <span>
+            <span className="flip-clock-location-readout">
+              <small>LOCATION / LOCAL ZONE</small>
               <strong>{location.name}</strong>
-              <small>{compactLocation(location)}</small>
+              <em>{compactLocation(location)}</em>
             </span>
-            <span aria-hidden="true">CHANGE</span>
+            <span className="flip-clock-tuner-knob" aria-hidden="true">
+              <i />
+            </span>
           </button>
         </header>
 
-        <div className="flip-clock-board">
-          <section className="flip-clock-time-zone" aria-label="Local time">
-            <div className="flip-clock-section-label">
-              <span>LOCAL TIME</span>
-              <span>{weather?.timezoneAbbreviation || timezone}</span>
-            </div>
-            <div className="flip-clock-time-row">
-              <FlipDotText
-                className="flip-dot-matrix--time"
-                label={`${clock.hoursMinutes}, ${clock.date}, ${location.name}`}
-                ready={dotsReady}
-                text={clockText}
-              />
-              <div className="flip-clock-seconds-board">
-                <span>SEC</span>
-                <FlipDotText
-                  className="flip-dot-matrix--seconds"
-                  label={`${clock.seconds} seconds`}
-                  ready={dotsReady}
-                  text={clock.seconds}
-                />
-              </div>
-            </div>
-            <div className="flip-clock-date-line">
-              <time dateTime={now?.toISOString()}>{clock.date}</time>
-              <span>24 HOUR / LOCAL ZONE</span>
-            </div>
-          </section>
-
-          <section className="flip-clock-weather-zone" aria-label="Current weather">
-            <div className="flip-clock-section-label">
-              <span>CURRENT CONDITIONS</span>
-              <span className={`flip-clock-sync flip-clock-sync--${loadState}`}>
-                {loadState === "loading" || loadState === "refreshing"
-                  ? "SYNC"
-                  : stale
-                    ? "SAVED"
-                    : loadState === "error"
-                      ? "OFFLINE"
-                      : "LIVE"}
-              </span>
-            </div>
-            <div className="flip-clock-weather-main">
-              <FlipDotWeatherIcon icon={descriptor.icon} label={descriptor.label} ready={dotsReady} />
-              <div className="flip-clock-temperature">
-                <FlipDotText
-                  className="flip-dot-matrix--temperature"
-                  label={weather ? `${Math.round(weather.temperature)} degrees Celsius` : "Temperature unavailable"}
-                  ready={dotsReady}
-                  text={temperatureText}
-                />
-                <div>
-                  <strong>{descriptor.label}</strong>
-                  <span>CELSIUS</span>
-                </div>
-              </div>
-            </div>
-
-            <dl className="flip-clock-weather-stats">
-              <div>
-                <dt>FEELS</dt>
-                <dd>{weather ? `${rounded(weather.apparentTemperature)}${weather.units.temperature}` : "--"}</dd>
-              </div>
-              <div>
-                <dt>HIGH / LOW</dt>
-                <dd>{weather ? `${rounded(weather.temperatureMax)}° / ${rounded(weather.temperatureMin)}°` : "-- / --"}</dd>
-              </div>
-              <div>
-                <dt>HUMIDITY</dt>
-                <dd>{weather ? `${rounded(weather.relativeHumidity)}${weather.units.humidity}` : "--"}</dd>
-              </div>
-              <div>
-                <dt>WIND</dt>
-                <dd>{weather ? `${windCompass(weather.windDirection)} ${rounded(weather.windSpeed)} ${weather.units.windSpeed}` : "--"}</dd>
-              </div>
-            </dl>
-          </section>
+        <div className="flip-clock-display-bezel">
+          <UnifiedFlipDotField
+            key={fieldVariant}
+            field={flipField}
+            label={fieldLabel}
+            ready={dotsReady}
+          />
         </div>
+
+        <section className="flip-clock-instruments" aria-label="Weather station instruments">
+          <div className="flip-clock-condition-dial">
+            <span className="flip-clock-condition-ticks" aria-hidden="true" />
+            <div className="flip-clock-condition-core">
+              <small>CURRENT</small>
+              <strong>{descriptor.label}</strong>
+              <span className={`flip-clock-sync flip-clock-sync--${loadState}`}>{syncLabel}</span>
+            </div>
+          </div>
+
+          <dl className="flip-clock-weather-stats">
+            <div>
+              <dt>FEELS</dt>
+              <dd>{weather ? `${rounded(weather.apparentTemperature)}${weather.units.temperature}` : "--"}</dd>
+            </div>
+            <div>
+              <dt>HIGH / LOW</dt>
+              <dd>{weather ? `${rounded(weather.temperatureMax)}° / ${rounded(weather.temperatureMin)}°` : "-- / --"}</dd>
+            </div>
+            <div>
+              <dt>HUMIDITY</dt>
+              <dd>{weather ? `${rounded(weather.relativeHumidity)}${weather.units.humidity}` : "--"}</dd>
+            </div>
+            <div>
+              <dt>WIND</dt>
+              <dd>{weather ? `${windCompass(weather.windDirection)} ${rounded(weather.windSpeed)} ${weather.units.windSpeed}` : "--"}</dd>
+            </div>
+          </dl>
+
+          <div className="flip-clock-date-module">
+            <small>LOCAL DATE / 24 HOUR</small>
+            <time dateTime={now?.toISOString()}>{clock.date}</time>
+            <span>{weather?.timezoneAbbreviation || timezone}</span>
+          </div>
+        </section>
 
         <footer className="flip-clock-footer">
           <span aria-live="polite" aria-atomic="true">{statusMessage}</span>

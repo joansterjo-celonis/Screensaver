@@ -27,7 +27,7 @@
 </div>
 
 <a href="https://joansterjo-celonis.github.io/Screensaver/">
-  <img src="./public/og-flip-dot.png" alt="A physical Always-On Frame flip-dot clock and weather board">
+  <img src="./public/og-always-on-frame.png" alt="Always-On Frame showing Flip Dot Weather, Swikipedia, and Posterjo in one tactile chassis">
 </a>
 
 <br>
@@ -76,7 +76,7 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 
 ## Flip Dot Weather
 
-The first field is a browser-built mechanical board, not an image or video loop. Its 5×7 clock alphabet and 9×9 weather symbols are defined as local dot matrices and rendered with DOM and CSS, so the clock face, labels, and fallback icons do not require a glyph or image service. The selected location’s IANA timezone drives the 24-hour clock, including seconds and local date.
+The first field is a browser-built mechanical board, not an image or video loop. Time, seconds, temperature, and the 9×9 weather symbol are stamped into one uninterrupted field of identically sized DOM/CSS rotors: 43×19 in landscape and 27×42 in tall portrait. The portrait composition stacks hours and minutes so a 9:16 frame remains legible and physical instead of shrinking a landscape dashboard. Only the external instrument rails use typography; the recessed dot cavity remains one clean tactile surface. The selected location’s IANA timezone drives the 24-hour clock, including seconds and local date.
 
 Tap the city name to search by city or postcode. Searches return up to six matches from the Open-Meteo Geocoding API; the five built-in presets remain available as a quick start. A selection is saved in browser storage and is restored on the next visit. The app does not request the device’s physical location.
 
@@ -157,6 +157,7 @@ app/
 ├── modes/
 │   ├── flip-dot-clock.tsx clock, location picker, refresh and saved fallback
 │   ├── flip-dot-glyphs.ts local clock alphabet and weather dot matrices
+│   ├── flip-dot-layout.ts one-field landscape/portrait matrix composition
 │   ├── weather-data.ts    Open-Meteo requests, response parsing, WMO mapping
 │   ├── gallery.tsx        Swikipedia display
 │   └── posterjo.tsx       Posterjo display

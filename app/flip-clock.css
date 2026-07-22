@@ -1,0 +1,608 @@
+/* Flip Dot Weather: one uninterrupted physical matrix inside an instrument chassis. */
+
+.flip-clock-mode {
+  --flip-yellow: #f2c744;
+  --flip-yellow-deep: #a9750d;
+  --flip-copy: #e1ddc9;
+  --flip-muted: rgba(225, 221, 201, 0.52);
+  padding:
+    max(clamp(6px, 0.8vmin, 12px), env(safe-area-inset-top))
+    max(clamp(6px, 0.8vmin, 12px), env(safe-area-inset-right))
+    max(clamp(6px, 0.8vmin, 12px), env(safe-area-inset-bottom))
+    max(clamp(6px, 0.8vmin, 12px), env(safe-area-inset-left));
+  background:
+    radial-gradient(ellipse at 50% 42%, #292a23 0, #12130f 48%, #060705 100%);
+}
+
+.flip-clock-cabinet {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  grid-template-rows: clamp(54px, 7.2vh, 78px) minmax(0, 1fr) clamp(84px, 11.5vh, 118px) auto;
+  gap: clamp(6px, 0.8vmin, 12px);
+  padding: clamp(14px, 1.45vmin, 24px);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), transparent 13% 82%, rgba(0, 0, 0, 0.28)),
+    repeating-linear-gradient(93deg, rgba(255, 255, 255, 0.009) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, #23241f, #151612);
+  border-color: #3d3e36;
+  border-radius: clamp(14px, 1.6vmin, 25px);
+  box-shadow:
+    0 3px 0 #050604,
+    0 18px 55px rgba(0, 0, 0, 0.64),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.72);
+}
+
+.flip-clock-cabinet::before {
+  inset: 7px;
+  border-color: rgba(238, 232, 198, 0.06);
+  border-radius: calc(clamp(14px, 1.6vmin, 25px) - 5px);
+}
+
+.flip-clock-cabinet::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  opacity: 0.18;
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0 0.45px, transparent 0.65px);
+  background-size: 3px 3px;
+  mix-blend-mode: soft-light;
+}
+
+.flip-clock-header,
+.flip-clock-display-bezel,
+.flip-clock-instruments,
+.flip-clock-footer {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  min-height: 0;
+}
+
+.flip-clock-header {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) minmax(230px, clamp(260px, 29vw, 390px));
+  align-items: center;
+  gap: clamp(12px, 1.5vw, 28px);
+  padding-inline: clamp(8px, 1vw, 16px);
+}
+
+.flip-clock-maker {
+  grid-template-columns: auto;
+  gap: 2px;
+  line-height: 1;
+}
+
+.flip-clock-maker span {
+  font-size: clamp(13px, 1.2vw, 18px);
+  letter-spacing: 0.15em;
+}
+
+.flip-clock-maker strong {
+  font-size: clamp(7px, 0.62vw, 10px);
+  letter-spacing: 0.16em;
+}
+
+.flip-clock-frequency-band {
+  position: relative;
+  height: 38px;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 9px 3px;
+  color: rgba(225, 221, 201, 0.36);
+  border-top: 1px solid rgba(225, 221, 201, 0.12);
+  border-bottom: 1px solid rgba(225, 221, 201, 0.12);
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  background:
+    repeating-linear-gradient(90deg, rgba(225, 221, 201, 0.34) 0 1px, transparent 1px 8px) 0 8px / 100% 11px no-repeat;
+}
+
+.flip-clock-frequency-band::before,
+.flip-clock-frequency-band::after {
+  position: absolute;
+  top: 5px;
+  color: rgba(242, 199, 68, 0.48);
+  font-size: 6px;
+  content: "BAND / WX";
+}
+
+.flip-clock-frequency-band::before { left: 9px; }
+.flip-clock-frequency-band::after { right: 9px; content: "88 — 108"; }
+
+.flip-clock-frequency-band i {
+  position: absolute;
+  top: 4px;
+  bottom: 3px;
+  left: 63%;
+  width: 2px;
+  background: var(--flip-yellow);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65);
+}
+
+.flip-clock-location-button {
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px 5px 13px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+    #0d0e0b;
+  border-color: #3a3b33;
+  border-radius: 7px;
+  box-shadow:
+    inset 0 2px 7px rgba(0, 0, 0, 0.95),
+    0 1px 0 rgba(255, 255, 255, 0.065);
+}
+
+.flip-clock-location-readout {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.flip-clock-location-readout small,
+.flip-clock-location-readout strong,
+.flip-clock-location-readout em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flip-clock-location-readout small {
+  color: rgba(242, 199, 68, 0.54);
+  font-size: 6px;
+  letter-spacing: 0.14em;
+}
+
+.flip-clock-location-readout strong {
+  color: var(--flip-copy);
+  font: 700 clamp(14px, 1.2vw, 18px)/0.98 "Rajdhani", sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.flip-clock-location-readout em {
+  color: var(--flip-muted);
+  font-size: 7px;
+  font-style: normal;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.flip-clock-tuner-knob {
+  position: relative;
+  width: 38px;
+  min-width: 38px !important;
+  height: 38px;
+  flex: 0 0 38px !important;
+  display: block;
+  border: 1px solid #050604;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from -2deg, #4c4d43 0 3deg, #181914 3deg 8deg),
+    radial-gradient(circle, #34352e, #11120f 70%);
+  box-shadow:
+    0 2px 3px #000,
+    inset 0 0 0 4px rgba(0, 0, 0, 0.34),
+    inset 0 1px 1px rgba(255, 255, 255, 0.16);
+}
+
+.flip-clock-tuner-knob::before {
+  position: absolute;
+  inset: 5px;
+  content: "";
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #45463e, #171813 65%, #090a08);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.11);
+}
+
+.flip-clock-tuner-knob i {
+  position: absolute;
+  z-index: 2;
+  top: 5px;
+  left: 50%;
+  width: 2px;
+  height: 10px;
+  background: var(--flip-yellow);
+  border-radius: 1px;
+  transform: translateX(-50%) rotate(23deg);
+  transform-origin: 50% 14px;
+}
+
+.flip-clock-display-bezel {
+  display: grid;
+  place-items: stretch;
+  overflow: hidden;
+  padding: clamp(10px, 1.15vmin, 18px);
+  background:
+    linear-gradient(145deg, #050604, #20211b 43%, #080906 76%),
+    #080906;
+  border: 1px solid #060705;
+  border-radius: clamp(8px, 0.8vmin, 13px);
+  box-shadow:
+    inset 0 0 0 2px #2b2c25,
+    inset 0 10px 25px rgba(0, 0, 0, 0.94),
+    inset 0 -1px rgba(255, 255, 255, 0.06),
+    0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.flip-clock-display-bezel::before {
+  position: absolute;
+  inset: clamp(5px, 0.55vmin, 9px);
+  content: "";
+  pointer-events: none;
+  border: 1px solid rgba(225, 221, 201, 0.055);
+  border-radius: 6px;
+}
+
+.flip-dot-field-stage {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.017), transparent 62%),
+    #060705;
+  border: 1px solid #010201;
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 22px rgba(0, 0, 0, 0.88),
+    0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.flip-dot-field {
+  --dot-depth: calc(var(--dot-size) * 0.12);
+  display: grid;
+  grid-template-columns: repeat(var(--field-columns), var(--dot-size));
+  grid-template-rows: repeat(var(--field-rows), var(--dot-size));
+  gap: var(--dot-gap);
+  width: max-content;
+  height: max-content;
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+
+.flip-dot-field[data-measured="false"] {
+  opacity: 0;
+}
+
+.flip-dot-field .flip-dot {
+  width: var(--dot-size);
+  height: var(--dot-size);
+}
+
+.flip-clock-instruments {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.82fr) minmax(390px, 2.15fr) minmax(205px, 0.88fr);
+  gap: clamp(7px, 0.8vw, 12px);
+}
+
+.flip-clock-condition-dial,
+.flip-clock-weather-stats,
+.flip-clock-date-module {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 32%),
+    #0d0e0b;
+  border: 1px solid #36372f;
+  border-radius: 6px;
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.76),
+    0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.flip-clock-condition-dial {
+  position: relative;
+  display: grid;
+  align-items: center;
+  padding: 8px 10px 8px clamp(72px, 6vw, 94px);
+}
+
+.flip-clock-condition-ticks {
+  position: absolute;
+  top: 50%;
+  left: clamp(9px, 0.8vw, 14px);
+  width: clamp(52px, 4.8vw, 72px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from -2deg,
+    rgba(225, 221, 201, 0.58) 0 1.2deg,
+    transparent 1.2deg 11.25deg
+  );
+  transform: translateY(-50%);
+}
+
+.flip-clock-condition-ticks::before,
+.flip-clock-condition-ticks::after {
+  position: absolute;
+  content: "";
+  border-radius: 50%;
+}
+
+.flip-clock-condition-ticks::before {
+  inset: 8px;
+  background:
+    radial-gradient(circle at 36% 30%, #3b3c34, #151612 64%, #070806);
+  border: 1px solid #4b4c42;
+  box-shadow: 0 2px 4px #000, inset 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.flip-clock-condition-ticks::after {
+  top: 8px;
+  left: 50%;
+  width: 3px;
+  height: 14px;
+  background: var(--flip-yellow);
+  transform: translateX(-50%) rotate(-38deg);
+  transform-origin: 50% calc(50% + 18px);
+}
+
+.flip-clock-condition-core {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.flip-clock-condition-core small,
+.flip-clock-date-module small,
+.flip-clock-weather-stats dt {
+  color: var(--flip-muted);
+  font-size: clamp(6px, 0.52vw, 8px);
+  letter-spacing: 0.14em;
+}
+
+.flip-clock-condition-core strong {
+  overflow: hidden;
+  color: var(--flip-copy);
+  font: 700 clamp(14px, 1.25vw, 19px)/0.96 "Rajdhani", sans-serif;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.flip-clock-sync {
+  width: max-content;
+  max-width: 100%;
+  padding-left: 12px;
+  color: rgba(225, 221, 201, 0.62);
+  font-size: 7px;
+  letter-spacing: 0.15em;
+}
+
+.flip-clock-weather-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid #36372f;
+}
+
+.flip-clock-weather-stats > div {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: clamp(8px, 1vw, 14px);
+  border: 0;
+  border-right: 1px solid rgba(225, 221, 201, 0.12);
+}
+
+.flip-clock-weather-stats > div:last-child {
+  border-right: 0;
+}
+
+.flip-clock-weather-stats dd {
+  font-size: clamp(11px, 1.08vw, 16px);
+}
+
+.flip-clock-date-module {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: clamp(9px, 1vw, 14px);
+}
+
+.flip-clock-date-module time {
+  overflow: hidden;
+  color: var(--flip-copy);
+  font: 600 clamp(13px, 1.2vw, 18px)/1 "Oxanium Variable", var(--font-mono);
+  letter-spacing: 0.07em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flip-clock-date-module > span {
+  color: rgba(242, 199, 68, 0.62);
+  font-size: 7px;
+  letter-spacing: 0.13em;
+}
+
+.flip-clock-footer {
+  min-height: 13px;
+  padding-inline: 4px;
+  font-size: clamp(5px, 0.48vw, 7px);
+}
+
+.flip-clock-footer > span {
+  max-width: 48%;
+}
+
+@media (max-aspect-ratio: 10 / 13) {
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-cabinet {
+    grid-template-rows: clamp(58px, 8.5vh, 76px) minmax(0, 1fr) auto auto;
+    gap: clamp(6px, 1vh, 10px);
+    padding: clamp(11px, 2.7vw, 20px);
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-header {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 9px;
+    padding-inline: 5px;
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-maker strong,
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-frequency-band {
+    display: none;
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-location-button {
+    min-height: 50px;
+    grid-template-columns: minmax(0, 1fr) 40px;
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-display-bezel {
+    padding: clamp(8px, 2.4vw, 14px);
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-instruments {
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+    grid-template-areas:
+      "dial date"
+      "stats stats";
+    gap: clamp(5px, 1.4vw, 8px);
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-condition-dial {
+    grid-area: dial;
+    min-height: 68px;
+    padding: 7px 8px 7px clamp(52px, 14vw, 68px);
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-condition-ticks {
+    left: 7px;
+    width: clamp(44px, 12vw, 62px);
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-condition-core strong {
+    font-size: clamp(11px, 3.1vw, 14px);
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-date-module {
+    grid-area: date;
+    min-height: 68px;
+    padding: 9px;
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-date-module time {
+    font-size: clamp(11px, 3.4vw, 16px);
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-weather-stats {
+    grid-area: stats;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-weather-stats > div {
+    min-height: 42px;
+    padding: 7px 9px;
+    border-right: 1px solid rgba(225, 221, 201, 0.12);
+    border-bottom: 1px solid rgba(225, 221, 201, 0.12);
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-weather-stats > div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-weather-stats > div:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-weather-stats dd {
+    font-size: clamp(10px, 3vw, 14px);
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-footer {
+    gap: 7px;
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-footer > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 440px) {
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-maker span {
+    font-size: 12px;
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-location-readout small {
+    display: none;
+  }
+
+  .flip-clock-mode[data-layout="portrait"] .flip-clock-footer a {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-height: 560px) and (min-aspect-ratio: 4 / 3) {
+  .flip-clock-cabinet {
+    grid-template-rows: 44px minmax(0, 1fr) 64px;
+    gap: 6px;
+    padding: 10px 16px;
+  }
+
+  .flip-clock-frequency-band {
+    height: 30px;
+  }
+
+  .flip-clock-location-button {
+    min-height: 42px;
+  }
+
+  .flip-clock-tuner-knob {
+    width: 32px;
+    min-width: 32px !important;
+    height: 32px;
+  }
+
+  .flip-clock-display-bezel {
+    padding: 8px;
+  }
+
+  .flip-clock-condition-dial {
+    padding-left: 63px;
+  }
+
+  .flip-clock-condition-ticks {
+    width: 46px;
+  }
+
+  .flip-clock-weather-stats > div,
+  .flip-clock-date-module {
+    padding: 6px 9px;
+  }
+
+  .flip-clock-footer {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-dot-field {
+    transition: none;
+  }
+}

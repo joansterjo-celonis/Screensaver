@@ -115,6 +115,23 @@ test("keeps the product modes explicit and the starter removed", async () => {
   }
 });
 
+test("uses one tri-mode social image across metadata and the README", async () => {
+  const [layout, readme, image, sharpModule] = await Promise.all([
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+    readFile(new URL("../public/og-always-on-frame.png", import.meta.url)),
+    import("sharp"),
+  ]);
+  const metadata = await sharpModule.default(image).metadata();
+
+  assert.equal(metadata.width, 1200);
+  assert.equal(metadata.height, 630);
+  assert.match(layout, /og-always-on-frame\.png/g);
+  assert.doesNotMatch(layout, /og-(?:flip-dot|posterjo)\.png/);
+  assert.match(layout, /Flip Dot Weather, Swikipedia, and Posterjo/);
+  assert.match(readme, /public\/og-always-on-frame\.png/);
+});
+
 test("ships the expanded artwork libraries and weather frame", async () => {
   const [paintings, inventorySource, overridesSource, artworks, frame, clock, gallery, styles, serviceWorker] = await Promise.all([
     readFile(new URL("../app/data/paintings.generated.ts", import.meta.url), "utf8"),
@@ -615,6 +632,112 @@ test("ships complete deterministic flip-dot glyph and weather-icon matrices", as
     }
   }
   assert.equal(weatherDotPattern("not-a-weather-icon"), weatherDotPattern("unknown"));
+});
+
+test("composes one equal-pitch flip-dot field for landscape and portrait", async () => {
+  const layoutModule = await import(
+    new URL("../app/modes/flip-dot-layout.ts", import.meta.url).href
+  );
+  const {
+    COMPACT_FLIP_DOT_GLYPHS,
+    FLIP_DOT_FIELD_SPECS,
+    LARGE_FLIP_DOT_DIGITS,
+    composeFlipDotField,
+    formatFlipDotTemperature,
+  } = layoutModule.default ?? layoutModule;
+
+  assert.deepEqual(
+    Object.keys(COMPACT_FLIP_DOT_GLYPHS).sort(),
+    [" ", "-", ":", "°", "?", ..."0123456789HILO"].sort(),
+  );
+  for (const pattern of Object.values(COMPACT_FLIP_DOT_GLYPHS)) {
+    assert.equal(pattern.length, 5);
+    assert.ok(pattern.every((row) => /^[01]{3}$/.test(row)));
+  }
+  assert.deepEqual(Object.keys(LARGE_FLIP_DOT_DIGITS).sort(), [" ", "-", ..."0123456789"].sort());
+  for (const pattern of Object.values(LARGE_FLIP_DOT_DIGITS)) {
+    assert.equal(pattern.length, 11);
+    assert.ok(pattern.every((row) => /^[01]{7}$/.test(row)));
+  }
+
+  const expectedDimensions = {
+    landscape: [43, 19],
+    portrait: [27, 42],
+  };
+  for (const variant of ["landscape", "portrait"]) {
+    const field = composeFlipDotField({
+      variant,
+      hours: "12",
+      minutes: "48",
+      seconds: "36",
+      separatorOn: true,
+      temperature: "-12°",
+      weatherIcon: "clear-day",
+    });
+    assert.deepEqual([field.columns, field.rows], expectedDimensions[variant]);
+    assert.equal(field.active.length, field.columns * field.rows);
+    assert.ok(field.active.every((cell) => typeof cell === "boolean"));
+    assert.ok(field.active.some(Boolean));
+
+    const regions = Object.values(FLIP_DOT_FIELD_SPECS[variant].regions);
+    for (const region of regions) {
+      assert.ok(region.x >= 0 && region.y >= 0);
+      assert.ok(region.x + region.width <= field.columns);
+      assert.ok(region.y + region.height <= field.rows);
+    }
+    for (let left = 0; left < regions.length; left += 1) {
+      for (let right = left + 1; right < regions.length; right += 1) {
+        const a = regions[left];
+        const b = regions[right];
+        const overlaps = a.x < b.x + b.width && a.x + a.width > b.x &&
+          a.y < b.y + b.height && a.y + a.height > b.y;
+        assert.equal(overlaps, false, `${variant} field regions must not overlap`);
+      }
+    }
+  }
+
+  const colonOn = composeFlipDotField({
+    variant: "landscape",
+    hours: "12",
+    minutes: "48",
+    seconds: "36",
+    separatorOn: true,
+    temperature: "14°",
+    weatherIcon: "cloudy",
+  });
+  const colonOff = composeFlipDotField({
+    variant: "landscape",
+    hours: "12",
+    minutes: "48",
+    seconds: "36",
+    separatorOn: false,
+    temperature: "14°",
+    weatherIcon: "cloudy",
+  });
+  assert.ok(colonOn.active.some((cell, index) => cell !== colonOff.active[index]));
+  assert.equal(formatFlipDotTemperature(14.4), "14°");
+  assert.equal(formatFlipDotTemperature(-7.6), "-8°");
+  assert.equal(formatFlipDotTemperature(100), "HI°");
+  assert.equal(formatFlipDotTemperature(-100), "LO°");
+  assert.equal(formatFlipDotTemperature(null), "--°");
+});
+
+test("renders the live clock through one shared-size mechanical grid", async () => {
+  const [clock, globalStyles, clockStyles] = await Promise.all([
+    readFile(new URL("../app/modes/flip-dot-clock.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/flip-clock.css", import.meta.url), "utf8"),
+  ]);
+  const source = `${clock}\n${globalStyles}\n${clockStyles}`;
+
+  assert.equal(clock.match(/<UnifiedFlipDotField/g)?.length, 1);
+  assert.match(clock, /field\.active\.map\(\(active, index\) =>/);
+  assert.match(clock, /key=\{index\}/);
+  assert.match(clock, /data-layout=\{field\.variant\}/);
+  assert.match(clockStyles, /\.flip-dot-field\s*\{[\s\S]*?grid-template-columns: repeat\(var\(--field-columns\), var\(--dot-size\)\);/);
+  assert.match(clockStyles, /\.flip-dot-field \.flip-dot\s*\{\s*width: var\(--dot-size\);\s*height: var\(--dot-size\);/);
+  assert.doesNotMatch(source, /flip-dot-matrix--(?:time|seconds|temperature)|flip-dot-weather-icon/);
+  assert.doesNotMatch(clock, /<FlipDotText[\s\S]*?className="flip-dot-matrix--(?:time|seconds|temperature)"/);
 });
 
 test("builds static-client Open-Meteo URLs without credentials", async () => {
