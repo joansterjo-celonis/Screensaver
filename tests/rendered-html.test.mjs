@@ -800,6 +800,134 @@ test("shuffles every Signal Field scene once per cycle", async () => {
   assert.match(signalField, /shuffleSeed: signalShuffleSeed/);
 });
 
+test("keeps Signal Field manually navigable, accessible and pause-safe", async () => {
+  const signalField = await readFile(
+    new URL("../app/modes/signal-field.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(signalField, /const navigateManually = useCallback/);
+  assert.match(signalField, /event\.key !== "ArrowLeft" && event\.key !== "ArrowRight"/);
+  assert.match(
+    signalField,
+    /navigateManually\(event\.key === "ArrowLeft" \? -1 : 1\)/,
+  );
+  assert.match(signalField, /on(?:Click|PointerUp)=\{/);
+  assert.match(signalField, /event\.currentTarget\.getBoundingClientRect\(\)/);
+  assert.match(
+    signalField,
+    /event\.clientX\s*<\s*bounds\.left\s*\+\s*bounds\.width\s*\/\s*2\s*\?\s*-1\s*:\s*1/,
+    "the left and right halves must move to the previous and next scene",
+  );
+
+  assert.match(signalField, /aria-describedby="signal-field-navigation-help"/);
+  assert.match(signalField, /aria-keyshortcuts="ArrowLeft ArrowRight"/);
+  assert.match(signalField, /className="signal-scene-hud"/);
+  assert.match(signalField, /role="group" aria-label="Signal scene navigation"/);
+  assert.match(signalField, /aria-label="Show previous Signal Field scene"/);
+  assert.match(signalField, /aria-label="Show next Signal Field scene"/);
+  assert.match(signalField, /aria-live="polite"/);
+  assert.match(signalField, /FRAME \{String\(sceneView\.deckPosition\)/);
+  assert.match(
+    signalField,
+    /left half for the previous scene[\s\S]*?right half for[\s\S]*?the next scene[\s\S]*?left and right arrow keys/i,
+  );
+
+  assert.match(signalField, /const accumulatedPlayheadRef = useRef\(0\)/);
+  assert.match(signalField, /const runningSinceRef = useRef<number \| null>\(null\)/);
+  assert.match(signalField, /if \(paused\) return;/);
+  assert.match(
+    signalField,
+    /accumulatedPlayheadRef\.current = currentPlayhead\([\s\S]*?runningSinceRef\.current,[\s\S]*?now,[\s\S]*?\);[\s\S]*?runningSinceRef\.current = null;/,
+    "pausing must bank elapsed time before stopping the running clock",
+  );
+  assert.doesNotMatch(
+    signalField,
+    /accumulatedPlayheadRef\.current\s*=\s*0\b/,
+    "pausing must not reset the Signal Field playhead",
+  );
+});
+
+test("ships the local cyberpunk type system, industrial palette and drawing primitives", async () => {
+  const [layout, packageSource, packageLockSource, signalField, signalLibrary, styles] = await Promise.all([
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../package-lock.json", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/signal-library.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  const packageJson = JSON.parse(packageSource);
+  const packageLock = JSON.parse(packageLockSource);
+  const fontPackages = [
+    ["@fontsource-variable/oxanium", "Oxanium Variable"],
+    ["@fontsource/rajdhani", "Rajdhani"],
+    ["@fontsource/ibm-plex-mono", "IBM Plex Mono"],
+  ];
+
+  for (const [packageName, family] of fontPackages) {
+    assert.ok(packageJson.dependencies?.[packageName], `${packageName} must be a production dependency`);
+    assert.ok(
+      layout.includes(`"${packageName}/`),
+      `${packageName} must be imported so its local font files ship with the app`,
+    );
+    assert.ok(signalField.includes(`"${family}"`), `${family} must be assigned to canvas typography`);
+    assert.equal(
+      packageLock.packages?.[`node_modules/${packageName}`]?.license,
+      "OFL-1.1",
+      `${family} must retain its free SIL Open Font License metadata`,
+    );
+  }
+
+  const paletteSource = signalLibrary.match(
+    /export const SIGNAL_PALETTE = Object\.freeze\(\{([\s\S]*?)\}\);/,
+  )?.[1];
+  assert.ok(paletteSource, "Signal Field must expose its industrial palette");
+  const paletteColor = (name) => {
+    const value = paletteSource.match(new RegExp(`\\b${name}:\\s*"(#[0-9a-f]{6})"`, "i"))?.[1];
+    assert.ok(value, `Signal palette must include ${name}`);
+    return [1, 3, 5].map((offset) => Number.parseInt(value.slice(offset, offset + 2), 16));
+  };
+  const [magentaRed, magentaGreen, magentaBlue] = paletteColor("magenta");
+  const [orangeRed, orangeGreen, orangeBlue] = paletteColor("orange");
+  assert.ok(
+    magentaRed >= 200 && magentaGreen <= 100 && magentaBlue >= 80,
+    "the magenta accent must be chromatic rather than muted frame pink",
+  );
+  assert.ok(
+    orangeRed >= 220 && orangeGreen >= 45 && orangeGreen <= 180 && orangeBlue <= 90,
+    "the orange accent must remain a vivid industrial orange",
+  );
+
+  const cyberStart = signalLibrary.indexOf("type CyberPanel");
+  const cyberEnd = signalLibrary.indexOf("const INTERNAL_SCENES", cyberStart);
+  assert.ok(cyberStart >= 0 && cyberEnd > cyberStart, "cyberpunk scene primitives must remain shared");
+  const cyberSource = signalLibrary.slice(cyberStart, cyberEnd);
+  for (const primitive of [
+    "cyberPanel",
+    "drawBarcode",
+    "drawCyberStar",
+    "drawReticle",
+    "drawPerspectiveCage",
+    "drawWireBust",
+    "drawMechanicalHand",
+    "drawCyberFinish",
+  ]) {
+    assert.match(
+      cyberSource,
+      new RegExp(`\\bfunction\\s+${primitive}\\s*\\(`),
+      `missing shared cyber primitive: ${primitive}`,
+    );
+  }
+  assert.match(signalLibrary, /INTERNAL_SCENES\[safeIndex\]\.draw\(frame\);[\s\S]*?drawCyberFinish\(frame,/);
+  assert.match(signalLibrary, /\bMAGENTA\b/);
+  assert.match(signalLibrary, /\bORANGE\b/);
+  assert.match(styles, /\.signal-vignette\s*\{/);
+  assert.match(styles, /\.signal-switch-flash\s*\{/);
+  assert.match(styles, /@keyframes signal-switch-flash/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
 test("keeps Signal Field on its discrete grid, typography and transition language", async () => {
   const [signalField, signalLibrary, frame, styles] = await Promise.all([
     readFile(new URL("../app/modes/signal-field.tsx", import.meta.url), "utf8"),
@@ -961,6 +1089,19 @@ test("keeps Signal Field on its discrete grid, typography and transition languag
     "checker-error",
     "deep-scan",
   ]);
+  for (const [id, label] of [
+    ["orbital-telemetry", "Industrial ID"],
+    ["constellation-mesh", "Lab Registry"],
+    ["vector-scope", "Neural Relic"],
+    ["raster-portrait", "Void Mesh"],
+    ["deep-scan", "Machine Protocol"],
+  ]) {
+    assert.match(
+      signalLibrary.slice(sceneTableStart, sceneTableEnd),
+      new RegExp(`id:\\s*"${id}"[^\\n{}]*label:\\s*"${label}"`),
+      `${id} must keep its ID while presenting the upgraded ${label} scene`,
+    );
+  }
 
   const lifeStart = signalLibrary.indexOf("function cellularAtlas");
   const lifeEnd = signalLibrary.indexOf("function packetRiver", lifeStart);

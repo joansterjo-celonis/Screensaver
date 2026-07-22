@@ -47,7 +47,7 @@ Always-On Frame is a quiet alternative to the blank screen: three slow, edge-to-
 
 | Field | What fills the frame |
 | --- | --- |
-| `01` **Signal Field** | Eighteen generative canvas scenes made from glyphs, grids, orbital telemetry, waveforms, and deliberate glitches. Responsive, visibility-aware, and reduced-motion friendly. |
+| `01` **Signal Field** | Eighteen shuffled cyberpunk transmissions built from industrial panels, wireframe figures, reticles, barcodes, telemetry, scanlines, and deliberate glitches. Five hero frames—Industrial ID, Lab Registry, Neural Relic, Void Mesh, and Machine Protocol—push the system into a richer graphic language while preserving the full scene library. |
 | `02` **Swikipedia** | A slow gallery spanning six centuries and 2,048 verified public-domain paintings. Each work arrives with its title, artist, date, and a concise Wikipedia description. |
 | `03` **Posterjo** | Joan Sterjo's local high-resolution artwork archive: 269 compositions presented edge to edge with restrained titles and source metadata. |
 
@@ -58,7 +58,7 @@ Always-On Frame is a quiet alternative to the blank screen: three slow, edge-to-
 | **Stay awake** | When supported, the frame requests Screen Wake Lock after interaction; fullscreen stays one key away. |
 | **Keep going** | A service worker progressively caches artwork and preserves successful downloads. Swikipedia ships its 300-work core as local WebPs; Posterjo warming begins only when selected. |
 | **Fit the room** | The frame adapts from portrait tablets to landscape TVs, respects safe areas, and keeps artwork composition-aware. |
-| **Disappear quietly** | Controls auto-hide, rotations pause behind the index, and gallery works advance on an unhurried five-minute clock. |
+| **Disappear quietly** | Controls auto-hide, rotations pause behind the index without losing their playhead, and gallery works advance on an unhurried five-minute clock. |
 | **Recover gracefully** | Each display mode has its own error boundary, and hidden tabs stop spending frames on animation. |
 | **Remember the ritual** | The current mode and refreshed gallery copy are cached on-device; reopening the frame returns to where it belongs. |
 
@@ -69,8 +69,19 @@ Always-On Frame is a quiet alternative to the blank screen: three slow, edge-to-
 | <kbd>1</kbd> · <kbd>2</kbd> · <kbd>3</kbd> | Open Signal Field, Swikipedia, or Posterjo |
 | <kbd>I</kbd> or <kbd>Esc</kbd> | Toggle the frame index |
 | <kbd>F</kbd> | Enter fullscreen |
-| <kbd>←</kbd> · <kbd>→</kbd> | Move through either gallery |
-| Tap/click the left or right half | Previous or next artwork |
+| <kbd>←</kbd> · <kbd>→</kbd> | Step through Signal Field scenes or either artwork gallery |
+| Tap/click the left or right half | Previous or next scene/artwork |
+| Signal Field <kbd>PREV</kbd> · <kbd>NEXT</kbd> | Switch frames from the on-screen scene HUD |
+
+## Signal Field type
+
+Signal Field’s display system is bundled with the app through Fontsource, so it makes no runtime font request. All three families are free to use under the [SIL Open Font License 1.1](https://openfontlicense.org/open-font-license-official-text/).
+
+| Typeface | Role | Attribution |
+| --- | --- | --- |
+| **Oxanium Variable** | Wide hero titles and frame identities | [Oxanium on Google Fonts](https://fonts.google.com/specimen/Oxanium) · SIL OFL 1.1 |
+| **Rajdhani** | Condensed interface labels and scene navigation | [Rajdhani on Google Fonts](https://fonts.google.com/specimen/Rajdhani) · SIL OFL 1.1 |
+| **IBM Plex Mono** | Telemetry, codes, counters, and technical metadata | [IBM Plex Mono on Google Fonts](https://fonts.google.com/specimen/IBM+Plex+Mono) · SIL OFL 1.1 |
 
 ## Run it locally
 

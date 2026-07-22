@@ -21,13 +21,22 @@ export const SIGNAL_FONT_FAMILY =
   '"Geist Signal", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
 
 export const SIGNAL_PALETTE = Object.freeze({
-  oxblood: "#121113",
-  night: "#0c0b0e",
-  ivory: "#cfccc6",
-  magenta: "#f0ede7",
-  dimIvory: "rgba(207, 204, 198, 0.48)",
-  faintIvory: "rgba(207, 204, 198, 0.14)",
-  dimOxblood: "rgba(18, 17, 19, 0.5)",
+  oxblood: "#080808",
+  night: "#050506",
+  ivory: "#e1e1dc",
+  magenta: "#e60170",
+  orange: "#f04e1b",
+  red: "#dc3a3a",
+  amber: "#db9d5c",
+  clay: "#a55246",
+  sage: "#658863",
+  slate: "#8e8d8b",
+  navy: "#171a38",
+  bone: "#e5d4b7",
+  acid: "#d9f15f",
+  dimIvory: "rgba(225, 225, 220, 0.52)",
+  faintIvory: "rgba(225, 225, 220, 0.13)",
+  dimOxblood: "rgba(8, 8, 8, 0.54)",
 });
 
 export interface SignalSceneDescriptor {
@@ -69,7 +78,8 @@ interface InternalScene extends SignalSceneDescriptor {
   draw: (frame: SceneFrame) => void;
 }
 
-const DEFAULT_SCENE_DURATION = 11_500;
+export const SIGNAL_SCENE_DURATION_MS = 11_500;
+const DEFAULT_SCENE_DURATION = SIGNAL_SCENE_DURATION_MS;
 const DEFAULT_TRANSITION_DURATION = 1_050;
 const TRANSITION_PIXEL_BUDGET = 2_200_000;
 const {
@@ -80,6 +90,17 @@ const {
   dimIvory: DIM,
   faintIvory: FAINT,
   dimOxblood: DIM_DARK,
+} = SIGNAL_PALETTE;
+const {
+  orange: ORANGE,
+  red: RED,
+  amber: AMBER,
+  clay: CLAY,
+  sage: SAGE,
+  slate: SLATE,
+  navy: NAVY,
+  bone: BONE,
+  acid: ACID,
 } = SIGNAL_PALETTE;
 
 function clamp(value: number, minimum = 0, maximum = 1) {
@@ -174,6 +195,8 @@ function drawSignalEllipse(
 
 export type SignalTypeface =
   | "signal"
+  | "display"
+  | "interface"
   | "sans"
   | "mono"
   | "pixel-square"
@@ -186,6 +209,8 @@ type SignalFontFamilies = Record<SignalTypeface, string>;
 
 const signalFontFamilies: SignalFontFamilies = {
   signal: SIGNAL_FONT_FAMILY,
+  display: '"Oxanium Variable", "Arial Narrow", sans-serif',
+  interface: '"Rajdhani", "Arial Narrow", sans-serif',
   sans: '"Geist Signal", Arial, sans-serif',
   mono: SIGNAL_FONT_FAMILY,
   "pixel-square": SIGNAL_FONT_FAMILY,
@@ -257,7 +282,7 @@ function type(
       pulse * (role === "primary" ? 0.26 : 0.08),
   );
   const resolvedWeight = signalWeight(strength, role);
-  const defaultFamily: SignalTypeface = role === "primary" ? "sans" : "mono";
+  const defaultFamily: SignalTypeface = role === "primary" ? "display" : "mono";
   const family = signalFontFamilies[options.family ?? defaultFamily];
   let resolvedSize = Math.max(6, size);
   let tracking = Math.max(0, options.tracking ?? 0) * (0.82 + pulse * 0.28);
@@ -1910,25 +1935,837 @@ function deepScan(frame: SceneFrame) {
   );
 }
 
+type CyberPanel = Readonly<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}>;
+
+function roundedPanelPath(
+  context: CanvasRenderingContext2D,
+  panelBounds: CyberPanel,
+  radius: number,
+) {
+  const { x, y, width, height } = panelBounds;
+  const resolvedRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
+  context.beginPath();
+  context.moveTo(x + resolvedRadius, y);
+  context.lineTo(x + width - resolvedRadius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + resolvedRadius);
+  context.lineTo(x + width, y + height - resolvedRadius);
+  context.quadraticCurveTo(
+    x + width,
+    y + height,
+    x + width - resolvedRadius,
+    y + height,
+  );
+  context.lineTo(x + resolvedRadius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - resolvedRadius);
+  context.lineTo(x, y + resolvedRadius);
+  context.quadraticCurveTo(x, y, x + resolvedRadius, y);
+  context.closePath();
+}
+
+function cyberPanel(
+  context: CanvasRenderingContext2D,
+  panelBounds: CyberPanel,
+  fillColor: string,
+  radius: number,
+  strokeColor = "rgba(8, 8, 8, 0.78)",
+) {
+  roundedPanelPath(context, panelBounds, radius);
+  context.fillStyle = fillColor;
+  context.fill();
+  context.strokeStyle = strokeColor;
+  context.lineWidth = 1;
+  context.stroke();
+}
+
+function drawBarcode(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: string = OXBLOOD,
+  seed = 17,
+) {
+  let cursor = x;
+  let index = 0;
+  context.fillStyle = color;
+  while (cursor < x + width) {
+    const unit = Math.max(1, width / 92);
+    const barWidth = unit * (hash(index, seed, 719) > 0.68 ? 3 : hash(index, seed, 331) > 0.4 ? 2 : 1);
+    if (hash(index, seed, 811) > 0.27) {
+      context.fillRect(cursor, y, Math.min(barWidth, x + width - cursor), height);
+    }
+    cursor += barWidth + unit;
+    index += 1;
+  }
+}
+
+function drawCyberStar(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  color: string,
+) {
+  context.beginPath();
+  context.moveTo(x, y - radius);
+  context.bezierCurveTo(x + radius * 0.16, y - radius * 0.22, x + radius * 0.22, y - radius * 0.16, x + radius, y);
+  context.bezierCurveTo(x + radius * 0.22, y + radius * 0.16, x + radius * 0.16, y + radius * 0.22, x, y + radius);
+  context.bezierCurveTo(x - radius * 0.16, y + radius * 0.22, x - radius * 0.22, y + radius * 0.16, x - radius, y);
+  context.bezierCurveTo(x - radius * 0.22, y - radius * 0.16, x - radius * 0.16, y - radius * 0.22, x, y - radius);
+  context.fillStyle = color;
+  context.fill();
+}
+
+function drawReticle(
+  context: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  color: string,
+  phase = 0,
+) {
+  drawSignalCircle(context, cx, cy, radius, color);
+  drawSignalCircle(context, cx, cy, radius * 0.58, color);
+  const angle = phase * 0.035;
+  line(context, cx - radius * 1.28, cy, cx - radius * 0.36, cy, color);
+  line(context, cx + radius * 0.36, cy, cx + radius * 1.28, cy, color);
+  line(context, cx, cy - radius * 1.28, cx, cy - radius * 0.36, color);
+  line(context, cx, cy + radius * 0.36, cx, cy + radius * 1.28, color);
+  context.beginPath();
+  context.arc(cx, cy, radius * 0.78, angle, angle + Math.PI * 0.72);
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.stroke();
+}
+
+function drawPerspectiveCage(
+  context: CanvasRenderingContext2D,
+  bounds: CyberPanel,
+  color: string,
+  phase: number,
+) {
+  const cx = bounds.x + bounds.width * 0.5;
+  const cy = bounds.y + bounds.height * 0.46;
+  context.beginPath();
+  for (let column = 0; column <= 10; column += 1) {
+    const x = bounds.x + (column / 10) * bounds.width;
+    context.moveTo(cx, cy);
+    context.lineTo(x, bounds.y + bounds.height);
+  }
+  for (let row = 0; row <= 9; row += 1) {
+    const amount = row / 9;
+    const eased = amount * amount;
+    const y = cy + eased * bounds.height * 0.54;
+    const inset = (1 - eased) * bounds.width * 0.5;
+    context.moveTo(bounds.x + inset, y);
+    context.lineTo(bounds.x + bounds.width - inset, y);
+  }
+  const drift = Math.sin(phase * 0.06) * bounds.width * 0.012;
+  context.moveTo(bounds.x + drift, bounds.y);
+  context.lineTo(cx, cy);
+  context.lineTo(bounds.x + bounds.width + drift, bounds.y);
+  context.strokeStyle = color;
+  context.lineWidth = 1;
+  context.stroke();
+}
+
+function drawWireBust(
+  context: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  width: number,
+  height: number,
+  color: string,
+  accent: string,
+  phase: number,
+  filled = false,
+) {
+  const pulse = Math.sin(phase * 0.08) * width * 0.012;
+  const headTop = cy - height * 0.49;
+  const headBottom = cy + height * 0.08;
+  if (filled) {
+    context.beginPath();
+    context.ellipse(cx + pulse, cy - height * 0.22, width * 0.24, height * 0.29, -0.08, 0, TAU);
+    context.fillStyle = color;
+    context.fill();
+  }
+  for (let row = 0; row < 42; row += 1) {
+    const amount = row / 41;
+    const y = headTop + amount * (headBottom - headTop);
+    const curve = Math.sqrt(Math.max(0, 1 - Math.pow((amount - 0.5) / 0.52, 2)));
+    const nose = amount > 0.42 && amount < 0.59 ? width * 0.055 : 0;
+    const jaw = amount > 0.72 ? (amount - 0.72) * width * 0.14 : 0;
+    const half = width * 0.235 * curve - jaw;
+    const glitch = hash(row, Math.floor(phase / 7), 401) > 0.88
+      ? (hash(row, 2, 612) - 0.5) * width * 0.18
+      : 0;
+    line(
+      context,
+      cx - half + pulse + glitch,
+      y,
+      cx + half + nose + pulse + glitch,
+      y,
+      hash(row, 0, 23) > 0.82 ? accent : color,
+      hash(row, 1, 91) > 0.84 ? 2 : 1,
+    );
+  }
+  context.beginPath();
+  context.moveTo(cx - width * 0.12, headBottom - height * 0.02);
+  context.lineTo(cx - width * 0.16, cy + height * 0.2);
+  context.bezierCurveTo(
+    cx - width * 0.48,
+    cy + height * 0.27,
+    cx - width * 0.5,
+    cy + height * 0.46,
+    cx - width * 0.53,
+    cy + height * 0.5,
+  );
+  context.moveTo(cx + width * 0.11, headBottom - height * 0.02);
+  context.lineTo(cx + width * 0.16, cy + height * 0.2);
+  context.bezierCurveTo(
+    cx + width * 0.48,
+    cy + height * 0.27,
+    cx + width * 0.5,
+    cy + height * 0.46,
+    cx + width * 0.53,
+    cy + height * 0.5,
+  );
+  context.strokeStyle = color;
+  context.lineWidth = filled ? 2 : 1.2;
+  context.stroke();
+  for (let index = 0; index < 14; index += 1) {
+    const amount = index / 13;
+    const y = cy + height * (0.21 + amount * 0.28);
+    const span = width * (0.18 + Math.sin(amount * Math.PI) * 0.36);
+    line(context, cx - span, y, cx + span, y, color, 1);
+  }
+}
+
+function drawMechanicalHand(
+  context: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  width: number,
+  height: number,
+  color: string,
+  detail: string,
+  phase: number,
+) {
+  const palmWidth = width * 0.38;
+  const palmHeight = height * 0.36;
+  const wristTop = cy + palmHeight * 0.35;
+  const palm = [
+    [cx - palmWidth * 0.48, cy + palmHeight * 0.26],
+    [cx - palmWidth * 0.56, cy - palmHeight * 0.28],
+    [cx - palmWidth * 0.28, cy - palmHeight * 0.5],
+    [cx + palmWidth * 0.34, cy - palmHeight * 0.46],
+    [cx + palmWidth * 0.55, cy - palmHeight * 0.12],
+    [cx + palmWidth * 0.42, cy + palmHeight * 0.42],
+    [cx - palmWidth * 0.2, cy + palmHeight * 0.54],
+  ] as const;
+  context.beginPath();
+  context.moveTo(palm[0][0], palm[0][1]);
+  for (let index = 1; index < palm.length; index += 1) {
+    context.lineTo(palm[index][0], palm[index][1]);
+  }
+  context.closePath();
+  context.fillStyle = "rgba(8, 8, 8, 0.66)";
+  context.fill();
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.stroke();
+  const fingers = [
+    { baseX: -0.36, baseY: -0.36, angle: -2.52, length: 0.39 },
+    { baseX: -0.18, baseY: -0.49, angle: -2.08, length: 0.52 },
+    { baseX: 0.02, baseY: -0.51, angle: -1.8, length: 0.58 },
+    { baseX: 0.2, baseY: -0.47, angle: -1.55, length: 0.52 },
+    { baseX: 0.37, baseY: -0.33, angle: -1.31, length: 0.42 },
+  ];
+  for (const [fingerIndex, finger] of fingers.entries()) {
+    let x = cx + palmWidth * finger.baseX;
+    let y = cy + palmHeight * finger.baseY;
+    const bend = Math.sin(phase * 0.025 + fingerIndex) * 0.07;
+    for (let joint = 0; joint < 3; joint += 1) {
+      const segmentLength = height * finger.length * (0.38 - joint * 0.035);
+      const angle = finger.angle + bend + joint * (0.07 + fingerIndex * 0.012);
+      const nextX = x + Math.cos(angle) * segmentLength;
+      const nextY = y + Math.sin(angle) * segmentLength;
+      line(context, x, y, nextX, nextY, color, Math.max(1.4, width * 0.012));
+      line(
+        context,
+        x + width * 0.018,
+        y,
+        nextX + width * 0.014,
+        nextY,
+        detail,
+        1,
+      );
+      drawSignalCircle(context, x, y, Math.max(2, width * 0.025), detail);
+      x = nextX;
+      y = nextY;
+    }
+    drawSignalCircle(context, x, y, Math.max(2, width * 0.018), color);
+  }
+  context.beginPath();
+  context.moveTo(cx - palmWidth * 0.2, wristTop);
+  context.lineTo(cx - width * 0.12, cy + height * 0.49);
+  context.lineTo(cx + width * 0.12, cy + height * 0.49);
+  context.lineTo(cx + palmWidth * 0.28, wristTop);
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.stroke();
+  for (let row = 0; row < 9; row += 1) {
+    const y = cy - palmHeight * 0.34 + row * palmHeight * 0.09;
+    line(context, cx - palmWidth * 0.34, y, cx + palmWidth * 0.36, y, detail, 1);
+  }
+}
+
+function drawCyberFinish(frame: SceneFrame, accent: string) {
+  const { context, width, height, phase, layout } = frame;
+  const cell = layout.cellSize;
+  const scanStep = Math.max(6, cell * 0.55);
+  context.save();
+  context.globalCompositeOperation = "source-over";
+  context.fillStyle = "rgba(0, 0, 0, 0.065)";
+  for (let y = positiveModulo(phase, 2) * 2; y < height; y += scanStep) {
+    context.fillRect(0, y, width, Math.max(1, scanStep * 0.14));
+  }
+  const edge = Math.max(2, cell * 0.22);
+  context.fillStyle = accent;
+  context.globalAlpha = 0.78;
+  context.fillRect(0, 0, Math.min(width * 0.14, cell * 8), edge);
+  context.fillRect(width - Math.min(width * 0.08, cell * 5), height - edge, Math.min(width * 0.08, cell * 5), edge);
+  context.globalAlpha = 0.18;
+  const glitchY = positiveModulo(phase * 17, Math.max(1, Math.floor(height)));
+  context.fillRect(width * 0.08, glitchY, width * (0.08 + hash(phase, 1, 101) * 0.22), Math.max(1, cell * 0.14));
+  context.globalAlpha = 1;
+  context.restore();
+}
+
+const SIGNAL_SCENE_ACCENTS = [
+  AMBER,
+  ORANGE,
+  MAGENTA,
+  RED,
+  SAGE,
+  ORANGE,
+  RED,
+  MAGENTA,
+  RED,
+  SAGE,
+  MAGENTA,
+  AMBER,
+  ACID,
+  ORANGE,
+  AMBER,
+  MAGENTA,
+  RED,
+  ORANGE,
+] as const;
+
+function cyberIndustrialId(frame: SceneFrame) {
+  const { context, width, height, phase, stateTick, layout } = frame;
+  fill(context, width, height, NIGHT);
+  drawSharedGrid(frame, "rgba(225, 225, 220, 0.025)");
+  const cell = layout.cellSize;
+  const pad = Math.max(cell * 1.7, 14);
+  const gap = Math.max(cell * 0.65, 7);
+  const radius = Math.max(10, cell * 1.25);
+  const portrait = layout.profile === "portrait";
+  const innerWidth = width - pad * 2;
+  const innerHeight = height - pad * 2;
+  let hero: CyberPanel;
+  let masthead: CyberPanel;
+  let registry: CyberPanel;
+  let scope: CyberPanel;
+  if (portrait) {
+    const heroHeight = innerHeight * 0.48;
+    const mastheadHeight = innerHeight * 0.22;
+    const lowerY = pad + heroHeight + mastheadHeight + gap * 2;
+    const lowerHeight = Math.max(cell * 8, pad + innerHeight - lowerY);
+    hero = { x: pad, y: pad, width: innerWidth, height: heroHeight };
+    masthead = { x: pad, y: hero.y + hero.height + gap, width: innerWidth, height: mastheadHeight };
+    registry = { x: pad, y: lowerY, width: (innerWidth - gap) * 0.56, height: lowerHeight };
+    scope = { x: registry.x + registry.width + gap, y: lowerY, width: innerWidth - registry.width - gap, height: lowerHeight };
+  } else {
+    const heroWidth = innerWidth * 0.38;
+    const rightX = pad + heroWidth + gap;
+    const rightWidth = width - pad - rightX;
+    const mastheadHeight = innerHeight * 0.48;
+    const lowerY = pad + mastheadHeight + gap;
+    const lowerHeight = innerHeight - mastheadHeight - gap;
+    hero = { x: pad, y: pad, width: heroWidth, height: innerHeight };
+    masthead = { x: rightX, y: pad, width: rightWidth, height: mastheadHeight };
+    registry = { x: rightX, y: lowerY, width: (rightWidth - gap) * 0.56, height: lowerHeight };
+    scope = { x: registry.x + registry.width + gap, y: lowerY, width: rightWidth - registry.width - gap, height: lowerHeight };
+  }
+
+  cyberPanel(context, hero, CLAY, radius);
+  cyberPanel(context, masthead, AMBER, radius);
+  cyberPanel(context, registry, SAGE, radius);
+  cyberPanel(context, scope, SLATE, radius);
+
+  type(context, "01", hero.x + cell * 1.25, hero.y + cell * 2.1, cell * 0.95, OXBLOOD, "left", 700, {
+    family: "display",
+    tracking: cell * 0.08,
+  });
+  type(context, "独創", hero.x + cell * 1.2, hero.y + hero.height - cell * 1.5, Math.min(cell * 3.3, hero.width * 0.13), OXBLOOD, "left", 700, {
+    family: "interface",
+    maxWidth: hero.width * 0.28,
+  });
+  drawMechanicalHand(
+    context,
+    hero.x + hero.width * 0.6,
+    hero.y + hero.height * 0.56,
+    hero.width * 0.7,
+    hero.height * 0.9,
+    OXBLOOD,
+    BONE,
+    phase,
+  );
+  drawBarcode(
+    context,
+    hero.x + cell * 1.2,
+    hero.y + hero.height - cell * 0.75,
+    hero.width * 0.2,
+    Math.max(2, cell * 0.22),
+    OXBLOOD,
+    91,
+  );
+
+  const mastheadSize = Math.min(masthead.height * 0.34, masthead.width * 0.105);
+  type(context, "CBRPNK", masthead.x + cell * 1.25, masthead.y + mastheadSize + cell * 0.7, mastheadSize, OXBLOOD, "left", 800, {
+    family: "display",
+    maxWidth: masthead.width * 0.67,
+    tracking: -mastheadSize * 0.035,
+    motion: 0.15,
+  });
+  context.fillStyle = RED;
+  context.beginPath();
+  context.arc(masthead.x + masthead.width * 0.64, masthead.y + cell * 1.3, Math.max(2, cell * 0.28), 0, TAU);
+  context.fill();
+  const arrowX = masthead.x + masthead.width - cell * 5.6;
+  const arrowY = masthead.y + cell * 1.35;
+  const arrowSize = Math.min(cell * 4, masthead.height * 0.38);
+  line(context, arrowX, arrowY + arrowSize, arrowX + arrowSize, arrowY, OXBLOOD, Math.max(4, cell * 0.72));
+  line(context, arrowX + arrowSize * 0.38, arrowY, arrowX + arrowSize, arrowY, OXBLOOD, Math.max(4, cell * 0.72));
+  line(context, arrowX + arrowSize, arrowY, arrowX + arrowSize, arrowY + arrowSize * 0.62, OXBLOOD, Math.max(4, cell * 0.72));
+  const dataY = masthead.y + masthead.height * 0.58;
+  const dataX = masthead.x + cell * 1.25;
+  const dataWidth = masthead.width * 0.54;
+  panel(context, dataX, dataY, dataWidth, masthead.height * 0.25, "rgba(8, 8, 8, 0.72)");
+  type(context, "ADSR", dataX + cell * 0.5, dataY + cell * 0.9, cell * 0.62, OXBLOOD, "left", 700, { family: "interface" });
+  for (let index = 0; index < 5; index += 1) {
+    const barX = dataX + dataWidth * 0.32 + index * dataWidth * 0.105;
+    const barHeight = masthead.height * (0.07 + hash(index, stateTick, 771) * 0.13);
+    context.fillStyle = index === positiveModulo(stateTick, 5) ? RED : OXBLOOD;
+    context.fillRect(barX, dataY + masthead.height * 0.21 - barHeight, dataWidth * 0.055, barHeight);
+  }
+  type(context, `UA 570-B / ${String(571 + positiveModulo(stateTick, 19)).padStart(3, "0")}`, masthead.x + masthead.width - cell * 1.2, dataY + cell * 0.9, cell * 0.58, OXBLOOD, "right", 700, {
+    family: "mono",
+    maxWidth: masthead.width * 0.36,
+  });
+
+  type(context, "DPM SYSTM", registry.x + cell, registry.y + cell * 2.25, Math.min(cell * 1.45, registry.width * 0.09), OXBLOOD, "left", 700, {
+    family: "display",
+    maxWidth: registry.width - cell * 2,
+  });
+  line(context, registry.x + cell, registry.y + cell * 2.8, registry.x + registry.width - cell, registry.y + cell * 2.8, OXBLOOD);
+  type(context, "SORT / BEFORE SENDING", registry.x + cell, registry.y + registry.height * 0.57, cell * 0.58, OXBLOOD, "left", 700, { family: "interface" });
+  type(context, "TS26", registry.x + cell, registry.y + registry.height - cell * 0.75, Math.min(cell * 2.6, registry.width * 0.21), OXBLOOD, "left", 800, {
+    family: "display",
+    maxWidth: registry.width * 0.64,
+  });
+  drawReticle(
+    context,
+    registry.x + registry.width - cell * 2,
+    registry.y + registry.height - cell * 1.7,
+    Math.min(cell * 0.75, registry.width * 0.06),
+    OXBLOOD,
+    phase,
+  );
+
+  const scopeRadius = Math.min(scope.width, scope.height) * 0.25;
+  type(context, "25", scope.x + cell, scope.y + scope.height - cell * 0.75, Math.min(cell * 4, scope.width * 0.42), OXBLOOD, "left", 800, {
+    family: "display",
+    maxWidth: scope.width - cell * 2,
+    motion: 0.08,
+  });
+  drawReticle(
+    context,
+    scope.x + scope.width * 0.7,
+    scope.y + scope.height * 0.38,
+    scopeRadius,
+    OXBLOOD,
+    phase,
+  );
+}
+
+function cyberLabRegistry(frame: SceneFrame) {
+  const { context, width, height, phase, stateTick, layout } = frame;
+  fill(context, width, height, NIGHT);
+  drawSharedGrid(frame, "rgba(225, 225, 220, 0.028)");
+  const cell = layout.cellSize;
+  const pad = Math.max(14, cell * 1.7);
+  const gap = Math.max(7, cell * 0.65);
+  const radius = Math.max(10, cell * 1.25);
+  const portrait = layout.profile === "portrait";
+  const innerWidth = width - pad * 2;
+  const innerHeight = height - pad * 2;
+  let header: CyberPanel;
+  let specimen: CyberPanel;
+  let record: CyberPanel;
+  let scope: CyberPanel;
+  if (portrait) {
+    header = { x: pad, y: pad, width: innerWidth, height: innerHeight * 0.23 };
+    specimen = { x: pad, y: header.y + header.height + gap, width: innerWidth, height: innerHeight * 0.44 };
+    const lowerY = specimen.y + specimen.height + gap;
+    const lowerHeight = pad + innerHeight - lowerY;
+    record = { x: pad, y: lowerY, width: (innerWidth - gap) * 0.52, height: lowerHeight };
+    scope = { x: record.x + record.width + gap, y: lowerY, width: innerWidth - record.width - gap, height: lowerHeight };
+  } else {
+    header = { x: pad, y: pad, width: innerWidth * 0.68, height: innerHeight * 0.48 };
+    specimen = { x: header.x + header.width + gap, y: pad, width: width - pad - header.x - header.width - gap, height: innerHeight };
+    const lowerY = header.y + header.height + gap;
+    const lowerHeight = innerHeight - header.height - gap;
+    record = { x: pad, y: lowerY, width: (header.width - gap) * 0.5, height: lowerHeight };
+    scope = { x: record.x + record.width + gap, y: lowerY, width: header.width - record.width - gap, height: lowerHeight };
+  }
+  cyberPanel(context, header, NAVY, radius, "rgba(225, 225, 220, 0.12)");
+  cyberPanel(context, specimen, ORANGE, radius);
+  cyberPanel(context, record, BONE, radius);
+  cyberPanel(context, scope, SLATE, radius);
+
+  const headerSize = Math.min(header.height * 0.32, header.width * 0.105);
+  type(context, "CBRPNK", header.x + cell * 1.25, header.y + headerSize + cell * 0.72, headerSize, IVORY, "left", 800, {
+    family: "display",
+    maxWidth: header.width * 0.7,
+    tracking: -headerSize * 0.03,
+    motion: 0.12,
+  });
+  context.fillStyle = ORANGE;
+  context.beginPath();
+  context.arc(header.x + header.width * 0.64, header.y + cell * 1.15, Math.max(2, cell * 0.25), 0, TAU);
+  context.fill();
+  type(context, "9", header.x + cell * 1.25, header.y + header.height * 0.67, cell * 2.25, IVORY, "left", 800, { family: "display" });
+  type(context, "産業と技術革新の\n基盤をつくろう".replace("\n", " / "), header.x + cell * 4.2, header.y + header.height * 0.59, cell * 0.82, IVORY, "left", 700, {
+    family: "interface",
+    maxWidth: header.width * 0.45,
+  });
+  type(context, "ELEMENTARY\nCONCEPT 001".replace("\n", " / "), header.x + header.width - cell * 1.2, header.y + header.height * 0.67, cell * 0.62, IVORY, "right", 700, {
+    family: "interface",
+    maxWidth: header.width * 0.28,
+  });
+  line(context, header.x + cell * 1.2, header.y + header.height - cell * 2.15, header.x + header.width - cell * 1.2, header.y + header.height - cell * 2.15, "rgba(225, 225, 220, 0.48)");
+  type(context, `#FAC659 / DATASET ${String(positiveModulo(stateTick, 999)).padStart(3, "0")}`, header.x + cell * 1.2, header.y + header.height - cell, cell * 0.6, IVORY, "left", 700, {
+    family: "mono",
+    maxWidth: header.width * 0.62,
+  });
+  drawBarcode(context, header.x + header.width * 0.76, header.y + header.height - cell * 1.7, header.width * 0.18, cell * 0.65, IVORY, 42);
+
+  type(context, "wave", specimen.x + cell, specimen.y + cell * 2.2, Math.min(cell * 2.6, specimen.width * 0.24), OXBLOOD, "left", 800, {
+    family: "display",
+    maxWidth: specimen.width - cell * 2,
+  });
+  type(context, "C5-01", specimen.x + cell * 0.7, specimen.y + specimen.height * 0.58, cell * 0.68, OXBLOOD, "left", 700, { family: "mono" });
+  drawWireBust(
+    context,
+    specimen.x + specimen.width * 0.58,
+    specimen.y + specimen.height * 0.54,
+    specimen.width * 0.92,
+    specimen.height * 0.92,
+    OXBLOOD,
+    IVORY,
+    phase,
+    true,
+  );
+  type(context, "狂宴", specimen.x + cell * 0.8, specimen.y + specimen.height - cell * 1.1, Math.min(cell * 2.7, specimen.width * 0.18), OXBLOOD, "left", 800, {
+    family: "interface",
+    maxWidth: specimen.width * 0.3,
+  });
+
+  type(context, "RAD", record.x + cell, record.y + cell * 1.55, Math.min(cell * 1.4, record.width * 0.14), OXBLOOD, "left", 800, { family: "display" });
+  type(context, "実験室", record.x + record.width - cell, record.y + cell * 1.55, cell * 0.78, OXBLOOD, "right", 700, { family: "interface" });
+  context.fillStyle = OXBLOOD;
+  context.fillRect(record.x + cell, record.y + cell * 2.1, record.width - cell * 2, cell * 1.15);
+  type(context, "INTERNAL-559", record.x + cell * 1.4, record.y + cell * 2.95, cell * 0.65, BONE, "left", 700, { family: "mono" });
+  type(context, "MODEL / NONE 23", record.x + cell, record.y + record.height * 0.58, cell * 0.58, OXBLOOD, "left", 700, { family: "mono" });
+  drawBarcode(context, record.x + cell, record.y + record.height - cell * 2, record.width - cell * 2, cell * 0.9, OXBLOOD, 559);
+
+  const scopeRadius = Math.min(scope.width, scope.height) * 0.28;
+  drawReticle(context, scope.x + scope.width * 0.54, scope.y + scope.height * 0.54, scopeRadius, OXBLOOD, phase);
+  type(context, "LTO/R", scope.x + cell, scope.y + cell * 1.4, cell * 0.55, OXBLOOD, "left", 700, { family: "mono" });
+  type(context, "5020", scope.x + cell, scope.y + cell * 2.7, cell * 0.52, OXBLOOD, "left", 700, { family: "mono" });
+  type(context, "4490", scope.x + scope.width - cell, scope.y + cell * 2.7, cell * 0.52, OXBLOOD, "right", 700, { family: "mono" });
+}
+
+function cyberNeuralRelic(frame: SceneFrame) {
+  const { context, width, height, phase, stateTick, layout } = frame;
+  fill(context, width, height, "#1c1b1b");
+  drawSharedGrid(frame, "rgba(225, 235, 212, 0.022)");
+  const cell = layout.cellSize;
+  const portrait = layout.profile === "portrait";
+  const pad = Math.max(16, cell * 2.1);
+  const heroX = portrait ? width * 0.5 : width * 0.47;
+  const heroY = portrait ? height * 0.47 : height * 0.52;
+  const heroWidth = portrait ? width * 0.9 : Math.min(width * 0.66, height * 0.92);
+  const heroHeight = portrait ? height * 0.6 : height * 0.9;
+  type(context, "NEURAL / RELIC", pad, pad + cell * 1.15, cell * 0.84, BONE, "left", 700, {
+    family: "interface",
+    tracking: cell * 0.09,
+  });
+  type(context, "XAI–9", width - pad, pad + cell * 1.15, cell * 0.84, RED, "right", 700, {
+    family: "display",
+    tracking: cell * 0.1,
+  });
+  line(context, pad, pad + cell * 1.8, width - pad, pad + cell * 1.8, "rgba(232, 235, 212, 0.28)");
+  drawMechanicalHand(context, heroX, heroY, heroWidth, heroHeight, BONE, "rgba(143, 143, 139, 0.78)", phase);
+
+  const capsules = portrait
+    ? [
+        [0.17, 0.29, "A"], [0.81, 0.27, "✣"], [0.15, 0.53, "09"],
+        [0.82, 0.55, "+"], [0.2, 0.76, "X"], [0.76, 0.78, "∆"],
+      ] as const
+    : [
+        [0.13, 0.3, "A"], [0.76, 0.24, "✣"], [0.17, 0.52, "09"],
+        [0.79, 0.49, "+"], [0.24, 0.75, "X"], [0.72, 0.76, "∆"],
+      ] as const;
+  const pillWidth = Math.max(cell * 2.5, Math.min(width, height) * 0.075);
+  const pillHeight = pillWidth * 1.45;
+  for (const [index, capsule] of capsules.entries()) {
+    const [xAmount, yAmount, label] = capsule;
+    const drift = Math.sin(phase * 0.035 + index * 1.7) * cell * 0.35;
+    const pill: CyberPanel = {
+      x: width * xAmount - pillWidth / 2 + drift,
+      y: height * yAmount - pillHeight / 2,
+      width: pillWidth,
+      height: pillHeight,
+    };
+    roundedPanelPath(context, pill, pillWidth * 0.42);
+    context.fillStyle = "rgba(28, 27, 27, 0.76)";
+    context.fill();
+    context.strokeStyle = index === positiveModulo(Math.floor(stateTick / 3), capsules.length) ? BONE : RED;
+    context.lineWidth = Math.max(1, cell * 0.12);
+    context.stroke();
+    drawSignalCircle(context, pill.x + pill.width / 2, pill.y + pill.height / 2, pill.width * 0.24, "rgba(232, 235, 212, 0.56)");
+    type(context, label, pill.x + pill.width / 2, pill.y + pill.height * 0.59, cell * 0.76, BONE, "center", 700, {
+      family: "display",
+      maxWidth: pill.width * 0.65,
+    });
+  }
+
+  const brand: CyberPanel = portrait
+    ? { x: width * 0.54, y: height - pad - cell * 4.2, width: width * 0.34, height: cell * 3.2 }
+    : { x: width - pad - cell * 10, y: height - pad - cell * 3.3, width: cell * 10, height: cell * 2.8 };
+  panel(context, brand.x, brand.y, brand.width, brand.height, RED);
+  context.fillStyle = RED;
+  context.fillRect(brand.x, brand.y, brand.width, Math.max(3, cell * 0.32));
+  type(context, "XAI", brand.x + brand.width / 2, brand.y + brand.height * 0.72, Math.min(brand.height * 0.6, brand.width * 0.24), BONE, "center", 800, {
+    family: "display",
+    tracking: cell * 0.18,
+  });
+  type(context, "BIO-MECHANICAL MEMORY / UNIT 04", pad, height - pad, cell * 0.56, "rgba(232, 235, 212, 0.58)", "left", 700, {
+    family: "mono",
+    maxWidth: width * 0.48,
+  });
+}
+
+function cyberVoidMesh(frame: SceneFrame) {
+  const { context, width, height, phase, stateTick, layout } = frame;
+  fill(context, width, height, NIGHT);
+  drawSharedGrid(frame, "rgba(225, 225, 220, 0.025)");
+  const cell = layout.cellSize;
+  const pad = Math.max(14, cell * 1.65);
+  const gap = Math.max(7, cell * 0.65);
+  const portrait = layout.profile === "portrait";
+  const left: CyberPanel = portrait
+    ? { x: pad, y: pad + cell * 4, width: width - pad * 2, height: height * 0.48 }
+    : { x: pad, y: pad + cell * 3, width: width * 0.45, height: height - pad * 2 - cell * 3 };
+  const rightX = portrait ? pad : left.x + left.width + gap;
+  const rightY = portrait ? left.y + left.height + gap : left.y;
+  const rightWidth = portrait ? width - pad * 2 : width - pad - rightX;
+  const rightHeight = portrait ? height - pad - rightY : left.height;
+  type(context, "VOID MESH", pad, pad + cell * 1.35, Math.min(cell * 1.35, width * 0.035), IVORY, "left", 800, {
+    family: "display",
+    tracking: cell * 0.11,
+  });
+  type(context, `FRAME ${String(positiveModulo(stateTick, 999)).padStart(3, "0")} / SPECTRAL`, width - pad, pad + cell * 1.25, cell * 0.58, MAGENTA, "right", 700, {
+    family: "mono",
+  });
+
+  panel(context, left.x, left.y, left.width, left.height, "rgba(225, 225, 220, 0.72)");
+  drawPerspectiveCage(context, left, "rgba(225, 225, 220, 0.18)", phase);
+  drawWireBust(
+    context,
+    left.x + left.width * 0.5,
+    left.y + left.height * 0.5,
+    left.width * 0.84,
+    left.height * 0.88,
+    IVORY,
+    MAGENTA,
+    phase,
+  );
+  drawCyberStar(context, left.x + left.width * 0.15, left.y + left.height * 0.15, Math.min(cell * 1.2, left.width * 0.04), MAGENTA);
+  drawCyberStar(context, left.x + left.width * 0.86, left.y + left.height * 0.64, Math.min(cell * 0.9, left.width * 0.03), MAGENTA);
+
+  const brandHeight = rightHeight * 0.24;
+  const brand: CyberPanel = { x: rightX, y: rightY, width: rightWidth, height: brandHeight };
+  const instrumentsY = brand.y + brand.height + gap;
+  const instrumentsHeight = rightHeight - brand.height - gap;
+  const instrumentLeft: CyberPanel = { x: rightX, y: instrumentsY, width: (rightWidth - gap) * 0.42, height: instrumentsHeight };
+  const instrumentRight: CyberPanel = { x: instrumentLeft.x + instrumentLeft.width + gap, y: instrumentsY, width: rightWidth - instrumentLeft.width - gap, height: instrumentsHeight };
+  panel(context, brand.x, brand.y, brand.width, brand.height, "rgba(225, 225, 220, 0.42)");
+  type(context, "SIGNAL", brand.x + cell, brand.y + brand.height * 0.48, Math.min(brand.height * 0.43, brand.width * 0.14), IVORY, "left", 800, {
+    family: "display",
+    maxWidth: brand.width - cell * 2,
+    tracking: -cell * 0.04,
+    motion: 0.16,
+  });
+  type(context, "SYSTEM", brand.x + brand.width - cell, brand.y + brand.height * 0.88, Math.min(brand.height * 0.36, brand.width * 0.11), IVORY, "right", 800, {
+    family: "display",
+    maxWidth: brand.width - cell * 2,
+    tracking: cell * 0.08,
+  });
+  drawCyberStar(context, brand.x + brand.width - cell * 1.2, brand.y + cell, cell * 0.5, MAGENTA);
+
+  panel(context, instrumentLeft.x, instrumentLeft.y, instrumentLeft.width, instrumentLeft.height, "rgba(225, 225, 220, 0.38)");
+  const ringRadius = Math.min(instrumentLeft.width, instrumentLeft.height) * 0.28;
+  const ringX = instrumentLeft.x + instrumentLeft.width * 0.5;
+  const ringY = instrumentLeft.y + instrumentLeft.height * 0.27;
+  for (let index = 0; index < 6; index += 1) {
+    drawSignalEllipse(context, ringX, ringY, ringRadius, ringRadius * (0.18 + index * 0.14), 0, index === 3 ? MAGENTA : "rgba(225, 225, 220, 0.52)");
+  }
+  drawCyberStar(context, ringX, ringY, ringRadius * 0.86, MAGENTA);
+  const terrainTop = instrumentLeft.y + instrumentLeft.height * 0.56;
+  for (let row = 0; row < 10; row += 1) {
+    context.beginPath();
+    for (let column = 0; column <= 20; column += 1) {
+      const amount = column / 20;
+      const x = instrumentLeft.x + amount * instrumentLeft.width;
+      const wave = Math.sin(amount * TAU * 2.2 + row * 0.37 + phase * 0.035);
+      const y = terrainTop + row * instrumentLeft.height * 0.035 - Math.abs(wave) * instrumentLeft.height * (0.12 - row * 0.006);
+      if (column === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    }
+    context.strokeStyle = row === positiveModulo(Math.floor(stateTick / 2), 10) ? MAGENTA : "rgba(225, 225, 220, 0.32)";
+    context.lineWidth = 1;
+    context.stroke();
+  }
+
+  panel(context, instrumentRight.x, instrumentRight.y, instrumentRight.width, instrumentRight.height, "rgba(225, 225, 220, 0.38)");
+  const torusX = instrumentRight.x + instrumentRight.width * 0.5;
+  const torusY = instrumentRight.y + instrumentRight.height * 0.48;
+  const torusRadius = Math.min(instrumentRight.width, instrumentRight.height) * 0.34;
+  for (let index = 0; index < 34; index += 1) {
+    const amount = index / 34;
+    drawSignalEllipse(
+      context,
+      torusX + Math.sin(amount * TAU + phase * 0.012) * torusRadius * 0.28,
+      torusY,
+      torusRadius * (0.3 + Math.abs(Math.cos(amount * TAU)) * 0.72),
+      torusRadius * 0.34,
+      amount * Math.PI,
+      index % 9 === 0 ? MAGENTA : "rgba(225, 225, 220, 0.42)",
+    );
+  }
+  type(context, "WE SHAPE SIGNALS THAT LIVE BEYOND TRENDS.", instrumentRight.x + cell, instrumentRight.y + cell * 1.4, cell * 0.54, IVORY, "left", 500, {
+    family: "mono",
+    maxWidth: instrumentRight.width - cell * 2,
+  });
+}
+
+function cyberMachineProtocol(frame: SceneFrame) {
+  const { context, width, height, phase, stateTick, layout } = frame;
+  fill(context, width, height, "#8f9695");
+  const cell = layout.cellSize;
+  const pad = Math.max(12, cell * 1.45);
+  type(context, "POST", pad, Math.min(height * 0.18, cell * 7), Math.min(height * 0.18, width * 0.17), OXBLOOD, "left", 800, {
+    family: "display",
+    maxWidth: width - pad * 2,
+    tracking: -cell * 0.32,
+    motion: 0.1,
+  });
+  type(context, "HUMAN", width - pad, height - pad, Math.min(height * 0.2, width * 0.16), OXBLOOD, "right", 800, {
+    family: "display",
+    maxWidth: width - pad * 2,
+    tracking: -cell * 0.28,
+    motion: 0.1,
+  });
+  drawBarcode(context, pad, height * 0.34, width - pad * 2, Math.max(cell * 1.1, 12), OXBLOOD, 2088);
+  const card: CyberPanel = {
+    x: width * (layout.profile === "portrait" ? 0.08 : 0.17),
+    y: height * 0.2,
+    width: width * (layout.profile === "portrait" ? 0.84 : 0.68),
+    height: height * 0.62,
+  };
+  cyberPanel(context, card, "rgba(146, 153, 152, 0.97)", Math.max(12, cell * 1.15), OXBLOOD);
+  line(context, card.x, card.y + cell * 2.4, card.x + card.width, card.y + cell * 2.4, OXBLOOD, 2);
+  type(context, "INDEX", card.x + cell, card.y + cell * 1.55, cell * 0.56, OXBLOOD, "left", 700, { family: "mono" });
+  type(context, "SPLICE", card.x + card.width * 0.36, card.y + cell * 1.55, cell * 0.56, OXBLOOD, "center", 700, { family: "mono" });
+  type(context, "CONTROL / CONNECTIVITY", card.x + card.width - cell, card.y + cell * 1.55, cell * 0.56, OXBLOOD, "right", 700, { family: "mono" });
+  drawWireBust(
+    context,
+    card.x + card.width * 0.68,
+    card.y + card.height * 0.54,
+    card.width * 0.6,
+    card.height * 0.92,
+    OXBLOOD,
+    ORANGE,
+    phase,
+  );
+  const badge: CyberPanel = {
+    x: card.x + cell * 1.8,
+    y: card.y + card.height * 0.43,
+    width: card.width * 0.33,
+    height: card.height * 0.15,
+  };
+  panel(context, badge.x, badge.y, badge.width, badge.height, OXBLOOD);
+  type(context, "MADE BY SIGNALS", badge.x + cell, badge.y + badge.height * 0.64, cell * 0.9, OXBLOOD, "left", 700, {
+    family: "interface",
+    maxWidth: badge.width - cell * 2,
+  });
+  const arrowX = card.x + cell * 2;
+  const arrowY = card.y + card.height * 0.66;
+  const arrowSize = Math.min(cell * 4.6, card.width * 0.14);
+  line(context, arrowX, arrowY + arrowSize, arrowX + arrowSize, arrowY, IVORY, Math.max(5, cell * 0.8));
+  line(context, arrowX + arrowSize * 0.38, arrowY, arrowX + arrowSize, arrowY, IVORY, Math.max(5, cell * 0.8));
+  line(context, arrowX + arrowSize, arrowY, arrowX + arrowSize, arrowY + arrowSize * 0.62, IVORY, Math.max(5, cell * 0.8));
+  drawCyberStar(context, card.x + cell * 3, card.y + card.height - cell * 3.2, cell * 1.15, OXBLOOD);
+  type(context, "MACHINE", card.x + cell * 5, card.y + card.height - cell * 3.25, cell * 1.15, OXBLOOD, "left", 800, {
+    family: "display",
+    maxWidth: card.width * 0.38,
+  });
+  type(context, `PROTOCOL / ML-${String(positiveModulo(stateTick, 99)).padStart(2, "0")}`, card.x + cell * 5, card.y + card.height - cell * 1.95, cell * 0.58, OXBLOOD, "left", 700, {
+    family: "mono",
+    maxWidth: card.width * 0.42,
+  });
+}
+
 const INTERNAL_SCENES: readonly InternalScene[] = [
-  { id: "orbital-telemetry", label: "Orbital Telemetry", code: "ORBIT-07", typeface: "pixel-circle", draw: orbitalTelemetry },
-  { id: "constellation-mesh", label: "Constellation Mesh", code: "NODE-42", typeface: "pixel-grid", draw: constellationMesh },
+  { id: "orbital-telemetry", label: "Industrial ID", code: "UA-570", typeface: "display", draw: cyberIndustrialId },
+  { id: "constellation-mesh", label: "Lab Registry", code: "FAC-659", typeface: "interface", draw: cyberLabRegistry },
   { id: "glyph-cascade", label: "Glyph Cascade", code: "RAIN-14", typeface: "pixel-line", draw: glyphCascade },
   { id: "barcode-cathedral", label: "Barcode Cathedral", code: "NAVE-43", typeface: "pixel-square", draw: barcodeCathedral },
   { id: "cellular-atlas", label: "Cellular Atlas", code: "LIFE-32", typeface: "pixel-square", draw: cellularAtlas },
   { id: "packet-river", label: "Packet River", code: "FLOW-06", typeface: "mono", draw: packetRiver },
   { id: "seismic-field", label: "Seismic Field", code: "QUAKE-12", typeface: "pixel-line", draw: seismicField },
   { id: "clockwork-rings", label: "Clockwork Rings", code: "GEAR-05", typeface: "pixel-circle", draw: clockworkRings },
-  { id: "vector-scope", label: "Vector Scope", code: "XY-09", typeface: "pixel-grid", draw: vectorScope },
+  { id: "vector-scope", label: "Neural Relic", code: "XAI-09", typeface: "display", draw: cyberNeuralRelic },
   { id: "memory-map", label: "Memory Map", code: "RAM-64", typeface: "pixel-square", draw: memoryMap },
   { id: "waveform-stack", label: "Waveform Stack", code: "WAVE-16", typeface: "pixel-line", draw: waveformStack },
   { id: "data-loom", label: "Data Loom", code: "WARP-18", typeface: "pixel-triangle", draw: dataLoom },
   { id: "hex-field", label: "Hex Field", code: "HEX-19", typeface: "pixel-grid", draw: hexField },
   { id: "satellite-topology", label: "Satellite Topology", code: "SAT-08", typeface: "pixel-circle", draw: satelliteTopology },
   { id: "archive-index", label: "Archive Index", code: "ARC-96", typeface: "mono", draw: archiveIndex },
-  { id: "raster-portrait", label: "Raster Portrait", code: "FACE-01", typeface: "pixel-square", draw: rasterPortrait },
+  { id: "raster-portrait", label: "Void Mesh", code: "VOID-01", typeface: "display", draw: cyberVoidMesh },
   { id: "checker-error", label: "Checker Error", code: "ERR-77", typeface: "pixel-triangle", draw: checkerError },
-  { id: "deep-scan", label: "Deep Scan", code: "DEPTH-∞", typeface: "pixel-line", draw: deepScan },
+  { id: "deep-scan", label: "Machine Protocol", code: "ML-88", typeface: "display", draw: cyberMachineProtocol },
 ];
 
 export const SIGNAL_SCENES: readonly SignalSceneDescriptor[] = Object.freeze(
@@ -2065,6 +2902,7 @@ function drawScene(
   context.globalAlpha = 1;
   context.globalCompositeOperation = "source-over";
   INTERNAL_SCENES[safeIndex].draw(frame);
+  drawCyberFinish(frame, SIGNAL_SCENE_ACCENTS[safeIndex] ?? MAGENTA);
   context.restore();
 }
 

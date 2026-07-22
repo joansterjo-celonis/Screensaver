@@ -1,4 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import "@fontsource-variable/oxanium/wght.css";
+import "@fontsource/rajdhani/latin-500.css";
+import "@fontsource/rajdhani/latin-700.css";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
