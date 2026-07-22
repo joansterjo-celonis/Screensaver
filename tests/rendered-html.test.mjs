@@ -128,8 +128,158 @@ test("uses one tri-mode social image across metadata and the README", async () =
   assert.equal(metadata.height, 630);
   assert.match(layout, /og-always-on-frame\.png/g);
   assert.doesNotMatch(layout, /og-(?:flip-dot|posterjo)\.png/);
-  assert.match(layout, /Flip Dot Weather, Swikipedia, and Posterjo/);
+  assert.match(layout, /exact flip-dot matrix, Swikipedia, and the original Posterjo artwork The monolith/);
   assert.match(readme, /public\/og-always-on-frame\.png/);
+});
+
+test("builds the social image from exact geometry and two verified archive works", async () => {
+  const [
+    builder,
+    builderSource,
+    provenanceSource,
+    posterjoManifestSource,
+    artworkManifestSource,
+    image,
+    baseTemplate,
+    sharpModule,
+  ] = await Promise.all([
+    import(new URL("../scripts/build-og-always-on-frame.mjs", import.meta.url)),
+    readFile(new URL("../scripts/build-og-always-on-frame.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../public/og-always-on-frame.provenance.json", import.meta.url), "utf8"),
+    readFile(new URL("../public/posterjo/manifest.json", import.meta.url), "utf8"),
+    readFile(new URL("../public/artworks/manifest.json", import.meta.url), "utf8"),
+    readFile(new URL("../public/og-always-on-frame.png", import.meta.url)),
+    readFile(new URL("../scripts/assets/og-always-on-frame-base.png", import.meta.url)),
+    import("sharp"),
+  ]);
+  const provenance = JSON.parse(provenanceSource);
+  const posterjoManifest = JSON.parse(posterjoManifestSource);
+  const artworkManifest = JSON.parse(artworkManifestSource);
+  const svg = builder.createFlipDotPanelSvg();
+  const cellCount = builder.DOT_GRID.columns * builder.DOT_GRID.rows;
+  const faceRadii = [...svg.matchAll(/<circle data-dot-face="true"[^>]*\br="([^"]+)"/g)].map(
+    (match) => Number(match[1]),
+  );
+  const wellRadii = [...svg.matchAll(/<circle data-dot-well="true"[^>]*\br="([^"]+)"/g)].map(
+    (match) => Number(match[1]),
+  );
+  const cells = [...svg.matchAll(
+    /data-flip-dot-cell="true" data-column="(\d+)" data-row="(\d+)" transform="translate\(([^ ]+) ([^)]+)\)"/g,
+  )];
+
+  assert.equal(cells.length, cellCount);
+  assert.equal(faceRadii.length, cellCount);
+  assert.equal(wellRadii.length, cellCount);
+  assert.deepEqual([...new Set(faceRadii)], [builder.DOT_GRID.rotorRadius]);
+  assert.deepEqual([...new Set(wellRadii)], [builder.DOT_GRID.wellRadius]);
+  assert.equal(new Set(cells.map((match) => Number(match[3]))).size, builder.DOT_GRID.columns);
+  assert.equal(new Set(cells.map((match) => Number(match[4]))).size, builder.DOT_GRID.rows);
+  assert.ok(
+    cells.every((match) =>
+      Number(match[3]) === builder.DOT_GRID.firstCenterX + Number(match[1]) * builder.DOT_GRID.pitch
+      && Number(match[4]) === builder.DOT_GRID.firstCenterY + Number(match[2]) * builder.DOT_GRID.pitch,
+    ),
+    "every dot center must sit on the same square lattice",
+  );
+  assert.equal(
+    builder.createActiveDotMatrix().flat().filter(Boolean).length,
+    provenance.flipDotPanel.activeCount,
+  );
+  assert.equal(provenance.version, 1);
+  assert.equal(provenance.builder, "scripts/build-og-always-on-frame.mjs");
+  assert.deepEqual(provenance.output, builder.OG_IMAGE);
+  assert.deepEqual(provenance.baseTemplate, builder.BASE_TEMPLATE);
+  assert.equal(createHash("sha256").update(baseTemplate).digest("hex"), builder.BASE_TEMPLATE.sha256);
+  assert.notEqual(builder.BASE_TEMPLATE.file, builder.OG_IMAGE.file);
+  assert.doesNotMatch(builderSource, /readFile\(outputPath\)/);
+  assert.deepEqual(provenance.flipDotPanel.bay, builder.LEFT_BAY);
+  assert.deepEqual(provenance.flipDotPanel.grid, builder.DOT_GRID);
+  assert.equal(provenance.flipDotPanel.activeCount, 122);
+  assert.deepEqual(provenance.flipDotPanel.content, {
+    time: "12:48",
+    layout: "stacked-hours-minutes",
+    seconds: false,
+  });
+  assert.equal("weather" in provenance.flipDotPanel.content, false);
+  assert.equal("temperature" in provenance.flipDotPanel.content, false);
+
+  const swikipediaRecord = artworkManifest.files.find(
+    (record) => record.qid === builder.SWIKIPEDIA_ARTWORK.qid,
+  );
+  const swikipediaSource = await readFile(
+    new URL(`../public/${builder.SWIKIPEDIA_ARTWORK.file}`, import.meta.url),
+  );
+  assert.ok(swikipediaRecord, `${builder.SWIKIPEDIA_ARTWORK.qid} must be a committed Swikipedia work`);
+  assert.equal(swikipediaRecord.file, builder.SWIKIPEDIA_ARTWORK.file.replace(/^artworks\//, ""));
+  assert.equal(swikipediaRecord.title, builder.SWIKIPEDIA_ARTWORK.title);
+  assert.equal(swikipediaRecord.artist, builder.SWIKIPEDIA_ARTWORK.artist);
+  assert.equal(swikipediaRecord.sha256, builder.SWIKIPEDIA_ARTWORK.sha256);
+  assert.equal(createHash("sha256").update(swikipediaSource).digest("hex"), swikipediaRecord.sha256);
+  assert.deepEqual(provenance.swikipediaPanel.bay, builder.CENTER_BAY);
+  assert.equal(provenance.swikipediaPanel.qid, builder.SWIKIPEDIA_ARTWORK.qid);
+  assert.equal(provenance.swikipediaPanel.file, builder.SWIKIPEDIA_ARTWORK.file);
+  assert.equal(provenance.swikipediaPanel.title, builder.SWIKIPEDIA_ARTWORK.title);
+  assert.equal(provenance.swikipediaPanel.artist, builder.SWIKIPEDIA_ARTWORK.artist);
+  assert.equal(provenance.swikipediaPanel.sourcePage, swikipediaRecord.source.article);
+  assert.equal(provenance.swikipediaPanel.sha256, swikipediaRecord.sha256);
+  assert.equal(provenance.swikipediaPanel.fit, builder.SWIKIPEDIA_ARTWORK.fit);
+  assert.equal(provenance.swikipediaPanel.position, builder.SWIKIPEDIA_ARTWORK.position);
+
+  const posterjoFile = builder.POSTERJO_ARTWORK.file.replace(/^posterjo\//, "");
+  const manifestRecord = posterjoManifest.files.find((record) => record.file === posterjoFile);
+  const posterjoSource = await readFile(
+    new URL(`../public/${builder.POSTERJO_ARTWORK.file}`, import.meta.url),
+  );
+  assert.ok(manifestRecord, `${posterjoFile} must be a committed Posterjo work`);
+  assert.equal(manifestRecord.title, builder.POSTERJO_ARTWORK.title);
+  assert.equal(manifestRecord.sha256, builder.POSTERJO_ARTWORK.sha256);
+  assert.equal(createHash("sha256").update(posterjoSource).digest("hex"), manifestRecord.sha256);
+  assert.equal(provenance.posterjoPanel.file, builder.POSTERJO_ARTWORK.file);
+  assert.deepEqual(provenance.posterjoPanel.bay, builder.RIGHT_BAY);
+  assert.equal(provenance.posterjoPanel.title, builder.POSTERJO_ARTWORK.title);
+  assert.equal(provenance.posterjoPanel.sourcePage, manifestRecord.source.page);
+  assert.equal(provenance.posterjoPanel.sha256, manifestRecord.sha256);
+  assert.equal(provenance.posterjoPanel.fit, builder.POSTERJO_ARTWORK.fit);
+  assert.equal(provenance.posterjoPanel.position, builder.POSTERJO_ARTWORK.position);
+  assert.equal(createHash("sha256").update(image).digest("hex"), provenance.outputSha256);
+
+  const [expectedLeft, expectedCenter, expectedRight] = await Promise.all([
+    builder.renderFlipDotPanel(),
+    builder.renderSwikipediaPanel(),
+    builder.renderPosterjoPanel(),
+  ]);
+  assert.equal(
+    createHash("sha256").update(expectedLeft).digest("hex"),
+    provenance.flipDotPanel.panelSha256,
+  );
+  assert.equal(
+    createHash("sha256").update(expectedCenter).digest("hex"),
+    provenance.swikipediaPanel.panelSha256,
+  );
+  assert.equal(
+    createHash("sha256").update(expectedRight).digest("hex"),
+    provenance.posterjoPanel.panelSha256,
+  );
+
+  const sharp = sharpModule.default;
+  const [
+    actualLeftPixels,
+    expectedLeftPixels,
+    actualCenterPixels,
+    expectedCenterPixels,
+    actualRightPixels,
+    expectedRightPixels,
+  ] = await Promise.all([
+    sharp(image).extract(builder.LEFT_BAY).removeAlpha().raw().toBuffer(),
+    sharp(expectedLeft).removeAlpha().raw().toBuffer(),
+    sharp(image).extract(builder.CENTER_BAY).removeAlpha().raw().toBuffer(),
+    sharp(expectedCenter).removeAlpha().raw().toBuffer(),
+    sharp(image).extract(builder.RIGHT_BAY).removeAlpha().raw().toBuffer(),
+    sharp(expectedRight).removeAlpha().raw().toBuffer(),
+  ]);
+  assert.deepEqual(actualLeftPixels, expectedLeftPixels, "the PNG must contain the exact uniform rotor panel");
+  assert.deepEqual(actualCenterPixels, expectedCenterPixels, "the PNG must contain the exact Swikipedia crop");
+  assert.deepEqual(actualRightPixels, expectedRightPixels, "the PNG must contain the exact Posterjo crop");
 });
 
 test("ships the expanded artwork libraries and weather frame", async () => {
@@ -581,7 +731,7 @@ test("prioritizes randomized Swikipedia decks for the viewport orientation", asy
   );
 });
 
-test("ships complete deterministic flip-dot glyph and weather-icon matrices", async () => {
+test("ships the complete deterministic flip-dot alphabet", async () => {
   const glyphModule = await import(
     new URL("../app/modes/flip-dot-glyphs.ts", import.meta.url).href
   );
@@ -589,7 +739,6 @@ test("ships complete deterministic flip-dot glyph and weather-icon matrices", as
     FLIP_DOT_GLYPHS,
     flipDotGlyph,
     normalizeFlipDotText,
-    weatherDotPattern,
   } = glyphModule.default ?? glyphModule;
   const requiredCharacters = [
     " ", "-", ".", ":", "°", "?",
@@ -609,29 +758,6 @@ test("ships complete deterministic flip-dot glyph and weather-icon matrices", as
   assert.equal(normalizeFlipDotText("München 21°c"), "MUNCHEN 21°C");
   assert.equal(normalizeFlipDotText("A/B!"), "A B ");
   assert.equal(flipDotGlyph("☃"), FLIP_DOT_GLYPHS["?"]);
-
-  const weatherIcons = [
-    "clear-day",
-    "clear-night",
-    "partly-cloudy-day",
-    "partly-cloudy-night",
-    "cloudy",
-    "fog",
-    "drizzle",
-    "rain",
-    "snow",
-    "storm",
-    "unknown",
-  ];
-  for (const icon of weatherIcons) {
-    const pattern = weatherDotPattern(icon);
-    assert.equal(pattern.length, 9, `${icon} must be nine dots tall`);
-    for (const row of pattern) {
-      assert.equal(row.length, 9, `${icon} must be nine dots wide`);
-      assert.match(row, /^[01]{9}$/);
-    }
-  }
-  assert.equal(weatherDotPattern("not-a-weather-icon"), weatherDotPattern("unknown"));
 });
 
 test("composes one equal-pitch flip-dot field for landscape and portrait", async () => {
@@ -639,26 +765,49 @@ test("composes one equal-pitch flip-dot field for landscape and portrait", async
     new URL("../app/modes/flip-dot-layout.ts", import.meta.url).href
   );
   const {
-    COMPACT_FLIP_DOT_GLYPHS,
     FLIP_DOT_FIELD_SPECS,
     LARGE_FLIP_DOT_DIGITS,
+    LARGE_FLIP_DOT_DIGITS_BOLD,
+    LARGE_FLIP_DOT_DIGITS_BY_WEIGHT,
     composeFlipDotField,
     formatFlipDotTemperature,
   } = layoutModule.default ?? layoutModule;
 
-  assert.deepEqual(
-    Object.keys(COMPACT_FLIP_DOT_GLYPHS).sort(),
-    [" ", "-", ":", "°", "?", ..."0123456789HILO"].sort(),
-  );
-  for (const pattern of Object.values(COMPACT_FLIP_DOT_GLYPHS)) {
-    assert.equal(pattern.length, 5);
-    assert.ok(pattern.every((row) => /^[01]{3}$/.test(row)));
-  }
   assert.deepEqual(Object.keys(LARGE_FLIP_DOT_DIGITS).sort(), [" ", "-", ..."0123456789"].sort());
-  for (const pattern of Object.values(LARGE_FLIP_DOT_DIGITS)) {
-    assert.equal(pattern.length, 11);
-    assert.ok(pattern.every((row) => /^[01]{7}$/.test(row)));
+  assert.deepEqual(Object.keys(LARGE_FLIP_DOT_DIGITS_BOLD).sort(), [" ", "-", ..."0123456789"].sort());
+  assert.deepEqual(Object.keys(LARGE_FLIP_DOT_DIGITS_BY_WEIGHT), ["normal", "bold"]);
+  for (const digitSet of [LARGE_FLIP_DOT_DIGITS, LARGE_FLIP_DOT_DIGITS_BOLD]) {
+    for (const pattern of Object.values(digitSet)) {
+      assert.equal(pattern.length, 15);
+      assert.ok(pattern.every((row) => /^[01]{7}$/.test(row)));
+    }
   }
+  for (const character of ["-", ..."0123456789"]) {
+    const normal = LARGE_FLIP_DOT_DIGITS[character].join("");
+    const bold = LARGE_FLIP_DOT_DIGITS_BOLD[character].join("");
+    assert.ok(
+      [...normal].every((cell, index) => cell !== "1" || bold[index] === "1"),
+      `${character}: bold must retain every normal active rotor`,
+    );
+    assert.ok(bold.match(/1/g).length > normal.match(/1/g).length);
+  }
+  assert.deepEqual(LARGE_FLIP_DOT_DIGITS_BOLD["8"], [
+    "0111110",
+    "1011101",
+    "1100011",
+    "1100011",
+    "1100011",
+    "1100011",
+    "1011101",
+    "0111110",
+    "1011101",
+    "1100011",
+    "1100011",
+    "1100011",
+    "1100011",
+    "1011101",
+    "0111110",
+  ]);
 
   const expectedDimensions = {
     landscape: [43, 19],
@@ -669,17 +818,17 @@ test("composes one equal-pitch flip-dot field for landscape and portrait", async
       variant,
       hours: "12",
       minutes: "48",
-      seconds: "36",
       separatorOn: true,
-      temperature: "-12°",
-      weatherIcon: "clear-day",
+      digitWeight: "normal",
     });
     assert.deepEqual([field.columns, field.rows], expectedDimensions[variant]);
     assert.equal(field.active.length, field.columns * field.rows);
     assert.ok(field.active.every((cell) => typeof cell === "boolean"));
     assert.ok(field.active.some(Boolean));
+    assert.ok(field.active.some((cell) => !cell), "unused positions must remain physical off-state dots");
 
     const regions = Object.values(FLIP_DOT_FIELD_SPECS[variant].regions);
+    assert.deepEqual(Object.keys(FLIP_DOT_FIELD_SPECS[variant].regions), ["time"]);
     for (const region of regions) {
       assert.ok(region.x >= 0 && region.y >= 0);
       assert.ok(region.x + region.width <= field.columns);
@@ -700,21 +849,93 @@ test("composes one equal-pitch flip-dot field for landscape and portrait", async
     variant: "landscape",
     hours: "12",
     minutes: "48",
-    seconds: "36",
     separatorOn: true,
-    temperature: "14°",
-    weatherIcon: "cloudy",
   });
   const colonOff = composeFlipDotField({
     variant: "landscape",
     hours: "12",
     minutes: "48",
-    seconds: "36",
     separatorOn: false,
-    temperature: "14°",
-    weatherIcon: "cloudy",
   });
-  assert.ok(colonOn.active.some((cell, index) => cell !== colonOff.active[index]));
+  const changedLandscapeCells = colonOn.active
+    .map((cell, index) => cell !== colonOff.active[index] ? index : -1)
+    .filter((index) => index >= 0);
+  assert.deepEqual(changedLandscapeCells, [7 * 43 + 21, 11 * 43 + 21]);
+
+  const portraitColonOn = composeFlipDotField({
+    variant: "portrait",
+    hours: "12",
+    minutes: "48",
+    separatorOn: true,
+  });
+  const portraitColonOff = composeFlipDotField({
+    variant: "portrait",
+    hours: "12",
+    minutes: "48",
+    separatorOn: false,
+  });
+  const changedPortraitCells = portraitColonOn.active
+    .map((cell, index) => cell !== portraitColonOff.active[index] ? index : -1)
+    .filter((index) => index >= 0);
+  assert.deepEqual(changedPortraitCells, [19 * 27 + 13, 22 * 27 + 13]);
+
+  for (const variant of ["landscape", "portrait"]) {
+    const input = { variant, hours: "12", minutes: "48", separatorOn: true };
+    const implicit = composeFlipDotField(input);
+    const normal = composeFlipDotField({ ...input, digitWeight: "normal" });
+    const bold = composeFlipDotField({ ...input, digitWeight: "bold" });
+    assert.deepEqual(implicit.active, normal.active, `${variant}: normal remains the default`);
+    assert.deepEqual([bold.columns, bold.rows], [normal.columns, normal.rows]);
+    assert.equal(bold.active.length, normal.active.length);
+    assert.equal(normal.active.filter(Boolean).length, 103);
+    assert.equal(bold.active.filter(Boolean).length, 179);
+    assert.ok(
+      normal.active.every((cell, index) => !cell || bold.active[index]),
+      `${variant}: bold only activates more same-size rotors`,
+    );
+  }
+
+  const boldLandscapeColonOn = composeFlipDotField({
+    variant: "landscape",
+    hours: "12",
+    minutes: "48",
+    separatorOn: true,
+    digitWeight: "bold",
+  });
+  const boldLandscapeColonOff = composeFlipDotField({
+    variant: "landscape",
+    hours: "12",
+    minutes: "48",
+    separatorOn: false,
+    digitWeight: "bold",
+  });
+  assert.deepEqual(
+    boldLandscapeColonOn.active
+      .map((cell, index) => cell !== boldLandscapeColonOff.active[index] ? index : -1)
+      .filter((index) => index >= 0),
+    [6 * 43 + 21, 7 * 43 + 21, 11 * 43 + 21, 12 * 43 + 21],
+  );
+
+  const boldPortraitColonOn = composeFlipDotField({
+    variant: "portrait",
+    hours: "12",
+    minutes: "48",
+    separatorOn: true,
+    digitWeight: "bold",
+  });
+  const boldPortraitColonOff = composeFlipDotField({
+    variant: "portrait",
+    hours: "12",
+    minutes: "48",
+    separatorOn: false,
+    digitWeight: "bold",
+  });
+  assert.deepEqual(
+    boldPortraitColonOn.active
+      .map((cell, index) => cell !== boldPortraitColonOff.active[index] ? index : -1)
+      .filter((index) => index >= 0),
+    [18 * 27 + 13, 19 * 27 + 13, 22 * 27 + 13, 23 * 27 + 13],
+  );
   assert.equal(formatFlipDotTemperature(14.4), "14°");
   assert.equal(formatFlipDotTemperature(-7.6), "-8°");
   assert.equal(formatFlipDotTemperature(100), "HI°");
@@ -723,21 +944,131 @@ test("composes one equal-pitch flip-dot field for landscape and portrait", async
 });
 
 test("renders the live clock through one shared-size mechanical grid", async () => {
-  const [clock, globalStyles, clockStyles] = await Promise.all([
+  const [clock, layout, globalStyles, clockStyles] = await Promise.all([
     readFile(new URL("../app/modes/flip-dot-clock.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/flip-dot-layout.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/flip-clock.css", import.meta.url), "utf8"),
   ]);
-  const source = `${clock}\n${globalStyles}\n${clockStyles}`;
+  const source = `${clock}\n${layout}\n${globalStyles}\n${clockStyles}`;
 
   assert.equal(clock.match(/<UnifiedFlipDotField/g)?.length, 1);
   assert.match(clock, /field\.active\.map\(\(active, index\) =>/);
   assert.match(clock, /key=\{index\}/);
   assert.match(clock, /data-layout=\{field\.variant\}/);
+  assert.match(clock, /data-digit-weight=\{field\.digitWeight\}/);
   assert.match(clockStyles, /\.flip-dot-field\s*\{[\s\S]*?grid-template-columns: repeat\(var\(--field-columns\), var\(--dot-size\)\);/);
   assert.match(clockStyles, /\.flip-dot-field \.flip-dot\s*\{\s*width: var\(--dot-size\);\s*height: var\(--dot-size\);/);
   assert.doesNotMatch(source, /flip-dot-matrix--(?:time|seconds|temperature)|flip-dot-weather-icon/);
   assert.doesNotMatch(clock, /<FlipDotText[\s\S]*?className="flip-dot-matrix--(?:time|seconds|temperature)"/);
+  assert.doesNotMatch(layout, /weatherDotPattern|weatherIcon|\bseconds\s*:/);
+  assert.doesNotMatch(clock, /clock\.seconds|second:\s*["']2-digit["']|and \$\{clock\.seconds\} seconds/);
+  assert.equal(clock.match(/getSeconds\(\)/g)?.length, 1);
+  assert.match(clock, /const colonVisible = [^;]*getSeconds\(\) % 2 === 0/);
+  assert.match(clock, /className="flip-clock-weather-panel"/);
+  assert.match(clock, /function FlatWeatherIcon/);
+  assert.match(clock, /className="flip-weather-icon" data-icon=\{icon\}/);
+  assert.match(clockStyles, /\.flip-clock-weather-panel\s*\{[\s\S]*?grid-template-columns:/);
+  assert.match(clockStyles, /\.flip-weather-icon\[data-icon="clear-day"\]/);
+  assert.match(clockStyles, /\.flip-weather-icon\[data-icon="unknown"\]/);
+});
+
+test("persists normal or bold numeral weight without changing rotor size", async () => {
+  const [weightModule, clock, clockStyles, readme] = await Promise.all([
+    import(new URL("../app/modes/flip-dot-weights.ts", import.meta.url).href),
+    readFile(new URL("../app/modes/flip-dot-clock.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/flip-clock.css", import.meta.url), "utf8"),
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+  ]);
+  const {
+    DEFAULT_FLIP_DOT_WEIGHT,
+    FLIP_DOT_WEIGHTS,
+    FLIP_DOT_WEIGHT_STORAGE_KEY,
+    isFlipDotDigitWeight,
+    resolveFlipDotWeight,
+    toggleFlipDotWeight,
+  } = weightModule.default ?? weightModule;
+  const weightSelectorSource = clock.slice(
+    clock.indexOf("function WeightSelector"),
+    clock.indexOf("function isWeatherLocation"),
+  );
+
+  assert.equal(DEFAULT_FLIP_DOT_WEIGHT, "normal");
+  assert.equal(FLIP_DOT_WEIGHT_STORAGE_KEY, "always-on-frame.flip-dot-weight.v1");
+  assert.deepEqual(FLIP_DOT_WEIGHTS.map(({ id }) => id), ["normal", "bold"]);
+  assert.deepEqual(FLIP_DOT_WEIGHTS.map(({ shortLabel }) => shortLabel), ["NORM", "BOLD"]);
+  assert.equal(isFlipDotDigitWeight("normal"), true);
+  assert.equal(isFlipDotDigitWeight("bold"), true);
+  assert.equal(isFlipDotDigitWeight("heavy"), false);
+  assert.equal(resolveFlipDotWeight("heavy").id, "normal");
+  assert.equal(toggleFlipDotWeight("normal"), "bold");
+  assert.equal(toggleFlipDotWeight("bold"), "normal");
+
+  assert.match(clock, /useState<FlipDotDigitWeight>\(DEFAULT_FLIP_DOT_WEIGHT\)/);
+  assert.match(clock, /readStoredJson\(FLIP_DOT_WEIGHT_STORAGE_KEY\)/);
+  assert.match(clock, /isFlipDotDigitWeight\(storedDigitWeight\)[\s\S]*?setDigitWeight\(storedDigitWeight\)/);
+  assert.match(clock, /storeJson\(FLIP_DOT_WEIGHT_STORAGE_KEY, nextWeight\)/);
+  assert.match(clock, /composeFlipDotField\(\{[\s\S]*?digitWeight,/);
+  assert.match(clock, /className="flip-clock-weight-selector"/);
+  assert.match(clock, /aria-pressed=\{weight === "bold"\}/);
+  assert.match(weightSelectorSource, /ArrowRight/);
+  assert.match(weightSelectorSource, /ArrowLeft/);
+  assert.match(clock, /\[colonVisible, digitWeight, fieldVariant, hours, minutes\]/);
+  assert.match(clockStyles, /\.flip-clock-weight-selector\[data-weight="bold"\]/);
+  assert.doesNotMatch(
+    clockStyles,
+    /\.flip-dot-field[^\{]*(?:normal|bold|weight)[^\{]*\{[^}]*(?:--dot-size|width|height|scale)/i,
+  );
+  assert.match(readme, /There is no seconds readout/i);
+  assert.match(readme, /NORMAL\/BOLD[\s\S]*activating more rotors, never by enlarging individual dots/i);
+  assert.match(readme, /numeral weight[\s\S]*cached on-device/i);
+  assert.doesNotMatch(readme, /Time, seconds|including seconds|weather dot matrices|dot icons/i);
+});
+
+test("ships four persistent physical flip-dot color and chassis themes", async () => {
+  const [themeModule, clock, globalStyles, clockStyles] = await Promise.all([
+    import(new URL("../app/modes/flip-dot-themes.ts", import.meta.url).href),
+    readFile(new URL("../app/modes/flip-dot-clock.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/flip-clock.css", import.meta.url), "utf8"),
+  ]);
+  const {
+    DEFAULT_FLIP_DOT_THEME,
+    FLIP_DOT_THEMES,
+    FLIP_DOT_THEME_STORAGE_KEY,
+    isFlipDotThemeId,
+    resolveFlipDotTheme,
+    stepFlipDotTheme,
+  } = themeModule.default ?? themeModule;
+  const themeSelectorSource = clock.slice(
+    clock.indexOf("function ThemeSelector"),
+    clock.indexOf("function WeightSelector"),
+  );
+
+  assert.equal(DEFAULT_FLIP_DOT_THEME, "amber");
+  assert.equal(FLIP_DOT_THEME_STORAGE_KEY, "always-on-frame.flip-dot-theme.v1");
+  assert.deepEqual(FLIP_DOT_THEMES.map((theme) => theme.id), ["amber", "ivory", "vermilion", "mint"]);
+  assert.equal(new Set(FLIP_DOT_THEMES.map((theme) => theme.label)).size, 4);
+  assert.equal(isFlipDotThemeId("mint"), true);
+  assert.equal(isFlipDotThemeId("ultraviolet"), false);
+  assert.equal(resolveFlipDotTheme("ultraviolet").id, "amber");
+  assert.equal(stepFlipDotTheme("mint", 1).id, "amber");
+  assert.equal(stepFlipDotTheme("amber", -1).id, "mint");
+
+  assert.match(clock, /readStoredJson\(FLIP_DOT_THEME_STORAGE_KEY\)/);
+  assert.match(clock, /storeJson\(FLIP_DOT_THEME_STORAGE_KEY, nextThemeId\)/);
+  assert.match(clock, /data-theme=\{themeId\}/);
+  assert.match(clock, /className="flip-clock-theme-selector"/);
+  assert.match(clock, /aria-label=\{`Flip-dot theme:/);
+  assert.match(themeSelectorSource, /ArrowRight/);
+  assert.match(themeSelectorSource, /ArrowLeft/);
+  for (const theme of FLIP_DOT_THEMES.slice(1)) {
+    assert.match(clockStyles, new RegExp(`\\.flip-clock-mode\\[data-theme="${theme.id}"\\]`));
+  }
+  assert.match(globalStyles, /\.flip-dot__face--on\s*\{[\s\S]*?var\(--flip-dot-on-hi/);
+  assert.match(globalStyles, /\.flip-dot__edge\s*\{[\s\S]*?var\(--flip-dot-edge/);
+  assert.match(clockStyles, /--flip-dot-on-hi:/);
+  assert.match(clockStyles, /--flip-shell-top:/);
 });
 
 test("builds static-client Open-Meteo URLs without credentials", async () => {

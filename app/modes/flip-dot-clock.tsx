@@ -9,6 +9,7 @@ import {
   useState,
   type CSSProperties,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 import {
   DEFAULT_WEATHER_LOCATION,
@@ -19,6 +20,7 @@ import {
   parseGeocodingResponse,
   weatherDescriptor,
   windCompass,
+  type WeatherIconName,
   type WeatherLocation,
   type WeatherSnapshot,
 } from "./weather-data";
@@ -33,6 +35,23 @@ import {
   type ComposedFlipDotField,
   type FlipDotFieldVariant,
 } from "./flip-dot-layout";
+import {
+  DEFAULT_FLIP_DOT_THEME,
+  FLIP_DOT_THEMES,
+  FLIP_DOT_THEME_STORAGE_KEY,
+  isFlipDotThemeId,
+  resolveFlipDotTheme,
+  stepFlipDotTheme,
+  type FlipDotThemeId,
+} from "./flip-dot-themes";
+import {
+  DEFAULT_FLIP_DOT_WEIGHT,
+  FLIP_DOT_WEIGHT_STORAGE_KEY,
+  isFlipDotDigitWeight,
+  resolveFlipDotWeight,
+  toggleFlipDotWeight,
+  type FlipDotDigitWeight,
+} from "./flip-dot-weights";
 
 const LOCATION_STORAGE_KEY = "always-on-frame.weather-location.v1";
 const WEATHER_CACHE_KEY = "always-on-frame.weather-cache.v1";
@@ -47,6 +66,7 @@ type DotFieldStyle = CSSProperties & {
   "--dot-gap": string;
 };
 type LoadState = "idle" | "loading" | "ready" | "refreshing" | "stale" | "error";
+type ThemeSelectorStyle = CSSProperties & { "--theme-angle": string };
 
 interface CachedWeather {
   fetchedAt: number;
@@ -197,6 +217,7 @@ function UnifiedFlipDotField({
       <div
         className="flip-dot-field"
         data-layout={field.variant}
+        data-digit-weight={field.digitWeight}
         data-measured={dotSize > 0 ? "true" : "false"}
         style={style}
         role="img"
@@ -212,6 +233,104 @@ function UnifiedFlipDotField({
         ))}
       </div>
     </div>
+  );
+}
+
+function FlatWeatherIcon({ icon }: { icon: WeatherIconName }) {
+  return (
+    <span className="flip-weather-icon" data-icon={icon} aria-hidden="true">
+      <span className="flip-weather-icon__sun" />
+      <span className="flip-weather-icon__moon" />
+      <span className="flip-weather-icon__cloud" />
+      <span className="flip-weather-icon__precipitation" />
+      <span className="flip-weather-icon__bolt" />
+      <span className="flip-weather-icon__unknown">?</span>
+    </span>
+  );
+}
+
+function ThemeSelector({
+  onSelect,
+  themeId,
+}: {
+  onSelect: (themeId: FlipDotThemeId) => void;
+  themeId: FlipDotThemeId;
+}) {
+  const theme = resolveFlipDotTheme(themeId);
+  const themeIndex = FLIP_DOT_THEMES.findIndex((candidate) => candidate.id === theme.id);
+  const style = { "--theme-angle": `${-54 + themeIndex * 36}deg` } as ThemeSelectorStyle;
+  const step = (direction: -1 | 1) => onSelect(stepFlipDotTheme(theme.id, direction).id);
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (["ArrowRight", "ArrowUp"].includes(event.key)) {
+      event.preventDefault();
+      step(1);
+    } else if (["ArrowLeft", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      step(-1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      onSelect(FLIP_DOT_THEMES[0].id);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      onSelect(FLIP_DOT_THEMES[FLIP_DOT_THEMES.length - 1].id);
+    }
+  };
+
+  return (
+    <button
+      className="flip-clock-theme-selector"
+      type="button"
+      style={style}
+      onClick={() => step(1)}
+      onKeyDown={handleKeyDown}
+      aria-label={`Flip-dot theme: ${theme.label}. Activate to choose the next theme.`}
+      title="Change flip-dot color and chassis theme"
+    >
+      <span className="flip-clock-theme-readout">
+        <small>DOT / CHASSIS</small>
+        <strong>{theme.pigment} · {theme.chassis}</strong>
+      </span>
+      <span className="flip-clock-theme-knob" aria-hidden="true"><i /></span>
+    </button>
+  );
+}
+
+function WeightSelector({
+  onSelect,
+  weight,
+}: {
+  onSelect: (weight: FlipDotDigitWeight) => void;
+  weight: FlipDotDigitWeight;
+}) {
+  const option = resolveFlipDotWeight(weight);
+  const choose = (nextWeight: FlipDotDigitWeight) => onSelect(nextWeight);
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (["ArrowRight", "ArrowUp", "End"].includes(event.key)) {
+      event.preventDefault();
+      choose("bold");
+    } else if (["ArrowLeft", "ArrowDown", "Home"].includes(event.key)) {
+      event.preventDefault();
+      choose("normal");
+    }
+  };
+
+  return (
+    <button
+      className="flip-clock-weight-selector"
+      data-weight={weight}
+      type="button"
+      onClick={() => choose(toggleFlipDotWeight(weight))}
+      onKeyDown={handleKeyDown}
+      aria-label="Bold flip-dot numerals"
+      aria-pressed={weight === "bold"}
+      title={`${option.label}; activate to toggle normal or bold numerals`}
+    >
+      <span className="flip-clock-weight-lamp" aria-hidden="true"><i /></span>
+      <span className="flip-clock-weight-readout">
+        <small>WEIGHT</small>
+        <strong>{option.shortLabel}</strong>
+      </span>
+    </button>
   );
 }
 
@@ -283,14 +402,13 @@ function storeJson(key: string, value: unknown) {
 
 function formatClock(date: Date | null, timezone: string) {
   if (!date) {
-    return { date: "--- -- ---", hoursMinutes: "--:--", seconds: "--" };
+    return { date: "--- -- ---", hoursMinutes: "--:--" };
   }
   try {
     const parts = new Intl.DateTimeFormat("en-GB", {
       timeZone: timezone,
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit",
       hourCycle: "h23",
       weekday: "short",
       day: "2-digit",
@@ -301,7 +419,6 @@ function formatClock(date: Date | null, timezone: string) {
     return {
       date: `${value("weekday")} ${value("day")} ${value("month")}`.toUpperCase(),
       hoursMinutes: `${value("hour")}:${value("minute")}`,
-      seconds: value("second"),
     };
   } catch {
     return formatClock(date, "UTC");
@@ -328,6 +445,8 @@ export function FlipDotClock({
   shuffleSeed: string;
 }) {
   const [location, setLocation] = useState<WeatherLocation>(DEFAULT_WEATHER_LOCATION);
+  const [themeId, setThemeId] = useState<FlipDotThemeId>(DEFAULT_FLIP_DOT_THEME);
+  const [digitWeight, setDigitWeight] = useState<FlipDotDigitWeight>(DEFAULT_FLIP_DOT_WEIGHT);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const weatherRef = useRef<WeatherSnapshot | null>(null);
@@ -401,6 +520,10 @@ export function FlipDotClock({
         : DEFAULT_WEATHER_LOCATION;
       setLocation(nextLocation);
       const storedWeather = readStoredJson(WEATHER_CACHE_KEY);
+      const storedTheme = readStoredJson(FLIP_DOT_THEME_STORAGE_KEY);
+      const storedDigitWeight = readStoredJson(FLIP_DOT_WEIGHT_STORAGE_KEY);
+      if (isFlipDotThemeId(storedTheme)) setThemeId(storedTheme);
+      if (isFlipDotDigitWeight(storedDigitWeight)) setDigitWeight(storedDigitWeight);
       if (isCachedWeather(storedWeather) && storedWeather.locationId === nextLocation.id) {
         weatherRef.current = storedWeather.snapshot;
         fetchedAtRef.current = storedWeather.fetchedAt;
@@ -556,6 +679,16 @@ export function FlipDotClock({
     setSearchState("idle");
   }, []);
 
+  const chooseTheme = useCallback((nextThemeId: FlipDotThemeId) => {
+    setThemeId(nextThemeId);
+    storeJson(FLIP_DOT_THEME_STORAGE_KEY, nextThemeId);
+  }, []);
+
+  const chooseDigitWeight = useCallback((nextWeight: FlipDotDigitWeight) => {
+    setDigitWeight(nextWeight);
+    storeJson(FLIP_DOT_WEIGHT_STORAGE_KEY, nextWeight);
+  }, []);
+
   const timezone = weather?.timezone || location.timezone;
   const clock = useMemo(() => formatClock(now, timezone), [now, timezone]);
   const descriptor = weather
@@ -573,12 +706,10 @@ export function FlipDotClock({
     variant: fieldVariant,
     hours,
     minutes,
-    seconds: clock.seconds,
     separatorOn: colonVisible,
-    temperature: temperatureText,
-    weatherIcon: descriptor.icon,
-  }), [clock.seconds, colonVisible, descriptor.icon, fieldVariant, hours, minutes, temperatureText]);
-  const fieldLabel = `${clock.hoursMinutes} and ${clock.seconds} seconds, ${clock.date}, ${descriptor.label}, ${temperatureText} Celsius in ${location.name}`;
+    digitWeight,
+  }), [colonVisible, digitWeight, fieldVariant, hours, minutes]);
+  const fieldLabel = `${clock.hoursMinutes}, ${clock.date}, local time in ${location.name}`;
   const syncLabel = loadState === "loading" || loadState === "refreshing"
     ? "SYNC"
     : stale
@@ -592,6 +723,8 @@ export function FlipDotClock({
       ref={modeRef}
       className="flip-clock-mode"
       data-layout={fieldVariant}
+      data-theme={themeId}
+      data-digit-weight={digitWeight}
       aria-label={`Flip-dot clock and weather for ${location.name}`}
     >
       <div className="flip-clock-cabinet">
@@ -607,6 +740,10 @@ export function FlipDotClock({
           <div className="flip-clock-frequency-band" aria-hidden="true">
             <span>02</span><span>08</span><span>16</span><span>32</span><span>64</span>
             <i />
+          </div>
+          <div className="flip-clock-appearance-controls" role="group" aria-label="Flip-dot appearance controls">
+            <ThemeSelector themeId={themeId} onSelect={chooseTheme} />
+            <WeightSelector weight={digitWeight} onSelect={chooseDigitWeight} />
           </div>
           <button
             ref={locationButtonRef}
@@ -636,39 +773,44 @@ export function FlipDotClock({
         </div>
 
         <section className="flip-clock-instruments" aria-label="Weather station instruments">
-          <div className="flip-clock-condition-dial">
-            <span className="flip-clock-condition-ticks" aria-hidden="true" />
-            <div className="flip-clock-condition-core">
-              <small>CURRENT</small>
-              <strong>{descriptor.label}</strong>
-              <span className={`flip-clock-sync flip-clock-sync--${loadState}`}>{syncLabel}</span>
-            </div>
-          </div>
-
-          <dl className="flip-clock-weather-stats">
-            <div>
-              <dt>FEELS</dt>
-              <dd>{weather ? `${rounded(weather.apparentTemperature)}${weather.units.temperature}` : "--"}</dd>
-            </div>
-            <div>
-              <dt>HIGH / LOW</dt>
-              <dd>{weather ? `${rounded(weather.temperatureMax)}° / ${rounded(weather.temperatureMin)}°` : "-- / --"}</dd>
-            </div>
-            <div>
-              <dt>HUMIDITY</dt>
-              <dd>{weather ? `${rounded(weather.relativeHumidity)}${weather.units.humidity}` : "--"}</dd>
-            </div>
-            <div>
-              <dt>WIND</dt>
-              <dd>{weather ? `${windCompass(weather.windDirection)} ${rounded(weather.windSpeed)} ${weather.units.windSpeed}` : "--"}</dd>
-            </div>
-          </dl>
-
           <div className="flip-clock-date-module">
             <small>LOCAL DATE / 24 HOUR</small>
             <time dateTime={now?.toISOString()}>{clock.date}</time>
             <span>{weather?.timezoneAbbreviation || timezone}</span>
           </div>
+
+          <section className="flip-clock-weather-panel" aria-label={`Current conditions: ${descriptor.label}`}>
+            <div className="flip-clock-weather-primary">
+              <FlatWeatherIcon icon={descriptor.icon} />
+              <div className="flip-clock-weather-reading">
+                <div>
+                  <small>CURRENT / {location.name}</small>
+                  <span className={`flip-clock-sync flip-clock-sync--${loadState}`}>{syncLabel}</span>
+                </div>
+                <strong>{temperatureText}</strong>
+                <span>{descriptor.label}</span>
+              </div>
+            </div>
+
+            <dl className="flip-clock-weather-stats">
+              <div>
+                <dt>FEELS</dt>
+                <dd>{weather ? `${rounded(weather.apparentTemperature)}${weather.units.temperature}` : "--"}</dd>
+              </div>
+              <div>
+                <dt>HIGH / LOW</dt>
+                <dd>{weather ? `${rounded(weather.temperatureMax)}° / ${rounded(weather.temperatureMin)}°` : "-- / --"}</dd>
+              </div>
+              <div>
+                <dt>HUMIDITY</dt>
+                <dd>{weather ? `${rounded(weather.relativeHumidity)}${weather.units.humidity}` : "--"}</dd>
+              </div>
+              <div>
+                <dt>WIND</dt>
+                <dd>{weather ? `${windCompass(weather.windDirection)} ${rounded(weather.windSpeed)} ${weather.units.windSpeed}` : "--"}</dd>
+              </div>
+            </dl>
+          </section>
         </section>
 
         <footer className="flip-clock-footer">

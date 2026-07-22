@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "builder": "scripts/build-og-always-on-frame.mjs",
+  "output": {
+    "file": "public/og-always-on-frame.png",
+    "width": 1200,
+    "height": 630
+  },
+  "outputSha256": "833596c9e8022982d25718d754a2b586589373b71b508f8282931df9d1416acb",
+  "baseTemplate": {
+    "file": "scripts/assets/og-always-on-frame-base.png",
+    "sha256": "0c6500854c49a3461cc7218f597fbad04aa4eb85024eb9cb306c913cadbc9995"
+  },
+  "flipDotPanel": {
+    "bay": {
+      "left": 87,
+      "top": 109,
+      "width": 307,
+      "height": 398
+    },
+    "grid": {
+      "columns": 22,
+      "rows": 28,
+      "pitch": 14,
+      "firstCenterX": 6.5,
+      "firstCenterY": 10,
+      "wellRadius": 5.25,
+      "rotorRadius": 4.6
+    },
+    "activeCount": 122,
+    "content": {
+      "time": "12:48",
+      "layout": "stacked-hours-minutes",
+      "seconds": false
+    },
+    "panelSha256": "3d8328ca31966d65ac8682586d4ea210e23071a12b44480034b0d3718872dc97"
+  },
+  "swikipediaPanel": {
+    "bay": {
+      "left": 464,
+      "top": 134,
+      "width": 270,
+      "height": 350
+    },
+    "qid": "Q2409245",
+    "file": "artworks/Q2409245.webp",
+    "title": "Portrait of a Young Girl",
+    "artist": "Petrus Christus",
+    "sourcePage": "https://en.wikipedia.org/wiki/Portrait_of_a_Young_Girl_(Christus)",
+    "sha256": "d00720921e6ed3e01b7b5052b71a96eaafe80d2b12218f20b204b8d354c4fbd8",
+    "fit": "cover",
+    "position": "centre",
+    "panelSha256": "e913a7fbeb3f993e05ee5c1ba18b261dbdfe37142a47a7ec3235417dce28bed8"
+  },
+  "posterjoPanel": {
+    "bay": {
+      "left": 804,
+      "top": 108,
+      "width": 310,
+      "height": 406
+    },
+    "file": "posterjo/posterjo-27163045-487769.webp",
+    "title": "The monolith - 03.03.26",
+    "sourcePage": "https://dribbble.com/shots/27163045-The-monolith-03-03-26",
+    "sha256": "b811ea713028021830a45b7d793bb1fc4bcc97ab0d24cfda2fdf0d3267fd048a",
+    "fit": "cover",
+    "position": "centre",
+    "panelSha256": "19243cacdd60a95d4d3c6baae53ed3d100fc179bd79267a77482452ea1c7dcb5"
+  }
+}

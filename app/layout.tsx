@@ -29,7 +29,7 @@ export const metadata: Metadata = {
         url: "https://joansterjo-celonis.github.io/Screensaver/og-always-on-frame.png",
         width: 1200,
         height: 630,
-        alt: "Always-On Frame — Flip Dot Weather, Swikipedia, and Posterjo displayed in one tactile frame",
+        alt: "Always-On Frame — an exact flip-dot matrix, Swikipedia, and the original Posterjo artwork The monolith in one tactile frame",
       },
     ],
   },

@@ -27,8 +27,10 @@
 </div>
 
 <a href="https://joansterjo-celonis.github.io/Screensaver/">
-  <img src="./public/og-always-on-frame.png" alt="Always-On Frame showing Flip Dot Weather, Swikipedia, and Posterjo in one tactile chassis">
+  <img src="./public/og-always-on-frame.png" alt="Always-On Frame showing an exact flip-dot matrix, Swikipedia, and the original Posterjo artwork The monolith in one tactile chassis">
 </a>
+
+<p align="center"><sub>The social preview’s Flip Dot bay is a purpose-built 22×28 matrix of identical rotors. Its art bays use the verified archive sources <strong>Portrait of a Young Girl</strong> by Petrus Christus and the original 4K Posterjo work <strong>The monolith — 03.03.26</strong>.</sub></p>
 
 <br>
 
@@ -47,7 +49,7 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 
 | Field | What fills the frame |
 | --- | --- |
-| `01` **Flip Dot Weather** | A mechanical flip-dot clock and live weather board for any searchable city or postcode. It shows local time, current conditions, feels-like temperature, daily high/low, humidity, and wind through locally rendered flip-dot glyphs and icons. |
+| `01` **Flip Dot Weather** | A single mechanical 24-hour hours-and-minutes field with a separate flat-icon weather instrument for any searchable city or postcode. Four saved pigment/chassis themes and NORMAL/BOLD numeral weights tune the hardware without changing its rotor geometry. |
 | `02` **Swikipedia** | A slow gallery spanning six centuries and 2,048 verified public-domain paintings. Each work arrives with its title, artist, date, and a concise Wikipedia description. |
 | `03` **Posterjo** | Joan Sterjo's local high-resolution artwork archive: 269 compositions presented edge to edge with restrained titles and source metadata. |
 
@@ -60,7 +62,7 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 | **Fit the room** | The frame adapts from portrait tablets to landscape TVs, respects safe areas, and keeps artwork composition-aware. |
 | **Disappear quietly** | Controls auto-hide, weather refreshes every 15 minutes while active, and gallery works keep their unhurried five-minute clock. Opening the index pauses the display beneath it. |
 | **Recover gracefully** | Each display mode has its own error boundary. If live weather cannot refresh, the last matching snapshot remains visible as `SAVED`; without one, the board stays usable as a local clock and marks conditions `OFFLINE`. |
-| **Remember the ritual** | The current mode, selected weather location, latest successful weather snapshot, and refreshed gallery copy are cached on-device; reopening the frame returns to where it belongs. |
+| **Remember the ritual** | The current mode, selected weather location, latest successful weather snapshot, flip-dot theme, numeral weight, and refreshed gallery copy are cached on-device; reopening the frame returns to where it belongs. |
 
 ## Controls
 
@@ -72,11 +74,13 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 | <kbd>←</kbd> · <kbd>→</kbd> | Step through either artwork gallery |
 | Tap/click the left or right half of a gallery | Show the previous or next artwork |
 | Flip Dot Weather city / `CHANGE` | Open the location picker; search a city or postcode with at least three characters |
+| Flip Dot Weather `DOT / CHASSIS` | Cycle Amber/Graphite, Ivory/Navy, Vermilion/Bakelite, or Mint/Gunmetal; the choice is saved on this device |
+| Flip Dot Weather `WEIGHT` | Toggle NORMAL/BOLD numeral strokes; the choice is saved on this device |
 | Location picker `QUICK SELECT` | Choose Berlin, London, New York, Tokyo, or Sydney without searching |
 
 ## Flip Dot Weather
 
-The first field is a browser-built mechanical board, not an image or video loop. Time, seconds, temperature, and the 9×9 weather symbol are stamped into one uninterrupted field of identically sized DOM/CSS rotors: 43×19 in landscape and 27×42 in tall portrait. The portrait composition stacks hours and minutes so a 9:16 frame remains legible and physical instead of shrinking a landscape dashboard. Only the external instrument rails use typography; the recessed dot cavity remains one clean tactile surface. The selected location’s IANA timezone drives the 24-hour clock, including seconds and local date.
+The first field is a browser-built mechanical board, not an image or video loop. Its 24-hour hours-and-minutes display is stamped into one uninterrupted field of identically sized DOM/CSS rotors: 43×19 in landscape and 27×42 in tall portrait. There is no seconds readout; the separator alone pulses once per second when motion is enabled. The saved NORMAL/BOLD control thickens the numeral strokes by activating more rotors, never by enlarging individual dots. The portrait composition stacks hours above minutes so a 9:16 frame remains legible and physical instead of shrinking a landscape dashboard. Temperature, the readable flat weather icon, and local date remain in the external instrument rails, leaving the recessed dot cavity as one clean tactile surface. The selected location’s IANA timezone drives the 24-hour clock and local date.
 
 Tap the city name to search by city or postcode. Searches return up to six matches from the Open-Meteo Geocoding API; the five built-in presets remain available as a quick start. A selection is saved in browser storage and is restored on the next visit. The app does not request the device’s physical location.
 
@@ -92,7 +96,7 @@ The interface type is bundled with the app through Fontsource, so it makes no ru
 
 ### Weather data, attribution, and API use
 
-- Live values come from the [Open-Meteo Forecast API](https://open-meteo.com/en/docs). Its “current” conditions are model-derived 15-minute data, not guaranteed readings from a nearby physical station. This interface rounds values for display and maps WMO weather codes to its own local labels and dot icons.
+- Live values come from the [Open-Meteo Forecast API](https://open-meteo.com/en/docs). Its “current” conditions are model-derived 15-minute data, not guaranteed readings from a nearby physical station. This interface rounds values for display and maps WMO weather codes to its own local labels and CSS-rendered flat instrument icons.
 - Location search uses the [Open-Meteo Geocoding API](https://open-meteo.com/en/docs/geocoding-api), whose location database comes from [GeoNames](https://www.geonames.org/). Both providers are credited beside the weather board.
 - Open-Meteo API data are offered under [CC BY 4.0](https://open-meteo.com/en/license), which requires attribution, a licence link, and disclosure of modifications. Open-Meteo does not guarantee data accuracy, completeness, availability, or uninterrupted service.
 - This static client calls Open-Meteo’s public HTTPS endpoints directly and contains no API key. Under the current [Open-Meteo terms](https://open-meteo.com/en/terms), the free endpoints are limited to non-commercial use and fewer than 10,000 calls per day, 5,000 per hour, and 600 per minute. Review those terms before deploying a fork.
@@ -133,6 +137,7 @@ New catalog additions must have a short edge of at least 2,160 pixels, contain a
 
 | Command | Purpose |
 | --- | --- |
+| `npm run og:build` | Rebuild the social preview from its exact flip-dot geometry and verified Posterjo source |
 | `npm run artworks:catalog` | Rebuild the curated 2,048-work catalog |
 | `npm run artworks:sync` | Regenerate the 300-work local WebP core |
 | `npm run artworks:verify` | Verify every committed local painting |
@@ -156,8 +161,10 @@ app/
 ├── frame-app.tsx          mode index, wake lock, persistence, controls
 ├── modes/
 │   ├── flip-dot-clock.tsx clock, location picker, refresh and saved fallback
-│   ├── flip-dot-glyphs.ts local clock alphabet and weather dot matrices
-│   ├── flip-dot-layout.ts one-field landscape/portrait matrix composition
+│   ├── flip-dot-glyphs.ts local 5×7 flip-dot alphabet
+│   ├── flip-dot-layout.ts normal/bold hour-minute matrix composition
+│   ├── flip-dot-themes.ts saved pigment and chassis themes
+│   ├── flip-dot-weights.ts saved normal/bold numeral preference
 │   ├── weather-data.ts    Open-Meteo requests, response parsing, WMO mapping
 │   ├── gallery.tsx        Swikipedia display
 │   └── posterjo.tsx       Posterjo display

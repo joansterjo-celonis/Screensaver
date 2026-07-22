@@ -6,6 +6,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "og:build": "node scripts/build-og-always-on-frame.mjs",
     "artworks:catalog": "node scripts/build-painting-collection.mjs",
     "artworks:sync": "node scripts/sync-local-artworks.mjs",
     "artworks:verify": "node scripts/sync-local-artworks.mjs --verify",

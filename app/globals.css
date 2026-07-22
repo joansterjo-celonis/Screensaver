@@ -1548,11 +1548,11 @@ a:focus-visible {
   display: block;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 45% 38%, #10110e 0 44%, #050604 70%, #000 100%);
+    radial-gradient(circle at 45% 38%, var(--flip-dot-well-hi, #10110e) 0 44%, var(--flip-dot-well-low, #050604) 70%, #000 100%);
   box-shadow:
     inset 0 calc(var(--dot-size) * 0.09) calc(var(--dot-size) * 0.12) #000,
     inset 0 calc(var(--dot-size) * -0.05) calc(var(--dot-size) * 0.1) rgba(255, 255, 255, 0.05),
-    0 0 0 max(0.5px, calc(var(--dot-size) * 0.045)) #24251f;
+    0 0 0 max(0.5px, calc(var(--dot-size) * 0.045)) var(--flip-dot-ring, #24251f);
 }
 
 .flip-dot__well::before,
@@ -1563,7 +1563,7 @@ a:focus-visible {
   width: calc(var(--dot-size) * 0.13);
   height: calc(var(--dot-size) * 0.22);
   content: "";
-  background: linear-gradient(180deg, #56574d, #11120f 54%, #030403);
+  background: linear-gradient(180deg, var(--flip-dot-hinge-hi, #56574d), var(--flip-dot-hinge-mid, #11120f) 54%, var(--flip-dot-hinge-low, #030403));
   border-radius: 2px;
   transform: translateY(-50%);
   box-shadow: 0 0 1px #000;
@@ -1614,7 +1614,7 @@ a:focus-visible {
 
 .flip-dot__face--off {
   background:
-    radial-gradient(circle at 34% 25%, #383931 0, #21221d 32%, #11120f 68%, #090a08 100%);
+    radial-gradient(circle at 34% 25%, var(--flip-dot-off-hi, #383931) 0, var(--flip-dot-off-mid, #21221d) 32%, var(--flip-dot-off-low, #11120f) 68%, var(--flip-dot-off-shadow, #090a08) 100%);
   box-shadow:
     inset calc(var(--dot-size) * 0.06) calc(var(--dot-size) * 0.07) calc(var(--dot-size) * 0.1) rgba(255, 255, 255, 0.08),
     inset calc(var(--dot-size) * -0.06) calc(var(--dot-size) * -0.07) calc(var(--dot-size) * 0.1) rgba(0, 0, 0, 0.7);
@@ -1623,7 +1623,7 @@ a:focus-visible {
 
 .flip-dot__face--on {
   background:
-    radial-gradient(circle at 33% 24%, #ffe378 0, #f2ca43 33%, #d29c1a 72%, #9d6c0c 100%);
+    radial-gradient(circle at 33% 24%, var(--flip-dot-on-hi, #ffe378) 0, var(--flip-dot-on-mid, #f2ca43) 33%, var(--flip-dot-on-low, #d29c1a) 72%, var(--flip-dot-on-shadow, #9d6c0c) 100%);
   box-shadow:
     inset calc(var(--dot-size) * 0.06) calc(var(--dot-size) * 0.07) calc(var(--dot-size) * 0.1) rgba(255, 255, 255, 0.28),
     inset calc(var(--dot-size) * -0.08) calc(var(--dot-size) * -0.08) calc(var(--dot-size) * 0.12) rgba(90, 54, 3, 0.46);
@@ -1635,23 +1635,9 @@ a:focus-visible {
   left: 3%;
   width: 94%;
   height: var(--dot-depth);
-  background: linear-gradient(180deg, #9b7117, #37270a);
+  background: linear-gradient(180deg, var(--flip-dot-edge, #9b7117), var(--flip-dot-edge-deep, #37270a));
   transform: translateY(-50%) rotateX(90deg);
   transform-origin: center;
-}
-
-.flip-clock-seconds-board {
-  align-self: flex-end;
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  color: var(--flip-muted);
-  background: #070806;
-  border: 1px solid #262720;
-  border-radius: 5px;
-  box-shadow: inset 0 3px 8px #000;
-  font-size: 7px;
-  letter-spacing: 0.14em;
 }
 
 .flip-clock-date-line {
@@ -2112,10 +2098,6 @@ a:focus-visible {
 
   .flip-clock-time-row {
     gap: 9px;
-  }
-
-  .flip-clock-seconds-board {
-    padding: 7px;
   }
 
   .flip-clock-date-line span:last-child {
