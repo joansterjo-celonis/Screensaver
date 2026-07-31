@@ -20,23 +20,35 @@ import {
   type ArtworkSeed,
   type GalleryArtwork,
 } from "../data/artworks";
-import { shuffledCycle } from "../shuffle";
 import {
   advanceGalleryDeckPosition,
+  buildGalleryCycleDeck,
+  changeGalleryDeckOrderMode,
   currentGalleryDeckQid,
   galleryDeckWindowQids,
-  orderGalleryDeckForViewport,
-  reorientGalleryDeckRemainder,
+  reorientGalleryDeckPosition,
   resolveGalleryViewportOrientation,
   retreatGalleryDeckPosition,
   type GalleryDeckPosition,
   type GalleryViewportOrientation,
 } from "./gallery-deck";
 import { resolveGalleryArtPlacement } from "./gallery-layout";
+import {
+  DEFAULT_GALLERY_PREFERENCES,
+  GALLERY_DURATION_OPTIONS,
+  GALLERY_ORDER_OPTIONS,
+  GALLERY_PREFERENCES_STORAGE_KEY,
+  galleryDurationOption,
+  galleryOrderOption,
+  parseGalleryPreferences,
+  resolveGalleryPreferences,
+  serializeGalleryPreferences,
+  type GalleryPreferences,
+  type GalleryOrderMode,
+} from "./gallery-preferences";
 
 const CACHE_KEY = "always-on-frame.gallery.v4";
 const CACHE_TTL = 24 * 60 * 60 * 1000;
-const CYCLE_TIME = 5 * 60 * 1000;
 const ARTWORK_QIDS = ARTWORK_SEEDS.map(({ qid }) => qid);
 const ARTWORK_SEEDS_BY_QID = new Map(ARTWORK_SEEDS.map((seed) => [seed.qid, seed]));
 
@@ -126,6 +138,28 @@ function writeCache(artworks: GalleryArtwork[]) {
   }
 }
 
+function readStoredGalleryPreferences() {
+  if (typeof window === "undefined") return DEFAULT_GALLERY_PREFERENCES;
+  try {
+    return parseGalleryPreferences(
+      window.localStorage.getItem(GALLERY_PREFERENCES_STORAGE_KEY),
+    );
+  } catch {
+    return DEFAULT_GALLERY_PREFERENCES;
+  }
+}
+
+function writeStoredGalleryPreferences(preferences: GalleryPreferences) {
+  try {
+    window.localStorage.setItem(
+      GALLERY_PREFERENCES_STORAGE_KEY,
+      serializeGalleryPreferences(preferences),
+    );
+  } catch {
+    // In-memory controls remain usable when browser storage is unavailable.
+  }
+}
+
 async function fetchGallery(
   seeds: readonly ArtworkSeed[],
   signal: AbortSignal,
@@ -186,10 +220,16 @@ export function GalleryMode({
   shuffleSeed: string;
 }) {
   const galleryRef = useRef<HTMLElement>(null);
+  const settingsTriggerRef = useRef<HTMLButtonElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
   const fallbackCollection = useMemo(
     () => ARTWORK_SEEDS.map(fallbackArtwork),
     [],
   );
+  const [preferences, setPreferences] = useState<GalleryPreferences>(
+    readStoredGalleryPreferences,
+  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [artworks, setArtworks] = useState<GalleryArtwork[]>(fallbackCollection);
   const [deckState, setDeckState] = useState<GalleryDeckState>({
     cycle: 0,
@@ -197,11 +237,14 @@ export function GalleryMode({
     deck: [],
     history: [],
     orientation: "landscape",
+    orderMode: preferences.orderMode,
     viewportMeasured: false,
     timerRevision: 0,
   });
-  const [nextAt, setNextAt] = useState(() => Date.now() + CYCLE_TIME);
-  const [remaining, setRemaining] = useState(CYCLE_TIME);
+  const [nextAt, setNextAt] = useState(
+    () => Date.now() + preferences.durationMs,
+  );
+  const [remaining, setRemaining] = useState(preferences.durationMs);
   const [failedRemoteRequests, setFailedRemoteRequests] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -211,6 +254,9 @@ export function GalleryMode({
   });
   const metadataRequestsRef = useRef(new Set<string>());
   const timerGenerationRef = useRef(0);
+  const displayPaused = paused || settingsOpen;
+  const selectedDuration = galleryDurationOption(preferences.durationMs);
+  const selectedOrder = galleryOrderOption(preferences.orderMode);
 
   useEffect(() => {
     let cacheHydration = 0;
@@ -224,17 +270,21 @@ export function GalleryMode({
   }, []);
 
   const buildArtworkDeck = useCallback(
-    (cycle: number, viewportOrientation: GalleryViewportOrientation) =>
-      orderGalleryDeckForViewport(
-        shuffledCycle(
-          ARTWORK_QIDS,
-          `${shuffleSeed}:gallery`,
-          cycle,
-          (qid) => qid,
-        ),
-        ARTWORK_SEEDS,
-        viewportOrientation,
-      ),
+    (
+      cycle: number,
+      viewportOrientation: GalleryViewportOrientation,
+      orderMode: GalleryOrderMode,
+      previousQid?: string,
+    ) =>
+      buildGalleryCycleDeck({
+        qids: ARTWORK_QIDS,
+        artworks: ARTWORK_SEEDS,
+        seed: `${shuffleSeed}:gallery`,
+        cycle,
+        orientation: viewportOrientation,
+        orderMode,
+        previousQid,
+      }),
     [shuffleSeed],
   );
 
@@ -250,7 +300,13 @@ export function GalleryMode({
         if (!state.viewportMeasured) {
           return {
             ...state,
-            deck: [...buildArtworkDeck(state.cycle, viewportOrientation)],
+            deck: [
+              ...buildArtworkDeck(
+                state.cycle,
+                viewportOrientation,
+                state.orderMode,
+              ),
+            ],
             index: 0,
             orientation: viewportOrientation,
             viewportMeasured: true,
@@ -259,10 +315,11 @@ export function GalleryMode({
         if (viewportOrientation === state.orientation) return state;
 
         const previousQid = currentGalleryDeckQid(state);
-        const nextPosition = reorientGalleryDeckRemainder(
+        const nextPosition = reorientGalleryDeckPosition(
           state,
           viewportOrientation,
           ARTWORK_SEEDS,
+          buildArtworkDeck,
         );
         const artworkChanged =
           currentGalleryDeckQid(nextPosition) !== previousQid;
@@ -310,23 +367,27 @@ export function GalleryMode({
     setDeckState((state) => {
       if (!state.viewportMeasured) return state;
       const nextPosition = advanceGalleryDeckPosition(state, buildArtworkDeck);
-      return { ...state, ...nextPosition };
+      return {
+        ...state,
+        ...nextPosition,
+        timerRevision: state.timerRevision + 1,
+      };
     });
   }, [buildArtworkDeck]);
 
   useLayoutEffect(() => {
-    if (paused || !deckState.viewportMeasured) return;
+    if (displayPaused || !deckState.viewportMeasured) return;
     const generation = timerGenerationRef.current + 1;
     timerGenerationRef.current = generation;
     let timeout = 0;
     const schedule = () => {
-      const target = Date.now() + CYCLE_TIME;
+      const target = Date.now() + preferences.durationMs;
       setNextAt(target);
-      setRemaining(CYCLE_TIME);
+      setRemaining(preferences.durationMs);
       timeout = window.setTimeout(() => {
         if (timerGenerationRef.current !== generation) return;
         advance();
-      }, CYCLE_TIME);
+      }, preferences.durationMs);
     };
     schedule();
     return () => {
@@ -337,15 +398,14 @@ export function GalleryMode({
     };
   }, [
     advance,
-    deckState.cycle,
-    deckState.index,
     deckState.timerRevision,
     deckState.viewportMeasured,
-    paused,
+    displayPaused,
+    preferences.durationMs,
   ]);
 
   useEffect(() => {
-    if (paused) return;
+    if (displayPaused) return;
     let timeout = 0;
     const tick = () => {
       setRemaining(nextAt - Date.now());
@@ -353,7 +413,7 @@ export function GalleryMode({
     };
     tick();
     return () => window.clearTimeout(timeout);
-  }, [nextAt, paused]);
+  }, [displayPaused, nextAt]);
 
   const activeIndex = orderedArtworks.length
     ? deckState.index % orderedArtworks.length
@@ -377,7 +437,7 @@ export function GalleryMode({
   const metadataWindowKey = metadataWindowQids.join("|");
 
   useEffect(() => {
-    if (paused || !deckState.viewportMeasured) return;
+    if (displayPaused || !deckState.viewportMeasured) return;
     const metadataRequests = metadataRequestsRef.current;
     const qids = metadataWindowKey.split("|").filter(
       (qid) => qid && !metadataRequests.has(qid),
@@ -409,7 +469,7 @@ export function GalleryMode({
         for (const qid of qids) metadataRequests.delete(qid);
       }
     };
-  }, [deckState.viewportMeasured, metadataWindowKey, paused]);
+  }, [deckState.viewportMeasured, displayPaused, metadataWindowKey]);
 
   const recoveryUrl = current.localFallback
     ? localArtworkUrl(current.qid)
@@ -461,7 +521,7 @@ export function GalleryMode({
   }, [current.height, current.width]);
 
   useEffect(() => {
-    if (paused || !deckState.viewportMeasured) return;
+    if (displayPaused || !deckState.viewportMeasured) return;
     const adjacentQids = new Set([
       deckWindow.previousQid,
       deckWindow.nextQid,
@@ -486,8 +546,97 @@ export function GalleryMode({
     deckState.viewportMeasured,
     deckWindow.nextQid,
     deckWindow.previousQid,
-    paused,
+    displayPaused,
   ]);
+
+  const updatePreferences = useCallback(
+    (
+      update: Partial<
+        Pick<GalleryPreferences, "durationMs" | "orderMode">
+      >,
+    ) => {
+      const nextOrderMode = update.orderMode;
+      if (nextOrderMode) {
+        setDeckState((state) => {
+          if (state.orderMode === nextOrderMode) return state;
+          const previousQid = currentGalleryDeckQid(state);
+          const nextPosition = changeGalleryDeckOrderMode(
+            state,
+            nextOrderMode,
+            buildArtworkDeck,
+          );
+          const artworkChanged =
+            currentGalleryDeckQid(nextPosition) !== previousQid;
+          return {
+            ...state,
+            ...nextPosition,
+            timerRevision: artworkChanged
+              ? state.timerRevision + 1
+              : state.timerRevision,
+          };
+        });
+      }
+      setPreferences((current) => {
+        const next = resolveGalleryPreferences({ ...current, ...update });
+        writeStoredGalleryPreferences(next);
+        return next;
+      });
+    },
+    [buildArtworkDeck],
+  );
+
+  const closeSettings = useCallback((restoreFocus = true) => {
+    setSettingsOpen(false);
+    if (restoreFocus) {
+      window.setTimeout(() => settingsTriggerRef.current?.focus(), 0);
+    }
+  }, []);
+
+  const openSettings = useCallback(() => {
+    if (paused) return;
+    setSettingsOpen(true);
+  }, [paused]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const focusTimer = window.setTimeout(() => {
+      const selected = settingsPanelRef.current?.querySelector<HTMLInputElement>(
+        "input:checked",
+      );
+      (selected ?? settingsPanelRef.current)?.focus();
+    }, 0);
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeSettings();
+    };
+    window.addEventListener("keydown", handleEscape, true);
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("keydown", handleEscape, true);
+    };
+  }, [closeSettings, settingsOpen]);
+
+  useEffect(() => {
+    if (paused || settingsOpen) return;
+    const handleSettingsShortcut = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.key.toLocaleLowerCase() !== "s" ||
+        (event.target instanceof Element &&
+          event.target.closest(
+            "a, button, input, select, textarea, [contenteditable]:not([contenteditable='false']), [role='dialog']",
+          ))
+      ) {
+        return;
+      }
+      event.preventDefault();
+      openSettings();
+    };
+    window.addEventListener("keydown", handleSettingsShortcut);
+    return () => window.removeEventListener("keydown", handleSettingsShortcut);
+  }, [openSettings, paused, settingsOpen]);
 
   const navigateManually = useCallback((direction: -1 | 1) => {
     setDeckState((state) => {
@@ -509,10 +658,17 @@ export function GalleryMode({
       className={`gallery-mode${isVerticalArtwork ? " is-vertical-art" : ""}`}
       aria-labelledby="gallery-title"
       aria-describedby="gallery-navigation-help"
-      aria-keyshortcuts="ArrowLeft ArrowRight"
+      aria-keyshortcuts="ArrowLeft ArrowRight S"
       tabIndex={0}
       onClick={(event) => {
-        if (event.target instanceof Element && event.target.closest("a, button")) return;
+        if (
+          event.target instanceof Element &&
+          event.target.closest(
+            "a, button, input, select, textarea, label, [role='dialog'], [data-gallery-control]",
+          )
+        ) {
+          return;
+        }
         const bounds = event.currentTarget.getBoundingClientRect();
         const direction = event.clientX < bounds.left + bounds.width / 2 ? -1 : 1;
         navigateManually(direction);
@@ -550,6 +706,136 @@ export function GalleryMode({
           </div>
         </div>
       </header>
+
+      {settingsOpen && (
+        <>
+          <button
+            className="gallery-settings-backdrop"
+            type="button"
+            tabIndex={-1}
+            aria-label="Close Swikipedia display settings"
+            data-gallery-control
+            onClick={() => closeSettings()}
+          />
+          <div
+            id="gallery-settings-panel"
+            ref={settingsPanelRef}
+            className="gallery-settings-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gallery-settings-title"
+            aria-describedby="gallery-settings-description"
+            data-gallery-control
+            tabIndex={-1}
+            onKeyDown={(event) => {
+              if (event.key !== "Tab") return;
+              const focusable = [
+                ...event.currentTarget.querySelectorAll<HTMLElement>(
+                  "button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])",
+                ),
+              ];
+              if (!focusable.length) return;
+              const first = focusable[0];
+              const last = focusable[focusable.length - 1];
+              if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+              } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+              }
+            }}
+          >
+            <header className="gallery-settings-header">
+              <div>
+                <p>SWIKIPEDIA / DISPLAY</p>
+                <h2 id="gallery-settings-title">Gallery settings</h2>
+              </div>
+              <button type="button" onClick={() => closeSettings()}>
+                DONE
+              </button>
+            </header>
+            <p
+              id="gallery-settings-description"
+              className="gallery-settings-description"
+            >
+              Choose how long each painting stays and how the collection is
+              ordered. Changes are saved on this display.
+            </p>
+
+            <fieldset className="gallery-setting-group">
+              <legend>TIME PER PAINTING</legend>
+              <div className="gallery-duration-options">
+                {GALLERY_DURATION_OPTIONS.map((option) => (
+                  <label
+                    className={
+                      preferences.durationMs === option.durationMs
+                        ? "gallery-duration-option is-selected"
+                        : "gallery-duration-option"
+                    }
+                    key={option.durationMs}
+                  >
+                    <input
+                      type="radio"
+                      name="gallery-duration"
+                      value={option.durationMs}
+                      checked={preferences.durationMs === option.durationMs}
+                      onChange={() =>
+                        updatePreferences({ durationMs: option.durationMs })
+                      }
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset className="gallery-setting-group">
+              <legend>ORDER</legend>
+              <div className="gallery-order-options">
+                {GALLERY_ORDER_OPTIONS.map((option) => (
+                  <label
+                    className={
+                      preferences.orderMode === option.value
+                        ? "gallery-order-option is-selected"
+                        : "gallery-order-option"
+                    }
+                    key={option.value}
+                  >
+                    <input
+                      type="radio"
+                      name="gallery-order"
+                      value={option.value}
+                      checked={preferences.orderMode === option.value}
+                      onChange={() =>
+                        updatePreferences({ orderMode: option.value })
+                      }
+                    />
+                    <span>
+                      <strong>{option.label}</strong>
+                      <small>{option.description}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <footer className="gallery-settings-footer">
+              <span aria-live="polite">
+                {selectedDuration.label} / {selectedOrder.label}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  updatePreferences(DEFAULT_GALLERY_PREFERENCES)
+                }
+              >
+                RESET DEFAULTS
+              </button>
+            </footer>
+          </div>
+        </>
+      )}
 
       <figure className="gallery-plate">
         <div className="gallery-image-stage">
@@ -634,7 +920,22 @@ export function GalleryMode({
                 {current.license}
               </a>
             </span>
-            <span>Next plate / {formatCountdown(remaining)}</span>
+            <div className="gallery-meta-controls">
+              <span>Next plate / {formatCountdown(remaining)}</span>
+              <button
+                ref={settingsTriggerRef}
+                className="gallery-settings-trigger"
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={settingsOpen}
+                aria-controls="gallery-settings-panel"
+                aria-keyshortcuts="S"
+                aria-label={`Display settings: ${selectedDuration.label}, ${selectedOrder.label}`}
+                onClick={openSettings}
+              >
+                {selectedDuration.shortLabel} / {selectedOrder.shortLabel}
+              </button>
+            </div>
           </div>
         </figcaption>
       </figure>
@@ -643,7 +944,9 @@ export function GalleryMode({
         Now showing {current.title} by {current.artist}
       </span>
       <span id="gallery-navigation-help" className="sr-only">
-        Click or tap the left half for the previous painting and the right half for the next painting. You can also use the left and right arrow keys.
+        Click or tap the left half for the previous painting and the right half
+        for the next painting. You can also use the left and right arrow keys,
+        or press S to change display settings.
       </span>
     </section>
   );

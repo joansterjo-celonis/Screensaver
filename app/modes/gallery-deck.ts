@@ -1,3 +1,6 @@
+import { shuffledCycle, type ShuffleSeed } from "../shuffle.ts";
+import type { GalleryOrderMode } from "./gallery-preferences.ts";
+
 export type GalleryViewportOrientation = "portrait" | "landscape";
 
 export type GalleryDeckArtwork = Readonly<{
@@ -17,18 +20,25 @@ export type GalleryDeckPosition = Readonly<{
   deck: readonly string[];
   history: readonly GalleryDeckSnapshot[];
   orientation: GalleryViewportOrientation;
+  orderMode: GalleryOrderMode;
 }>;
 
 export type GalleryDeckFactory = (
   cycle: number,
   orientation: GalleryViewportOrientation,
+  orderMode: GalleryOrderMode,
+  previousQid?: string,
 ) => readonly string[];
 
 const MAX_GALLERY_DECK_HISTORY = 8;
 
-function artworkOrientation(
+export type GalleryArtworkOrientation =
+  | GalleryViewportOrientation
+  | "neutral";
+
+export function resolveGalleryArtworkOrientation(
   artwork: GalleryDeckArtwork | undefined,
-): GalleryViewportOrientation | "neutral" {
+): GalleryArtworkOrientation {
   if (
     !artwork ||
     !Number.isFinite(artwork.width) ||
@@ -42,6 +52,17 @@ function artworkOrientation(
   if (artwork.height > artwork.width) return "portrait";
   if (artwork.width > artwork.height) return "landscape";
   return "neutral";
+}
+
+export function isGalleryArtworkCompatible(
+  artwork: GalleryDeckArtwork | undefined,
+  orientation: GalleryViewportOrientation,
+) {
+  const candidateOrientation = resolveGalleryArtworkOrientation(artwork);
+  return (
+    candidateOrientation === orientation ||
+    candidateOrientation === "neutral"
+  );
 }
 
 /**
@@ -60,7 +81,9 @@ export function orderGalleryDeckForViewport(
   const opposite: string[] = [];
 
   for (const qid of randomizedQids) {
-    const candidateOrientation = artworkOrientation(artworkByQid.get(qid));
+    const candidateOrientation = resolveGalleryArtworkOrientation(
+      artworkByQid.get(qid),
+    );
     const bucket = candidateOrientation === orientation
       ? preferred
       : candidateOrientation === "neutral"
@@ -70,6 +93,67 @@ export function orderGalleryDeckForViewport(
   }
 
   return [...preferred, ...neutral, ...opposite];
+}
+
+export function avoidGalleryDeckBoundaryRepeat(
+  deck: readonly string[],
+  previousQid: string | undefined,
+) {
+  const next = [...deck];
+  if (!previousQid || next.length < 2 || next[0] !== previousQid) return next;
+  const swapIndex = next.findIndex(
+    (qid, index) => index > 0 && qid !== previousQid,
+  );
+  if (swapIndex > 0) {
+    [next[0], next[swapIndex]] = [next[swapIndex], next[0]];
+  }
+  return next;
+}
+
+export function buildGalleryCycleDeck({
+  qids,
+  artworks,
+  seed,
+  cycle,
+  orientation,
+  orderMode,
+  previousQid,
+}: {
+  qids: readonly string[];
+  artworks: readonly GalleryDeckArtwork[];
+  seed: ShuffleSeed;
+  cycle: number;
+  orientation: GalleryViewportOrientation;
+  orderMode: GalleryOrderMode;
+  previousQid?: string;
+}) {
+  const uniqueQids = [...new Set(qids)];
+  const artworkByQid = new Map(
+    artworks.map((artwork) => [artwork.qid, artwork]),
+  );
+  let candidates = uniqueQids;
+  let effectiveMode = orderMode;
+
+  if (orderMode === "compatible-only") {
+    candidates = uniqueQids.filter((qid) =>
+      isGalleryArtworkCompatible(artworkByQid.get(qid), orientation),
+    );
+    if (!candidates.length && uniqueQids.length) {
+      candidates = uniqueQids;
+      effectiveMode = "aspect-priority";
+    }
+  }
+
+  const randomized = shuffledCycle(
+    candidates,
+    seed,
+    cycle,
+    (qid) => qid,
+  );
+  const ordered = effectiveMode === "aspect-priority"
+    ? orderGalleryDeckForViewport(randomized, artworks, orientation)
+    : randomized;
+  return avoidGalleryDeckBoundaryRepeat(ordered, previousQid);
 }
 
 function safeDeckIndex(position: Pick<GalleryDeckPosition, "deck" | "index">) {
@@ -103,7 +187,7 @@ export function reorientGalleryDeckRemainder(
   const deck = [...visited, ...remaining];
 
   const artworkByQid = new Map(artworks.map((artwork) => [artwork.qid, artwork]));
-  const currentOrientation = artworkOrientation(
+  const currentOrientation = resolveGalleryArtworkOrientation(
     artworkByQid.get(position.deck[index]),
   );
   const shouldConsumeCurrent =
@@ -117,6 +201,62 @@ export function reorientGalleryDeckRemainder(
   };
 }
 
+export function reorientGalleryDeckPosition(
+  position: GalleryDeckPosition,
+  orientation: GalleryViewportOrientation,
+  artworks: readonly GalleryDeckArtwork[],
+  createDeck: GalleryDeckFactory,
+): GalleryDeckPosition {
+  if (orientation === position.orientation) return position;
+  if (position.orderMode === "random") {
+    return { ...position, orientation };
+  }
+  if (position.orderMode === "aspect-priority") {
+    return reorientGalleryDeckRemainder(position, orientation, artworks);
+  }
+
+  const deck = [
+    ...createDeck(0, orientation, position.orderMode),
+  ];
+  const currentQid = currentGalleryDeckQid(position);
+  const currentIndex = currentQid ? deck.indexOf(currentQid) : -1;
+  const anchoredDeck = currentIndex >= 0
+    ? [currentQid, ...deck.filter((qid) => qid !== currentQid)]
+    : deck;
+
+  return {
+    ...position,
+    cycle: 0,
+    deck: anchoredDeck,
+    index: 0,
+    history: [],
+    orientation,
+  };
+}
+
+export function changeGalleryDeckOrderMode(
+  position: GalleryDeckPosition,
+  orderMode: GalleryOrderMode,
+  createDeck: GalleryDeckFactory,
+): GalleryDeckPosition {
+  if (orderMode === position.orderMode) return position;
+  const deck = [...createDeck(0, position.orientation, orderMode)];
+  const currentQid = currentGalleryDeckQid(position);
+  const currentIndex = currentQid ? deck.indexOf(currentQid) : -1;
+  const anchoredDeck = currentIndex >= 0
+    ? [currentQid, ...deck.filter((qid) => qid !== currentQid)]
+    : deck;
+
+  return {
+    ...position,
+    cycle: 0,
+    deck: anchoredDeck,
+    index: 0,
+    history: [],
+    orderMode,
+  };
+}
+
 export function advanceGalleryDeckPosition(
   position: GalleryDeckPosition,
   createDeck: GalleryDeckFactory,
@@ -124,7 +264,13 @@ export function advanceGalleryDeckPosition(
   if (!position.deck.length) {
     return {
       ...position,
-      deck: [...createDeck(position.cycle, position.orientation)],
+      deck: [
+        ...createDeck(
+          position.cycle,
+          position.orientation,
+          position.orderMode,
+        ),
+      ],
       index: 0,
     };
   }
@@ -135,7 +281,14 @@ export function advanceGalleryDeckPosition(
   }
 
   const cycle = position.cycle + 1;
-  const deck = [...createDeck(cycle, position.orientation)];
+  const deck = [
+    ...createDeck(
+      cycle,
+      position.orientation,
+      position.orderMode,
+      position.deck[index],
+    ),
+  ];
   if (!deck.length) return { ...position, index };
 
   return {
@@ -172,7 +325,9 @@ export function retreatGalleryDeckPosition(
 
   if (position.cycle > 0) {
     const cycle = position.cycle - 1;
-    const deck = [...createDeck(cycle, position.orientation)];
+    const deck = [
+      ...createDeck(cycle, position.orientation, position.orderMode),
+    ];
     if (deck.length) return { ...position, cycle, deck, index: deck.length - 1 };
   }
 
@@ -196,6 +351,7 @@ export function galleryDeckWindowQids(
       previousQid = createDeck(
         position.cycle - 1,
         position.orientation,
+        position.orderMode,
       ).at(-1);
     }
     previousQid ??= position.deck.at(-1);
@@ -203,7 +359,12 @@ export function galleryDeckWindowQids(
 
   let nextQid: string | undefined = position.deck[index + 1];
   if (!nextQid) {
-    nextQid = createDeck(position.cycle + 1, position.orientation)[0];
+    nextQid = createDeck(
+      position.cycle + 1,
+      position.orientation,
+      position.orderMode,
+      position.deck[index],
+    )[0];
   }
 
   return {

@@ -72,7 +72,7 @@ const MODES: ModeDefinition[] = [
       label: "PAINTINGS",
       kicker: "SIX CENTURIES / ONE SLOW GALLERY",
       status: "PUBLIC DOMAIN",
-      tags: ["1400—2026", "5 MIN EACH", "VERIFIED"],
+      tags: ["1400—2026", "30 SEC—30 MIN", "3 ORDERS"],
     },
   },
   {

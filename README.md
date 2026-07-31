@@ -34,14 +34,14 @@
 
 <br>
 
-Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge display programs wrapped in an interface that gets out of the way. Pick a field, enter fullscreen, and leave it running. The chosen mode stays with the device, controls fade when idle, and each new session reshuffles the artwork galleries.
+Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge display programs wrapped in an interface that gets out of the way. Pick a field, enter fullscreen, and leave it running. The chosen mode stays with the device, controls fade when idle, and each new session builds a fresh artwork sequence.
 
 <table>
   <tr>
     <td align="center" width="25%"><strong>15 MIN</strong><br><sub>WEATHER REFRESH</sub></td>
     <td align="center" width="25%"><strong>2,048</strong><br><sub>PUBLIC-DOMAIN PAINTINGS</sub></td>
     <td align="center" width="25%"><strong>269</strong><br><sub>POSTERJO ARTWORKS</sub></td>
-    <td align="center" width="25%"><strong>5 MIN</strong><br><sub>GALLERY CADENCE</sub></td>
+    <td align="center" width="25%"><strong>30 SEC–30 MIN</strong><br><sub>SWIKIPEDIA CADENCE</sub></td>
   </tr>
 </table>
 
@@ -50,8 +50,8 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 | Field | What fills the frame |
 | --- | --- |
 | `01` **Flip Dot Weather** | A single mechanical 24-hour hours-and-minutes field with a separate duotone weather instrument for any searchable city or postcode. Four saved pigment/chassis themes and NORMAL/BOLD numeral weights tune the hardware without changing its rotor geometry. |
-| `02` **Swikipedia** | A slow gallery spanning six centuries and 2,048 verified public-domain paintings. Each work arrives with its title, artist, date, and a concise Wikipedia description. |
-| `03` **Posterjo** | Joan Sterjo's local high-resolution artwork archive: 269 compositions presented edge to edge with restrained titles and source metadata. |
+| `02` **Swikipedia** | A configurable gallery spanning six centuries and 2,048 verified public-domain paintings. Each work arrives with its title, artist, date, and a concise Wikipedia description. Choose a 30-second to 30-minute cadence and one of three screen-aware order modes. |
+| `03` **Posterjo** | Joan Sterjo's local high-resolution artwork archive: 269 compositions presented edge to edge for five minutes each, with restrained titles and source metadata. |
 
 ## Built for the long gaze
 
@@ -60,9 +60,9 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 | **Stay awake** | When supported, the frame requests Screen Wake Lock after interaction; fullscreen stays one key away. |
 | **Keep going** | A service worker progressively caches artwork and preserves successful downloads. Swikipedia ships its 300-work core as local WebPs; Posterjo warming begins only when selected. Flip Dot Weather keeps its selected location and latest successful matching forecast on-device. |
 | **Fit the room** | The frame adapts from portrait tablets to landscape TVs, respects safe areas, and keeps artwork composition-aware. |
-| **Disappear quietly** | Controls auto-hide, weather refreshes every 15 minutes while active, and gallery works keep their unhurried five-minute clock. Opening the index pauses the display beneath it. |
+| **Disappear quietly** | Controls auto-hide, weather refreshes every 15 minutes while active, Swikipedia follows its saved 30-second to 30-minute cadence, and Posterjo keeps its unhurried five-minute clock. Opening the index pauses the display beneath it. |
 | **Recover gracefully** | Each display mode has its own error boundary. If live weather cannot refresh, the last matching snapshot remains visible as `SAVED`; without one, the board stays usable as a local clock and marks conditions `OFFLINE`. |
-| **Remember the ritual** | The current mode, selected weather location, latest successful weather snapshot, flip-dot theme, numeral weight, and refreshed gallery copy are cached on-device; reopening the frame returns to where it belongs. |
+| **Remember the ritual** | The current mode, Swikipedia timing and order, selected weather location, latest successful weather snapshot, flip-dot theme, numeral weight, and refreshed gallery copy are cached on-device; reopening the frame returns to where it belongs. |
 
 ## Controls
 
@@ -73,10 +73,23 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 | <kbd>F</kbd> | Enter fullscreen |
 | <kbd>←</kbd> · <kbd>→</kbd> | Step through either artwork gallery |
 | Tap/click the left or right half of a gallery | Show the previous or next artwork |
+| <kbd>S</kbd> or the Swikipedia timing/order button | Open Swikipedia display settings |
 | Flip Dot Weather city / `CHANGE` | Open the location picker; search a city or postcode with at least three characters |
 | Flip Dot Weather `DOT / CHASSIS` | Cycle Amber/Graphite, Ivory/Navy, Vermilion/Bakelite, or Mint/Gunmetal; the choice is saved on this device |
 | Flip Dot Weather `WEIGHT` | Toggle NORMAL/BOLD numeral strokes; the choice is saved on this device |
 | Location picker `QUICK SELECT` | Choose Berlin, London, New York, Tokyo, or Sydney without searching |
+
+## Swikipedia
+
+Swikipedia starts at **5 minutes per painting** and **Screen fit first**. Open its settings with <kbd>S</kbd> or the timing/order button beside the countdown. Timing presets run from **30 seconds to 30 minutes**: 30 seconds, 1 minute, 2 minutes, 5 minutes, 10 minutes, or 30 minutes.
+
+The three order modes control how each shuffled cycle responds to the current screen:
+
+- **Screen fit first** (default) includes the complete collection but presents paintings matching the screen’s portrait or landscape orientation first.
+- **Pure shuffle** mixes the complete collection without grouping paintings by screen orientation.
+- **Screen fit only** skips portrait or landscape paintings that do not suit the current screen.
+
+Timing and order changes take effect immediately and are saved on this device. Posterjo remains separate and continues to show every artwork for a fixed five minutes.
 
 ## Flip Dot Weather
 

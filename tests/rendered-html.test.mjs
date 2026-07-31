@@ -40,7 +40,18 @@ test("server-renders the always-on frame shell", async () => {
 });
 
 test("keeps the product modes explicit and the starter removed", async () => {
-  const [page, layout, frame, clock, glyphs, weatherData, gallery, posterjo, packageJson] = await Promise.all([
+  const [
+    page,
+    layout,
+    frame,
+    clock,
+    glyphs,
+    weatherData,
+    gallery,
+    galleryPreferences,
+    posterjo,
+    packageJson,
+  ] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/frame-app.tsx", import.meta.url), "utf8"),
@@ -48,6 +59,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
     readFile(new URL("../app/modes/flip-dot-glyphs.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/weather-data.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/gallery.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/modes/gallery-preferences.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/modes/posterjo.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
@@ -92,8 +104,16 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(weatherData, /export function buildForecastUrl/);
   assert.match(weatherData, /export function parseForecastResponse/);
   assert.equal(JSON.parse(packageJson).dependencies.geist, "^1.7.2");
-  assert.match(gallery, /5 \* 60 \* 1000/);
+  assert.match(gallery, /preferences\.durationMs/);
   assert.match(gallery, /clearTimeout/);
+  assert.match(gallery, /role="dialog"/);
+  assert.match(gallery, /aria-keyshortcuts="S"/);
+  assert.match(gallery, /GALLERY_PREFERENCES_STORAGE_KEY/);
+  assert.match(galleryPreferences, /durationMs: 5 \* 60_000/);
+  assert.match(galleryPreferences, /durationMs: 30_000/);
+  assert.match(galleryPreferences, /"random"/);
+  assert.match(galleryPreferences, /"aspect-priority"/);
+  assert.match(galleryPreferences, /"compatible-only"/);
   assert.match(posterjo, /5 \* 60 \* 1000/);
   assert.match(posterjo, /shuffledCycle\(/);
   assert.match(posterjo, /navigateManually/);
@@ -687,6 +707,7 @@ test("prioritizes randomized Swikipedia decks for the viewport orientation", asy
     deck: createDeck(0, "portrait"),
     history: [],
     orientation: "portrait",
+    orderMode: "aspect-priority",
   };
   const shown = [currentGalleryDeckQid(position)];
   for (let step = 0; step < qids.length * 4 && shown.length < qids.length; step += 1) {
@@ -722,6 +743,7 @@ test("prioritizes randomized Swikipedia decks for the viewport orientation", asy
     deck: boundaryFactory(0, "portrait"),
     history: [],
     orientation: "portrait",
+    orderMode: "aspect-priority",
   };
   assert.equal(
     galleryDeckWindowQids(cycleZero, boundaryFactory).nextQid,
@@ -747,6 +769,482 @@ test("prioritizes randomized Swikipedia decks for the viewport orientation", asy
     "portrait-0-tail",
     "previous at a cycle boundary must return to the work that was actually shown last",
   );
+});
+
+test("validates and labels persistent Swikipedia display preferences", async () => {
+  const preferencesModule = await import(
+    new URL("../app/modes/gallery-preferences.ts", import.meta.url).href
+  );
+  const {
+    DEFAULT_GALLERY_PREFERENCES,
+    GALLERY_DURATION_OPTIONS,
+    GALLERY_ORDER_OPTIONS,
+    GALLERY_PREFERENCES_STORAGE_KEY,
+    galleryDurationOption,
+    galleryOrderOption,
+    parseGalleryPreferences,
+    resolveGalleryPreferences,
+    serializeGalleryPreferences,
+  } = preferencesModule.default ?? preferencesModule;
+
+  assert.equal(
+    GALLERY_PREFERENCES_STORAGE_KEY,
+    "always-on-frame.gallery.settings.v1",
+  );
+  assert.deepEqual(DEFAULT_GALLERY_PREFERENCES, {
+    version: 1,
+    durationMs: 5 * 60_000,
+    orderMode: "aspect-priority",
+  });
+  assert.ok(Object.isFrozen(DEFAULT_GALLERY_PREFERENCES));
+  assert.deepEqual(
+    GALLERY_DURATION_OPTIONS.map(({ durationMs }) => durationMs),
+    [30_000, 60_000, 120_000, 300_000, 600_000, 1_800_000],
+  );
+  assert.deepEqual(
+    GALLERY_ORDER_OPTIONS.map(({ value }) => value),
+    ["aspect-priority", "random", "compatible-only"],
+  );
+  assert.ok(
+    GALLERY_DURATION_OPTIONS.every(
+      (option) =>
+        Object.isFrozen(option) &&
+        option.label.length > 0 &&
+        option.shortLabel.length > 0,
+    ),
+  );
+  assert.ok(
+    GALLERY_ORDER_OPTIONS.every(
+      (option) =>
+        Object.isFrozen(option) &&
+        option.label.length > 0 &&
+        option.description.length > 0,
+    ),
+  );
+
+  for (const serialized of [
+    null,
+    "",
+    "{bad json",
+    "[]",
+    JSON.stringify({ version: 2, durationMs: 30_000, orderMode: "random" }),
+  ]) {
+    assert.equal(
+      parseGalleryPreferences(serialized),
+      DEFAULT_GALLERY_PREFERENCES,
+    );
+  }
+
+  const custom = resolveGalleryPreferences({
+    version: 1,
+    durationMs: 30_000,
+    orderMode: "random",
+  });
+  assert.deepEqual(custom, {
+    version: 1,
+    durationMs: 30_000,
+    orderMode: "random",
+  });
+  assert.ok(Object.isFrozen(custom));
+  assert.deepEqual(
+    parseGalleryPreferences(serializeGalleryPreferences(custom)),
+    custom,
+  );
+
+  for (const durationMs of [
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+    0,
+    45_000,
+    "30000",
+  ]) {
+    assert.deepEqual(
+      resolveGalleryPreferences({
+        version: 1,
+        durationMs,
+        orderMode: "random",
+      }),
+      {
+        version: 1,
+        durationMs: DEFAULT_GALLERY_PREFERENCES.durationMs,
+        orderMode: "random",
+      },
+    );
+  }
+  assert.deepEqual(
+    resolveGalleryPreferences({
+      version: 1,
+      durationMs: 30_000,
+      orderMode: "unknown",
+    }),
+    {
+      version: 1,
+      durationMs: 30_000,
+      orderMode: DEFAULT_GALLERY_PREFERENCES.orderMode,
+    },
+  );
+  assert.equal(
+    galleryDurationOption(-1).durationMs,
+    DEFAULT_GALLERY_PREFERENCES.durationMs,
+  );
+  assert.equal(
+    galleryOrderOption("not-a-mode").value,
+    DEFAULT_GALLERY_PREFERENCES.orderMode,
+  );
+});
+
+test("builds robust Swikipedia cycles for all three order policies", async () => {
+  const [galleryDeckModule, shuffleModule, paintingModule] = await Promise.all([
+    import(new URL("../app/modes/gallery-deck.ts", import.meta.url).href),
+    import(new URL("../app/shuffle.ts", import.meta.url).href),
+    import(new URL("../app/data/paintings.generated.ts", import.meta.url).href),
+  ]);
+  const {
+    advanceGalleryDeckPosition,
+    buildGalleryCycleDeck,
+    changeGalleryDeckOrderMode,
+    currentGalleryDeckQid,
+    galleryDeckWindowQids,
+    isGalleryArtworkCompatible,
+    orderGalleryDeckForViewport,
+    reorientGalleryDeckPosition,
+    resolveGalleryArtworkOrientation,
+  } = galleryDeckModule.default ?? galleryDeckModule;
+  const { shuffledCycle } = shuffleModule.default ?? shuffleModule;
+  const { PAINTINGS } = paintingModule.default ?? paintingModule;
+
+  const artworks = [
+    { qid: "portrait-a", width: 800, height: 1_200 },
+    { qid: "portrait-b", width: 900, height: 1_600 },
+    { qid: "landscape-a", width: 1_200, height: 800 },
+    { qid: "landscape-b", width: 1_600, height: 900 },
+    { qid: "square-a", width: 1_000, height: 1_000 },
+    { qid: "invalid-a", width: Number.NaN, height: -1 },
+  ];
+  const qids = [...artworks.map(({ qid }) => qid), "unmeasured"];
+  const qidSnapshot = [...qids];
+  const artworkSnapshot = artworks.map((artwork) => ({ ...artwork }));
+  const seed = "gallery:policy-contract";
+
+  assert.equal(resolveGalleryArtworkOrientation(artworks[0]), "portrait");
+  assert.equal(resolveGalleryArtworkOrientation(artworks[2]), "landscape");
+  assert.equal(resolveGalleryArtworkOrientation(artworks[4]), "neutral");
+  assert.equal(resolveGalleryArtworkOrientation(artworks[5]), "neutral");
+  assert.equal(resolveGalleryArtworkOrientation(undefined), "neutral");
+
+  for (const orientation of ["portrait", "landscape"]) {
+    for (let cycle = 0; cycle < 8; cycle += 1) {
+      const randomized = shuffledCycle(qids, seed, cycle);
+      const randomDeck = buildGalleryCycleDeck({
+        qids,
+        artworks,
+        seed,
+        cycle,
+        orientation,
+        orderMode: "random",
+      });
+      assert.deepEqual(
+        randomDeck,
+        randomized,
+        "pure shuffle must not add viewport grouping",
+      );
+
+      const priorityDeck = buildGalleryCycleDeck({
+        qids,
+        artworks,
+        seed,
+        cycle,
+        orientation,
+        orderMode: "aspect-priority",
+      });
+      assert.deepEqual(
+        priorityDeck,
+        orderGalleryDeckForViewport(randomized, artworks, orientation),
+      );
+
+      const compatibleQids = qids.filter((qid) =>
+        isGalleryArtworkCompatible(
+          artworks.find((artwork) => artwork.qid === qid),
+          orientation,
+        ),
+      );
+      const compatibleDeck = buildGalleryCycleDeck({
+        qids,
+        artworks,
+        seed,
+        cycle,
+        orientation,
+        orderMode: "compatible-only",
+      });
+      assert.deepEqual(
+        compatibleDeck,
+        shuffledCycle(compatibleQids, seed, cycle),
+        "compatible candidates must be filtered before shuffling",
+      );
+      assert.ok(
+        compatibleDeck.every((qid) =>
+          isGalleryArtworkCompatible(
+            artworks.find((artwork) => artwork.qid === qid),
+            orientation,
+          ),
+        ),
+      );
+    }
+  }
+  assert.deepEqual(qids, qidSnapshot, "deck building must not mutate QIDs");
+  assert.deepEqual(
+    artworks,
+    artworkSnapshot,
+    "deck building must not mutate artwork metadata",
+  );
+
+  assert.deepEqual(
+    buildGalleryCycleDeck({
+      qids: ["same", "same", "other"],
+      artworks: [],
+      seed,
+      cycle: 0,
+      orientation: "portrait",
+      orderMode: "random",
+    }).sort(),
+    ["other", "same"],
+    "malformed duplicate QIDs must not create duplicate plates",
+  );
+  assert.deepEqual(
+    buildGalleryCycleDeck({
+      qids: [],
+      artworks: [],
+      seed,
+      cycle: 0,
+      orientation: "portrait",
+      orderMode: "compatible-only",
+    }),
+    [],
+  );
+
+  const oppositeOnly = [
+    { qid: "wide-a", width: 1_600, height: 900 },
+    { qid: "wide-b", width: 1_200, height: 800 },
+  ];
+  const fallbackDeck = buildGalleryCycleDeck({
+    qids: oppositeOnly.map(({ qid }) => qid),
+    artworks: oppositeOnly,
+    seed,
+    cycle: 0,
+    orientation: "portrait",
+    orderMode: "compatible-only",
+  });
+  assert.equal(fallbackDeck.length, oppositeOnly.length);
+  assert.deepEqual(
+    [...fallbackDeck].sort(),
+    oppositeOnly.map(({ qid }) => qid).sort(),
+    "an impossible strict filter must fail soft instead of producing an empty frame",
+  );
+
+  for (const orientation of ["portrait", "landscape"]) {
+    for (const orderMode of [
+      "random",
+      "aspect-priority",
+      "compatible-only",
+    ]) {
+      for (let seedIndex = 0; seedIndex < 20; seedIndex += 1) {
+        let previousQid;
+        for (let cycle = 0; cycle < 30; cycle += 1) {
+          const deck = buildGalleryCycleDeck({
+            qids,
+            artworks,
+            seed: `${seed}:${seedIndex}`,
+            cycle,
+            orientation,
+            orderMode,
+            previousQid,
+          });
+          assert.equal(new Set(deck).size, deck.length);
+          if (previousQid && deck.length > 1) {
+            assert.notEqual(
+              deck[0],
+              previousQid,
+              `${orientation}/${orderMode} must not repeat across cycle ${cycle}`,
+            );
+          }
+          previousQid = deck.at(-1);
+        }
+      }
+    }
+  }
+
+  const createDeck = (
+    cycle,
+    orientation,
+    orderMode,
+    previousQid,
+  ) =>
+    buildGalleryCycleDeck({
+      qids,
+      artworks,
+      seed,
+      cycle,
+      orientation,
+      orderMode,
+      previousQid,
+    });
+  const incompatibleCurrent = {
+    cycle: 7,
+    index: 0,
+    deck: ["landscape-a", "portrait-a", "square-a"],
+    history: [{ cycle: 6, deck: ["portrait-b", "landscape-b"] }],
+    orientation: "portrait",
+    orderMode: "aspect-priority",
+  };
+  const strict = changeGalleryDeckOrderMode(
+    incompatibleCurrent,
+    "compatible-only",
+    createDeck,
+  );
+  assert.equal(strict.orderMode, "compatible-only");
+  assert.equal(strict.cycle, 0);
+  assert.equal(strict.index, 0);
+  assert.deepEqual(strict.history, []);
+  assert.notEqual(currentGalleryDeckQid(strict), "landscape-a");
+  assert.ok(
+    strict.deck.every((qid) =>
+      isGalleryArtworkCompatible(
+        artworks.find((artwork) => artwork.qid === qid),
+        "portrait",
+      ),
+    ),
+  );
+
+  const restored = changeGalleryDeckOrderMode(strict, "random", createDeck);
+  assert.equal(restored.orderMode, "random");
+  assert.equal(restored.deck.length, qids.length);
+  assert.equal(
+    currentGalleryDeckQid(restored),
+    currentGalleryDeckQid(strict),
+    "an eligible current work should stay visible across a policy change",
+  );
+  assert.deepEqual([...restored.deck].sort(), [...qids].sort());
+
+  const randomPosition = {
+    cycle: 0,
+    index: 2,
+    deck: createDeck(0, "portrait", "random"),
+    history: [],
+    orientation: "portrait",
+    orderMode: "random",
+  };
+  const randomRotated = reorientGalleryDeckPosition(
+    randomPosition,
+    "landscape",
+    artworks,
+    createDeck,
+  );
+  assert.deepEqual(randomRotated.deck, randomPosition.deck);
+  assert.equal(randomRotated.index, randomPosition.index);
+  assert.equal(randomRotated.orientation, "landscape");
+
+  const strictPortrait = {
+    cycle: 4,
+    index: 0,
+    deck: ["portrait-a", "portrait-b", "square-a"],
+    history: [{ cycle: 3, deck: ["portrait-b", "portrait-a"] }],
+    orientation: "portrait",
+    orderMode: "compatible-only",
+  };
+  const strictLandscape = reorientGalleryDeckPosition(
+    strictPortrait,
+    "landscape",
+    artworks,
+    createDeck,
+  );
+  assert.equal(strictLandscape.cycle, 0);
+  assert.equal(strictLandscape.index, 0);
+  assert.deepEqual(strictLandscape.history, []);
+  assert.notEqual(currentGalleryDeckQid(strictLandscape), "portrait-a");
+  assert.ok(
+    strictLandscape.deck.every((qid) =>
+      isGalleryArtworkCompatible(
+        artworks.find((artwork) => artwork.qid === qid),
+        "landscape",
+      ),
+    ),
+  );
+  assert.equal(
+    reorientGalleryDeckPosition(
+      strictLandscape,
+      "landscape",
+      artworks,
+      createDeck,
+    ),
+    strictLandscape,
+    "duplicate resize/orientation events must be idempotent",
+  );
+
+  const neutralCurrent = {
+    ...strictPortrait,
+    deck: ["square-a", "portrait-a"],
+    history: [],
+  };
+  const neutralRotated = reorientGalleryDeckPosition(
+    neutralCurrent,
+    "landscape",
+    artworks,
+    createDeck,
+  );
+  assert.equal(currentGalleryDeckQid(neutralRotated), "square-a");
+
+  let boundaryPosition = {
+    cycle: 0,
+    index: qids.length - 1,
+    deck: createDeck(0, "portrait", "random"),
+    history: [],
+    orientation: "portrait",
+    orderMode: "random",
+  };
+  for (let cycle = 0; cycle < 12; cycle += 1) {
+    const currentQid = currentGalleryDeckQid(boundaryPosition);
+    const windowQids = galleryDeckWindowQids(boundaryPosition, createDeck);
+    assert.notEqual(windowQids.nextQid, currentQid);
+    boundaryPosition = advanceGalleryDeckPosition(
+      boundaryPosition,
+      createDeck,
+    );
+    boundaryPosition = {
+      ...boundaryPosition,
+      index: boundaryPosition.deck.length - 1,
+    };
+  }
+  assert.equal(boundaryPosition.history.length, 8);
+
+  const catalogArtworks = PAINTINGS.map(
+    ({ qid, width, height }) => ({ qid, width, height }),
+  );
+  const catalogQids = catalogArtworks.map(({ qid }) => qid);
+  assert.equal(catalogQids.length, EXPECTED_PAINTING_COUNT);
+  for (const [orientation, expectedCompatibleCount] of [
+    ["portrait", 1_048],
+    ["landscape", 1_002],
+  ]) {
+    const compatibleDeck = buildGalleryCycleDeck({
+      qids: catalogQids,
+      artworks: catalogArtworks,
+      seed: "gallery:real-catalog",
+      cycle: 0,
+      orientation,
+      orderMode: "compatible-only",
+    });
+    assert.equal(compatibleDeck.length, expectedCompatibleCount);
+    assert.equal(new Set(compatibleDeck).size, expectedCompatibleCount);
+    assert.ok(
+      compatibleDeck.every((qid) =>
+        isGalleryArtworkCompatible(
+          catalogArtworks.find((artwork) => artwork.qid === qid),
+          orientation,
+        ),
+      ),
+    );
+  }
 });
 
 test("ships the complete deterministic flip-dot alphabet", async () => {
