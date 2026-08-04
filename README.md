@@ -39,7 +39,7 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 <table>
   <tr>
     <td align="center" width="25%"><strong>15 MIN</strong><br><sub>WEATHER REFRESH</sub></td>
-    <td align="center" width="25%"><strong>2,048</strong><br><sub>PUBLIC-DOMAIN PAINTINGS</sub></td>
+    <td align="center" width="25%"><strong>3,560</strong><br><sub>PUBLIC-DOMAIN PAINTINGS</sub></td>
     <td align="center" width="25%"><strong>269</strong><br><sub>POSTERJO ARTWORKS</sub></td>
     <td align="center" width="25%"><strong>30 SEC–30 MIN</strong><br><sub>SWIKIPEDIA CADENCE</sub></td>
   </tr>
@@ -50,7 +50,7 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 | Field | What fills the frame |
 | --- | --- |
 | `01` **Flip Dot Weather** | A single mechanical 24-hour hours-and-minutes field with a separate duotone weather instrument for any searchable city or postcode. Four saved pigment/chassis themes and NORMAL/BOLD numeral weights tune the hardware without changing its rotor geometry. |
-| `02` **Swikipedia** | A configurable gallery spanning six centuries and 2,048 verified public-domain paintings. Each work arrives with its title, artist, date, and a concise Wikipedia description. Choose a 30-second to 30-minute cadence and one of three screen-aware order modes. |
+| `02` **Swikipedia** | A configurable gallery of 3,560 verified public-domain paintings across seven selectable eras. Each work arrives with its title, artist, date, and a concise Wikipedia description. Choose a 30-second to 30-minute cadence, one of three screen-aware order modes, and any combination of eras. |
 | `03` **Posterjo** | Joan Sterjo's local high-resolution artwork archive: 269 compositions presented edge to edge for five minutes each, with restrained titles and source metadata. |
 
 ## Built for the long gaze
@@ -62,7 +62,7 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 | **Fit the room** | The frame adapts from portrait tablets to landscape TVs, respects safe areas, and keeps artwork composition-aware. |
 | **Disappear quietly** | Controls auto-hide, weather refreshes every 15 minutes while active, Swikipedia follows its saved 30-second to 30-minute cadence, and Posterjo keeps its unhurried five-minute clock. Opening the index pauses the display beneath it. |
 | **Recover gracefully** | Each display mode has its own error boundary. If live weather cannot refresh, the last matching snapshot remains visible as `SAVED`; without one, the board stays usable as a local clock and marks conditions `OFFLINE`. |
-| **Remember the ritual** | The current mode, Swikipedia timing and order, selected weather location, latest successful weather snapshot, flip-dot theme, numeral weight, and refreshed gallery copy are cached on-device; reopening the frame returns to where it belongs. |
+| **Remember the ritual** | The current mode, Swikipedia timing, order, and era selection, selected weather location, latest successful weather snapshot, flip-dot theme, numeral weight, and refreshed gallery copy are cached on-device; reopening the frame returns to where it belongs. |
 
 ## Controls
 
@@ -73,7 +73,7 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 | <kbd>F</kbd> | Enter fullscreen |
 | <kbd>←</kbd> · <kbd>→</kbd> | Step through either artwork gallery |
 | Tap/click the left or right half of a gallery | Show the previous or next artwork |
-| <kbd>S</kbd> or the Swikipedia timing/order button | Open Swikipedia display settings |
+| <kbd>S</kbd> or the Swikipedia display-settings button | Open Swikipedia timing, order, and era controls |
 | Flip Dot Weather city / `CHANGE` | Open the location picker; search a city or postcode with at least three characters |
 | Flip Dot Weather `DOT / CHASSIS` | Cycle Amber/Graphite, Ivory/Navy, Vermilion/Bakelite, or Mint/Gunmetal; the choice is saved on this device |
 | Flip Dot Weather `WEIGHT` | Toggle NORMAL/BOLD numeral strokes; the choice is saved on this device |
@@ -81,7 +81,9 @@ Always-On Frame is a quiet alternative to the blank screen: three edge-to-edge d
 
 ## Swikipedia
 
-Swikipedia starts at **5 minutes per painting** and **Screen fit first**. Open its settings with <kbd>S</kbd> or the timing/order button beside the countdown. Timing presets run from **30 seconds to 30 minutes**: 30 seconds, 1 minute, 2 minutes, 5 minutes, 10 minutes, or 30 minutes.
+Swikipedia starts with **all seven eras**, **5 minutes per painting**, and **Screen fit first**. Open its settings with <kbd>S</kbd> or the display-settings button beside the countdown. Timing presets run from **30 seconds to 30 minutes**: 30 seconds, 1 minute, 2 minutes, 5 minutes, 10 minutes, or 30 minutes.
+
+Era controls cover **Before 1400**, each century from the **1400s** through the **1800s**, and **1900+**. Turn any combination on or off; the gallery always keeps at least one era active so filtering can never leave the frame empty.
 
 The three order modes control how each shuffled cycle responds to the current screen:
 
@@ -89,7 +91,7 @@ The three order modes control how each shuffled cycle responds to the current sc
 - **Pure shuffle** mixes the complete collection without grouping paintings by screen orientation.
 - **Screen fit only** skips portrait or landscape paintings that do not suit the current screen.
 
-Timing and order changes take effect immediately and are saved on this device. Posterjo remains separate and continues to show every artwork for a fixed five minutes.
+Timing, order, and era changes take effect immediately and are saved on this device. Posterjo remains separate and continues to show every artwork for a fixed five minutes.
 
 ## Flip Dot Weather
 
@@ -146,14 +148,14 @@ npm run start
 
 ### Swikipedia
 
-The committed painting inventory records the Wikimedia Commons revision, source dimensions, MIME type, SHA-1, public-domain evidence, and selection policy for every work. The first 300 paintings ship as optimized local WebPs; the other 1,748 use validated high-resolution Commons masters and are cached as they are viewed.
+The committed painting inventory records the Wikimedia Commons revision, source dimensions, MIME type, SHA-1, public-domain evidence, and selection policy for every work. The first 300 paintings ship as optimized local WebPs; the other 3,260 use validated high-resolution Commons masters and are cached as they are viewed.
 
-New catalog additions must have a short edge of at least 2,160 pixels, contain at least six megapixels, and keep every artist at eight works or fewer. Curatorial corrections live separately from the generated catalog so the collection remains reproducible.
+New catalog additions must have a short edge of at least 2,160 pixels and contain at least six megapixels. Multiple works by the same artist are allowed, while round-robin era selection keeps the expansion chronologically broad. Curatorial corrections live separately from the generated catalog so the collection remains reproducible.
 
 | Command | Purpose |
 | --- | --- |
 | `npm run og:build` | Rebuild the social preview from its exact flip-dot geometry and verified Posterjo source |
-| `npm run artworks:catalog` | Rebuild the curated 2,048-work catalog |
+| `npm run artworks:catalog` | Rebuild the curated 3,560-work catalog |
 | `npm run artworks:sync` | Regenerate the 300-work local WebP core |
 | `npm run artworks:verify` | Verify every committed local painting |
 
@@ -182,6 +184,7 @@ app/
 │   ├── flip-dot-weights.ts saved normal/bold numeral preference
 │   ├── weather-data.ts    Open-Meteo requests, response parsing, WMO mapping
 │   ├── gallery.tsx        Swikipedia display
+│   ├── gallery-eras.ts    saved date-era classification and filtering
 │   └── posterjo.tsx       Posterjo display
 └── data/                  generated catalogs and artwork URL helpers
 public/

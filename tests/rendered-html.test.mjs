@@ -4,7 +4,10 @@ import { access, readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import { createContext, runInContext } from "node:vm";
 
-const EXPECTED_PAINTING_COUNT = 2_048;
+const EXPECTED_PAINTING_COUNT = 3_560;
+const STABLE_PAINTING_PREFIX_COUNT = 2_048;
+const STABLE_PAINTING_PREFIX_SHA256 =
+  "f205b8ecb4e73a9150b0a98de7e9b005753700e4d3887efaf9bd541a638311f1";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -67,7 +70,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(page, /<FrameApp \/>/);
   assert.match(layout, /title: "Always-On Frame"/);
   assert.match(layout, /physical flip-dot clock with selectable live weather/i);
-  assert.match(layout, /2,048 verified public-domain paintings/);
+  assert.match(layout, /3,560 verified public-domain paintings/);
   assert.match(frame, /Flip Dot Weather/);
   assert.match(frame, /Swikipedia/);
   assert.match(frame, /Posterjo/);
@@ -88,7 +91,7 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(frame, /shuffleSeed=\{shuffleSeed\}/);
   assert.match(frame, /function TypographyPreview/);
   assert.match(frame, /metric: "24:00"/);
-  assert.match(frame, /metric: "2,048"/);
+  assert.match(frame, /metric: "3,560"/);
   assert.match(frame, /metric: "269"/);
   assert.match(frame, /status: "LOCAL DATA"/);
   assert.match(frame, /status: "PUBLIC DOMAIN"/);
@@ -109,6 +112,11 @@ test("keeps the product modes explicit and the starter removed", async () => {
   assert.match(gallery, /role="dialog"/);
   assert.match(gallery, /aria-keyshortcuts="S"/);
   assert.match(gallery, /GALLERY_PREFERENCES_STORAGE_KEY/);
+  assert.match(gallery, /GALLERY_ERA_OPTIONS\.map/);
+  assert.match(gallery, /type="checkbox"/);
+  assert.match(gallery, /At least one era stays active/);
+  assert.match(gallery, /changeGalleryDeckConfiguration/);
+  assert.match(gallery, /timerRevision: state\.timerRevision \+ 1/);
   assert.match(galleryPreferences, /durationMs: 5 \* 60_000/);
   assert.match(galleryPreferences, /durationMs: 30_000/);
   assert.match(galleryPreferences, /"random"/);
@@ -328,7 +336,14 @@ test("ships the expanded artwork libraries and weather frame", async () => {
   );
   const inventory = JSON.parse(inventorySource);
   const overrides = JSON.parse(overridesSource);
-  assert.equal(paintingRows.length, EXPECTED_PAINTING_COUNT, `expected exactly 2,048 paintings, found ${paintingRows.length}`);
+  assert.equal(paintingRows.length, EXPECTED_PAINTING_COUNT, `expected exactly 3,560 paintings, found ${paintingRows.length}`);
+  assert.equal(
+    createHash("sha256")
+      .update(JSON.stringify(paintingRows.slice(0, STABLE_PAINTING_PREFIX_COUNT)))
+      .digest("hex"),
+    STABLE_PAINTING_PREFIX_SHA256,
+    "catalog expansion must append without changing or reordering the original 2,048 paintings",
+  );
   assert.equal(new Set(paintingRows.map((row) => row[0])).size, EXPECTED_PAINTING_COUNT, "painting QIDs must be unique");
   assert.equal(new Set(paintingRows.map((row) => row[1])).size, EXPECTED_PAINTING_COUNT, "Wikipedia articles must be unique");
   assert.equal(new Set(paintingRows.map((row) => row[5])).size, EXPECTED_PAINTING_COUNT, "Commons files must be unique");
@@ -346,9 +361,32 @@ test("ships the expanded artwork libraries and weather frame", async () => {
   }
   assert.equal(inventory.count, EXPECTED_PAINTING_COUNT);
   assert.equal(inventory.records.length, EXPECTED_PAINTING_COUNT);
+  assert.equal(inventory.policy.appendOnlyBaseCount, STABLE_PAINTING_PREFIX_COUNT);
+  assert.equal(inventory.policy.preservedRecordCount, STABLE_PAINTING_PREFIX_COUNT);
+  assert.equal(inventory.policy.localFallbackRecordCount, 300);
+  assert.deepEqual(inventory.policy.eraSelection.order, [
+    "pre-1400",
+    "1400s",
+    "1500s",
+    "1600s",
+    "1700s",
+    "1800s",
+    "1900-plus",
+  ]);
+  assert.equal(
+    Object.values(inventory.policy.eraSelection.additionsByEra)
+      .reduce((total, count) => total + count, 0),
+    EXPECTED_PAINTING_COUNT - STABLE_PAINTING_PREFIX_COUNT,
+  );
+  assert.equal(
+    Object.values(inventory.policy.eraSelection.catalogByEra)
+      .reduce((total, count) => total + count, 0),
+    EXPECTED_PAINTING_COUNT,
+  );
   assert.equal(inventory.policy.minimumAddedShortEdge, 2_160);
   assert.equal(inventory.policy.minimumAddedPixels, 6_000_000);
-  assert.equal(inventory.policy.maximumWorksPerArtist, 8);
+  assert.equal(inventory.policy.maximumWorksPerArtist, null);
+  assert.match(inventory.policy.artistDiversityRule, /Repeated creators are allowed/);
   assert.equal(inventory.policy.curatorOverrides, "scripts/data/painting-overrides.json");
   assert.ok(inventory.records.every((record) => /^[a-f0-9]{40}$/.test(record.commons.sha1)));
   assert.ok(inventory.records.every((record) => record.commons.copyrighted.toLowerCase() === "false"));
@@ -772,9 +810,10 @@ test("prioritizes randomized Swikipedia decks for the viewport orientation", asy
 });
 
 test("validates and labels persistent Swikipedia display preferences", async () => {
-  const preferencesModule = await import(
-    new URL("../app/modes/gallery-preferences.ts", import.meta.url).href
-  );
+  const [preferencesModule, erasModule] = await Promise.all([
+    import(new URL("../app/modes/gallery-preferences.ts", import.meta.url).href),
+    import(new URL("../app/modes/gallery-eras.ts", import.meta.url).href),
+  ]);
   const {
     DEFAULT_GALLERY_PREFERENCES,
     GALLERY_DURATION_OPTIONS,
@@ -786,17 +825,36 @@ test("validates and labels persistent Swikipedia display preferences", async () 
     resolveGalleryPreferences,
     serializeGalleryPreferences,
   } = preferencesModule.default ?? preferencesModule;
+  const {
+    ALL_GALLERY_ERA_IDS,
+    GALLERY_ERA_OPTIONS,
+    resolveGalleryEraIds,
+  } = erasModule.default ?? erasModule;
 
   assert.equal(
     GALLERY_PREFERENCES_STORAGE_KEY,
     "always-on-frame.gallery.settings.v1",
   );
   assert.deepEqual(DEFAULT_GALLERY_PREFERENCES, {
-    version: 1,
+    version: 2,
     durationMs: 5 * 60_000,
     orderMode: "aspect-priority",
+    selectedEraIds: ALL_GALLERY_ERA_IDS,
   });
   assert.ok(Object.isFrozen(DEFAULT_GALLERY_PREFERENCES));
+  assert.ok(Object.isFrozen(DEFAULT_GALLERY_PREFERENCES.selectedEraIds));
+  assert.deepEqual(
+    GALLERY_ERA_OPTIONS.map(({ value }) => value),
+    [
+      "pre-1400",
+      "1400s",
+      "1500s",
+      "1600s",
+      "1700s",
+      "1800s",
+      "1900-plus",
+    ],
+  );
   assert.deepEqual(
     GALLERY_DURATION_OPTIONS.map(({ durationMs }) => durationMs),
     [30_000, 60_000, 120_000, 300_000, 600_000, 1_800_000],
@@ -827,7 +885,7 @@ test("validates and labels persistent Swikipedia display preferences", async () 
     "",
     "{bad json",
     "[]",
-    JSON.stringify({ version: 2, durationMs: 30_000, orderMode: "random" }),
+    JSON.stringify({ version: 3, durationMs: 30_000, orderMode: "random" }),
   ]) {
     assert.equal(
       parseGalleryPreferences(serialized),
@@ -836,16 +894,19 @@ test("validates and labels persistent Swikipedia display preferences", async () 
   }
 
   const custom = resolveGalleryPreferences({
-    version: 1,
+    version: 2,
     durationMs: 30_000,
     orderMode: "random",
+    selectedEraIds: ["1800s", "1400s", "1800s", "not-an-era"],
   });
   assert.deepEqual(custom, {
-    version: 1,
+    version: 2,
     durationMs: 30_000,
     orderMode: "random",
+    selectedEraIds: ["1400s", "1800s"],
   });
   assert.ok(Object.isFrozen(custom));
+  assert.ok(Object.isFrozen(custom.selectedEraIds));
   assert.deepEqual(
     parseGalleryPreferences(serializeGalleryPreferences(custom)),
     custom,
@@ -861,28 +922,51 @@ test("validates and labels persistent Swikipedia display preferences", async () 
   ]) {
     assert.deepEqual(
       resolveGalleryPreferences({
-        version: 1,
+        version: 2,
         durationMs,
         orderMode: "random",
+        selectedEraIds: ["1800s"],
       }),
       {
-        version: 1,
+        version: 2,
         durationMs: DEFAULT_GALLERY_PREFERENCES.durationMs,
         orderMode: "random",
+        selectedEraIds: ["1800s"],
       },
     );
   }
   assert.deepEqual(
     resolveGalleryPreferences({
-      version: 1,
+      version: 2,
       durationMs: 30_000,
       orderMode: "unknown",
+      selectedEraIds: ["1900-plus"],
     }),
     {
-      version: 1,
+      version: 2,
       durationMs: 30_000,
       orderMode: DEFAULT_GALLERY_PREFERENCES.orderMode,
+      selectedEraIds: ["1900-plus"],
     },
+  );
+  assert.deepEqual(
+    resolveGalleryPreferences({
+      version: 1,
+      durationMs: 30_000,
+      orderMode: "random",
+    }),
+    {
+      version: 2,
+      durationMs: 30_000,
+      orderMode: "random",
+      selectedEraIds: ALL_GALLERY_ERA_IDS,
+    },
+    "stored v1 settings must migrate without losing the existing controls",
+  );
+  assert.equal(resolveGalleryEraIds([]), ALL_GALLERY_ERA_IDS);
+  assert.deepEqual(
+    resolveGalleryEraIds(["1900-plus", "1400s", "1400s", "bad"]),
+    ["1400s", "1900-plus"],
   );
   assert.equal(
     galleryDurationOption(-1).durationMs,
@@ -891,6 +975,159 @@ test("validates and labels persistent Swikipedia display preferences", async () 
   assert.equal(
     galleryOrderOption("not-a-mode").value,
     DEFAULT_GALLERY_PREFERENCES.orderMode,
+  );
+});
+
+test("classifies every Swikipedia date into stable selectable eras", async () => {
+  const [erasModule, paintingModule, deckModule] = await Promise.all([
+    import(new URL("../app/modes/gallery-eras.ts", import.meta.url).href),
+    import(new URL("../app/data/paintings.generated.ts", import.meta.url).href),
+    import(new URL("../app/modes/gallery-deck.ts", import.meta.url).href),
+  ]);
+  const {
+    ALL_GALLERY_ERA_IDS,
+    galleryArtworkQidsForEras,
+    galleryEraIdForYear,
+    galleryEraSelectionLabel,
+    parseGalleryYearStart,
+    resolveGalleryEraIds,
+    toggleGalleryEraId,
+  } = erasModule.default ?? erasModule;
+  const { PAINTINGS } = paintingModule.default ?? paintingModule;
+  const { buildGalleryCycleDeck } = deckModule.default ?? deckModule;
+
+  for (const [copy, startYear, eraId] of [
+    ["1399", 1399, "pre-1400"],
+    ["1400", 1400, "1400s"],
+    ["1499", 1499, "1400s"],
+    ["1500", 1500, "1500s"],
+    ["1599", 1599, "1500s"],
+    ["1600", 1600, "1600s"],
+    ["1699", 1699, "1600s"],
+    ["1700", 1700, "1700s"],
+    ["1790s", 1790, "1700s"],
+    ["1800", 1800, "1800s"],
+    ["1899–1900", 1899, "1800s"],
+    ["1900", 1900, "1900-plus"],
+    ["c. 1507–1516", 1507, "1500s"],
+    ["13th century", 1200, "pre-1400"],
+    ["15th century", 1400, "1400s"],
+    ["20th century", 1900, "1900-plus"],
+    ["500 BCE", -500, "pre-1400"],
+    ["5th century BCE", -500, "pre-1400"],
+  ]) {
+    assert.equal(parseGalleryYearStart(copy), startYear, copy);
+    assert.equal(galleryEraIdForYear(copy), eraId, copy);
+  }
+  assert.equal(parseGalleryYearStart("Date unknown"), null);
+  assert.equal(galleryEraIdForYear("Date unknown"), null);
+
+  const canonical = resolveGalleryEraIds([
+    "1800s",
+    "bad",
+    "1400s",
+    "1800s",
+  ]);
+  assert.deepEqual(canonical, ["1400s", "1800s"]);
+  assert.ok(Object.isFrozen(canonical));
+  assert.equal(resolveGalleryEraIds([]), ALL_GALLERY_ERA_IDS);
+  assert.deepEqual(
+    toggleGalleryEraId(["1400s"], "1400s", false),
+    ["1400s"],
+    "the final selected era must not be removable",
+  );
+  assert.deepEqual(
+    toggleGalleryEraId(["1400s"], "1800s", true),
+    ["1400s", "1800s"],
+  );
+  assert.equal(galleryEraSelectionLabel(ALL_GALLERY_ERA_IDS), "All eras");
+  assert.equal(galleryEraSelectionLabel(["1800s"]), "1800–1899");
+  assert.equal(galleryEraSelectionLabel(["1400s", "1800s"]), "2 eras");
+
+  const catalogQids = PAINTINGS.map(({ qid }) => qid);
+  const eraCounts = new Map(ALL_GALLERY_ERA_IDS.map((eraId) => [eraId, 0]));
+  for (const painting of PAINTINGS) {
+    const eraId = galleryEraIdForYear(painting.year);
+    assert.ok(eraId, `${painting.qid} has an unclassified date: ${painting.year}`);
+    eraCounts.set(eraId, eraCounts.get(eraId) + 1);
+  }
+  assert.equal(
+    [...eraCounts.values()].reduce((total, count) => total + count, 0),
+    PAINTINGS.length,
+  );
+  assert.ok(
+    [...eraCounts.values()].every((count) => count > 0),
+    "every displayed era control must contain catalog works",
+  );
+  assert.deepEqual(
+    galleryArtworkQidsForEras(PAINTINGS, ALL_GALLERY_ERA_IDS),
+    catalogQids,
+  );
+  for (const eraId of ALL_GALLERY_ERA_IDS) {
+    const expected = PAINTINGS
+      .filter((painting) => galleryEraIdForYear(painting.year) === eraId)
+      .map(({ qid }) => qid);
+    const filtered = galleryArtworkQidsForEras(PAINTINGS, [eraId]);
+    assert.deepEqual(filtered, expected, `${eraId} must retain catalog order`);
+    assert.deepEqual(
+      galleryArtworkQidsForEras(PAINTINGS, [eraId]),
+      filtered,
+      `${eraId} filtering must be deterministic`,
+    );
+  }
+
+  for (let mask = 1; mask < 2 ** ALL_GALLERY_ERA_IDS.length; mask += 1) {
+    const selectedEraIds = ALL_GALLERY_ERA_IDS.filter(
+      (_eraId, index) => (mask & (1 << index)) !== 0,
+    );
+    const eligibleQids = galleryArtworkQidsForEras(
+      PAINTINGS,
+      selectedEraIds,
+    );
+    const expected = [...eligibleQids].sort();
+    for (const orientation of ["portrait", "landscape"]) {
+      const input = {
+        qids: eligibleQids,
+        artworks: PAINTINGS,
+        seed: `gallery:era-combination:${mask}`,
+        cycle: 0,
+        orientation,
+        orderMode: "random",
+      };
+      const deck = buildGalleryCycleDeck(input);
+      assert.ok(deck.length > 0, `era mask ${mask}/${orientation} is empty`);
+      assert.equal(
+        new Set(deck).size,
+        deck.length,
+        `era mask ${mask}/${orientation} contains duplicates`,
+      );
+      assert.deepEqual(
+        [...deck].sort(),
+        expected,
+        `era mask ${mask}/${orientation} has the wrong eligible union`,
+      );
+      assert.deepEqual(
+        buildGalleryCycleDeck(input),
+        deck,
+        `era mask ${mask}/${orientation} is not deterministic`,
+      );
+    }
+  }
+
+  const malformed = [
+    { qid: "known", year: "1450" },
+    { qid: "known", year: "1850" },
+    { qid: "unknown", year: "Date unknown" },
+  ];
+  assert.deepEqual(
+    galleryArtworkQidsForEras(malformed, ALL_GALLERY_ERA_IDS),
+    ["known", "unknown"],
+    "all eras must retain unknown future date formats and de-duplicate QIDs",
+  );
+  assert.deepEqual(
+    galleryArtworkQidsForEras(malformed, ["1900-plus"]),
+    ["known", "unknown"],
+    "an impossible era filter must fail soft to a non-empty catalog",
   );
 });
 
@@ -903,6 +1140,8 @@ test("builds robust Swikipedia cycles for all three order policies", async () =>
   const {
     advanceGalleryDeckPosition,
     buildGalleryCycleDeck,
+    changeGalleryDeckCollection,
+    changeGalleryDeckConfiguration,
     changeGalleryDeckOrderMode,
     currentGalleryDeckQid,
     galleryDeckWindowQids,
@@ -1126,6 +1365,47 @@ test("builds robust Swikipedia cycles for all three order policies", async () =>
   );
   assert.deepEqual([...restored.deck].sort(), [...qids].sort());
 
+  const eligibleCollection = changeGalleryDeckCollection(
+    incompatibleCurrent,
+    () => ["square-a", "landscape-a"],
+  );
+  assert.equal(eligibleCollection.cycle, 0);
+  assert.equal(eligibleCollection.index, 0);
+  assert.deepEqual(eligibleCollection.history, []);
+  assert.equal(
+    currentGalleryDeckQid(eligibleCollection),
+    "landscape-a",
+    "a still-eligible current painting should anchor a new filtered cycle",
+  );
+  assert.deepEqual(eligibleCollection.deck, ["landscape-a", "square-a"]);
+
+  const excludedCollection = changeGalleryDeckCollection(
+    incompatibleCurrent,
+    () => ["portrait-b", "square-a"],
+  );
+  assert.equal(excludedCollection.cycle, 0);
+  assert.equal(excludedCollection.index, 0);
+  assert.deepEqual(excludedCollection.history, []);
+  assert.equal(
+    currentGalleryDeckQid(excludedCollection),
+    "portrait-b",
+    "an excluded current painting must not survive an era transition",
+  );
+
+  const simultaneousReset = changeGalleryDeckConfiguration(
+    incompatibleCurrent,
+    "random",
+    (_cycle, _orientation, orderMode) => {
+      assert.equal(orderMode, "random");
+      return ["square-a", "portrait-b"];
+    },
+  );
+  assert.equal(simultaneousReset.orderMode, "random");
+  assert.equal(simultaneousReset.cycle, 0);
+  assert.equal(simultaneousReset.index, 0);
+  assert.deepEqual(simultaneousReset.history, []);
+  assert.deepEqual(simultaneousReset.deck, ["square-a", "portrait-b"]);
+
   const randomPosition = {
     cycle: 0,
     index: 2,
@@ -1223,8 +1503,8 @@ test("builds robust Swikipedia cycles for all three order policies", async () =>
   const catalogQids = catalogArtworks.map(({ qid }) => qid);
   assert.equal(catalogQids.length, EXPECTED_PAINTING_COUNT);
   for (const [orientation, expectedCompatibleCount] of [
-    ["portrait", 1_048],
-    ["landscape", 1_002],
+    ["portrait", 1_947],
+    ["landscape", 1_617],
   ]) {
     const compatibleDeck = buildGalleryCycleDeck({
       qids: catalogQids,

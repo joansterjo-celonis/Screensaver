@@ -11,12 +11,11 @@ const DATA_FILE = join(REPO_ROOT, "app", "data", "paintings.generated.ts");
 const INVENTORY_FILE = join(REPO_ROOT, "scripts", "data", "painting-inventory.json");
 const OVERRIDES_FILE = join(REPO_ROOT, "scripts", "data", "painting-overrides.json");
 
-const PRESERVED_RECORDS = 300;
-const DEFAULT_TARGET_RECORDS = 2_048;
+const LOCAL_FALLBACK_RECORDS = 300;
+const DEFAULT_TARGET_RECORDS = 3_560;
 const DEFAULT_CANDIDATE_LIMIT = 20_000;
 const MIN_ADDED_SHORT_EDGE = 2_160;
 const MIN_ADDED_PIXELS = 6_000_000;
-const MAX_WORKS_PER_ARTIST = 8;
 const API_BATCH_SIZE = 50;
 const API_CONCURRENCY = 2;
 const WIKIDATA_ENTITY_MAX_LAG = 10;
@@ -31,6 +30,15 @@ const SUPPORTED_RASTER_MIMES = new Set([
   "image/png",
   "image/webp",
 ]);
+const ERA_KEYS = [
+  "pre-1400",
+  "1400s",
+  "1500s",
+  "1600s",
+  "1700s",
+  "1800s",
+  "1900-plus",
+];
 
 class CatalogError extends Error {
   constructor(message, options = {}) {
@@ -158,6 +166,16 @@ function canonicalUrl(value, fallback) {
   }
 }
 
+function canonicalOriginalUrl(value) {
+  const canonical = canonicalUrl(value, "");
+  if (!canonical) return "";
+  const url = new URL(canonical);
+  for (const parameter of ["utm_source", "utm_campaign", "utm_content"]) {
+    url.searchParams.delete(parameter);
+  }
+  return url.href;
+}
+
 function commonsDescriptionUrl(fileName) {
   return `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(fileName.replaceAll(" ", "_"))}`;
 }
@@ -195,7 +213,7 @@ function readPaintingRows(source) {
       width,
       height,
       licenseUrl = commonsDescriptionUrl(fallbackFile),
-      localFallback = index < PRESERVED_RECORDS,
+      localFallback = index < LOCAL_FALLBACK_RECORDS,
     ] = row;
     return {
       qid,
@@ -349,43 +367,92 @@ function articleTitleFromUrl(value) {
 }
 
 async function discoverCandidates(limit) {
-  const query = `SELECT ?item ?image ?article ?sitelinks WHERE {
-  ?item wdt:P31 wd:Q3305213;
+  const pageSize = Math.min(2_000, limit);
+  const queryBody = `SELECT DISTINCT ?item ?image ?article ?sitelinks WHERE {
+  ?item wdt:P31/wdt:P279* wd:Q3305213;
         wdt:P18 ?image;
         wikibase:sitelinks ?sitelinks.
   ?article schema:about ?item;
            schema:isPartOf <https://en.wikipedia.org/>.
-  FILTER(?sitelinks >= 2)
-}
-LIMIT ${limit}`;
-  const endpoint = new URL("https://query.wikidata.org/sparql");
-  endpoint.search = new URLSearchParams({ format: "json", query }).toString();
-  const data = await requestJson(endpoint, {
-    context: "Wikidata painting discovery",
-  });
-  const rows = data?.results?.bindings;
-  if (!Array.isArray(rows)) {
-    throw new CatalogError("Wikidata painting discovery returned no bindings");
-  }
-  const candidates = rows.flatMap((binding) => {
-    const qid = qidFromEntityUrl(binding.item?.value ?? "");
-    const fallbackFile = fileFromSpecialPath(binding.image?.value ?? "");
-    const articleTitle = articleTitleFromUrl(binding.article?.value ?? "");
-    const sitelinks = Number(binding.sitelinks?.value);
-    if (
-      !qid ||
-      !fallbackFile ||
-      !articleTitle ||
-      !Number.isSafeInteger(sitelinks)
-    ) {
-      return [];
+  FILTER(?sitelinks >= 1)
+}`;
+  const order = "ORDER BY ?item ?image ?article ?sitelinks";
+  const query = `${queryBody}\n${order}\nLIMIT <page-size> OFFSET <offset>`;
+  const candidatesByBinding = new Map();
+  let bindingCount = 0;
+  let complete = false;
+  let offset = 0;
+  let pages = 0;
+  while (offset < limit) {
+    const requested = Math.min(pageSize, limit - offset);
+    const pageQuery = `${queryBody}\n${order}\nLIMIT ${requested}\nOFFSET ${offset}`;
+    const endpoint = new URL("https://query.wikidata.org/sparql");
+    endpoint.search = new URLSearchParams({
+      format: "json",
+      query: pageQuery,
+    }).toString();
+    const data = await requestJson(endpoint, {
+      context: `Wikidata painting discovery page ${pages + 1}`,
+    });
+    const rows = data?.results?.bindings;
+    if (!Array.isArray(rows) || rows.length > requested) {
+      throw new CatalogError(
+        `Wikidata painting discovery page ${pages + 1} returned invalid bindings`,
+      );
     }
-    return [{ qid, fallbackFile, articleTitle, sitelinks }];
-  });
+    bindingCount += rows.length;
+    pages += 1;
+    for (const binding of rows) {
+      const qid = qidFromEntityUrl(binding.item?.value ?? "");
+      const fallbackFile = fileFromSpecialPath(binding.image?.value ?? "");
+      const articleTitle = articleTitleFromUrl(binding.article?.value ?? "");
+      const sitelinks = Number(binding.sitelinks?.value);
+      if (
+        !qid ||
+        !fallbackFile ||
+        !articleTitle ||
+        !Number.isSafeInteger(sitelinks)
+      ) {
+        continue;
+      }
+      const key = JSON.stringify([qid, fallbackFile, articleTitle, sitelinks]);
+      candidatesByBinding.set(key, {
+        qid,
+        fallbackFile,
+        articleTitle,
+        sitelinks,
+      });
+    }
+    console.log(
+      `Discovered Wikidata page ${pages}: ${rows.length}/${requested} bindings at offset ${offset}.`,
+    );
+    if (rows.length < requested) {
+      complete = true;
+      break;
+    }
+    offset += requested;
+  }
+  if (!complete) {
+    throw new CatalogError(
+      `Wikidata painting discovery reached the ${limit}-binding cap without a short terminal page`,
+    );
+  }
+  const candidates = [...candidatesByBinding.values()];
   console.log(
-    `Discovered ${candidates.length} painting/image candidates across ${new Set(candidates.map(({ qid }) => qid)).size} Wikidata items.`,
+    `Discovered ${candidates.length} unique painting/image candidates across ${new Set(candidates.map(({ qid }) => qid)).size} Wikidata items in ${pages} complete pages.`,
   );
-  return { candidates, query };
+  return {
+    candidates,
+    query,
+    pagination: {
+      pageSize,
+      pages,
+      bindingCount,
+      uniqueBindingCount: candidates.length,
+      order,
+      complete,
+    },
+  };
 }
 
 function resolveAlias(key, aliases) {
@@ -424,7 +491,7 @@ function publicDomainMetadata(page) {
     mime,
     sha1: String(info?.sha1 ?? ""),
     timestamp: String(info?.timestamp ?? ""),
-    originalUrl: String(info?.url ?? ""),
+    originalUrl: canonicalOriginalUrl(info?.url),
     descriptionUrl,
     licenseShortName,
     licenseUrl,
@@ -581,6 +648,63 @@ function yearFor(entity) {
     return `${ordinal(Math.floor((absoluteYear - 1) / 100) + 1)} century${suffix}`;
   }
   return "Date unknown";
+}
+
+function eraForYear(value) {
+  const text = String(value);
+  const isBce = /\b(?:BC|BCE)\b/iu.test(text);
+  const explicitYear = text.match(/\d{3,4}/u)?.[0];
+  const century = text.match(/\b(\d{1,2})(?:st|nd|rd|th) century\b/iu)?.[1];
+  const year = explicitYear
+    ? isBce
+      ? -Number(explicitYear)
+      : Number(explicitYear)
+    : century
+      ? isBce
+        ? -Number(century) * 100
+        : (Number(century) - 1) * 100
+      : null;
+  if (!Number.isSafeInteger(year)) return null;
+  if (year < 1400) return "pre-1400";
+  if (year < 1500) return "1400s";
+  if (year < 1600) return "1500s";
+  if (year < 1700) return "1600s";
+  if (year < 1800) return "1700s";
+  if (year < 1900) return "1800s";
+  return "1900-plus";
+}
+
+function countByEra(records) {
+  const counts = Object.fromEntries(ERA_KEYS.map((era) => [era, 0]));
+  for (const record of records) {
+    const era = eraForYear(record.year);
+    if (!era) {
+      throw new CatalogError(
+        `Could not classify ${record.qid} year ${JSON.stringify(record.year)} into an era`,
+      );
+    }
+    counts[era] += 1;
+  }
+  return counts;
+}
+
+function assertEraClassification() {
+  const cases = [
+    ["750 BCE", "pre-1400"],
+    ["15th century BCE", "pre-1400"],
+    ["14th century", "pre-1400"],
+    ["c. 1400", "1400s"],
+    ["1535–1540", "1500s"],
+    ["19th century", "1800s"],
+    ["1900", "1900-plus"],
+  ];
+  for (const [year, expected] of cases) {
+    if (eraForYear(year) !== expected) {
+      throw new CatalogError(
+        `Era classifier regression for ${JSON.stringify(year)}; expected ${expected}`,
+      );
+    }
+  }
 }
 
 function labelFor(entity) {
@@ -748,14 +872,16 @@ function parseIntegerArgument(arguments_, name, fallback, minimum, maximum) {
 function printHelp() {
   console.log(`Usage:
   node scripts/build-painting-collection.mjs
-  node scripts/build-painting-collection.mjs --target 2048 --candidate-limit 20000
+  node scripts/build-painting-collection.mjs --target 3560 --candidate-limit 20000
 
 Discovers English-Wikipedia painting records, validates their Wikimedia Commons
-public-domain metadata and source resolution, preserves the original 300 records,
-and atomically rebuilds the generated catalog and provenance inventory.`);
+public-domain metadata and source resolution, preserves every existing catalog
+record in place, and atomically appends additions to the generated catalog and
+provenance inventory.`);
 }
 
 async function main() {
+  assertEraClassification();
   const arguments_ = process.argv.slice(2);
   if (arguments_.includes("--help")) {
     printHelp();
@@ -771,7 +897,7 @@ async function main() {
     arguments_,
     "--target",
     DEFAULT_TARGET_RECORDS,
-    PRESERVED_RECORDS + 1,
+    LOCAL_FALLBACK_RECORDS + 1,
     5_000,
   );
   const candidateLimit = parseIntegerArgument(
@@ -783,49 +909,151 @@ async function main() {
   );
 
   const overrides = await loadOverrides();
-  const currentRows = readPaintingRows(await readFile(DATA_FILE, "utf8"));
-  if (currentRows.length < PRESERVED_RECORDS) {
+  const currentDataSource = await readFile(DATA_FILE, "utf8");
+  let currentRows = readPaintingRows(currentDataSource);
+  const publishedRowCount = currentRows.length;
+  if (currentRows.length < LOCAL_FALLBACK_RECORDS) {
     throw new CatalogError(
-      `${basename(DATA_FILE)} contains ${currentRows.length} records; cannot preserve the original ${PRESERVED_RECORDS}`,
+      `${basename(DATA_FILE)} contains ${currentRows.length} records; cannot preserve the original ${LOCAL_FALLBACK_RECORDS}`,
     );
   }
-  const preserved = currentRows
-    .slice(0, PRESERVED_RECORDS)
-    .map((record) => applyOverride(record, overrides));
-  assertCatalog(preserved, PRESERVED_RECORDS);
+  let currentInventory;
+  let currentInventorySource;
+  try {
+    currentInventorySource = await readFile(INVENTORY_FILE, "utf8");
+    currentInventory = JSON.parse(currentInventorySource);
+  } catch (error) {
+    throw new CatalogError(
+      `Could not read ${basename(INVENTORY_FILE)}: ${error.message}`,
+      { cause: error },
+    );
+  }
+  if (
+    currentInventory?.version !== 1 ||
+    !Array.isArray(currentInventory.records) ||
+    currentInventory.records.length < LOCAL_FALLBACK_RECORDS ||
+    currentInventory.count !== currentInventory.records.length
+  ) {
+    throw new CatalogError(
+      `${basename(INVENTORY_FILE)} must contain version 1 provenance with at least ${LOCAL_FALLBACK_RECORDS} records`,
+    );
+  }
+  const alignedInventoryCount = Math.min(
+    currentRows.length,
+    currentInventory.records.length,
+  );
+  for (const [index, record] of currentRows.slice(0, alignedInventoryCount).entries()) {
+    const provenance = currentInventory.records[index];
+    if (
+      provenance?.qid !== record.qid ||
+      (provenance.wikidataSitelinks !== null &&
+        !Number.isSafeInteger(provenance.wikidataSitelinks))
+    ) {
+      throw new CatalogError(
+        `${basename(INVENTORY_FILE)} record ${index + 1} does not align with ${record.qid}`,
+      );
+    }
+  }
+  const configuredAppendOnlyBaseCount =
+    currentInventory.policy?.appendOnlyBaseCount;
+  const appendOnlyBaseCount = Number.isSafeInteger(configuredAppendOnlyBaseCount)
+    ? configuredAppendOnlyBaseCount
+    : alignedInventoryCount;
+  if (
+    appendOnlyBaseCount < LOCAL_FALLBACK_RECORDS ||
+    appendOnlyBaseCount > currentRows.length
+  ) {
+    throw new CatalogError(
+      `${basename(INVENTORY_FILE)} has invalid appendOnlyBaseCount ${JSON.stringify(configuredAppendOnlyBaseCount)}`,
+    );
+  }
+  if (currentInventory.records.length > publishedRowCount) {
+    const recoveredRows = currentInventory.records
+      .slice(publishedRowCount)
+      .map((provenance) => ({
+        qid: provenance.qid,
+        articleTitle: provenance.articleTitle,
+        title: provenance.title,
+        artist: provenance.artist,
+        year: provenance.year,
+        fallbackFile: provenance.commonsFile,
+        width: provenance.width,
+        height: provenance.height,
+        licenseUrl: provenance.commons?.licenseUrl,
+        localFallback: false,
+      }));
+    currentRows = [...currentRows, ...recoveredRows];
+    console.warn(
+      `Recovering ${recoveredRows.length} append-only catalog rows from an inventory-ahead interrupted publish.`,
+    );
+  }
+  if (target < currentRows.length) {
+    throw new CatalogError(
+      `Refusing to shrink the append-only catalog from ${currentRows.length} to ${target} records`,
+    );
+  }
+  const stablePrefix = currentRows.map((record, index) => ({
+    ...record,
+    localFallback: index < LOCAL_FALLBACK_RECORDS,
+  }));
+  assertCatalog(stablePrefix, currentRows.length);
+  const additionsNeeded = target - stablePrefix.length;
 
-  const { candidates, query } = await discoverCandidates(candidateLimit);
+  const { candidates, query, pagination } = await discoverCandidates(candidateLimit);
+  const candidateSitelinksByQid = new Map(
+    candidates.map(({ qid, sitelinks }) => [qid, sitelinks]),
+  );
   const allFiles = [
-    ...preserved.map(({ fallbackFile }) => fallbackFile),
+    ...stablePrefix.map(({ fallbackFile }) => fallbackFile),
     ...candidates.map(({ fallbackFile }) => fallbackFile),
   ];
   const commonsByFile = await fetchCommonsMetadata(allFiles);
 
-  const preservedInventory = preserved.map((record) => {
+  const preservedInventory = stablePrefix.map((record, index) => {
     const commons = commonsByFile.get(normaliseFileTitle(record.fallbackFile));
     if (!commons?.verifiedPublicDomain) {
       throw new CatalogError(
         `Preserved record ${record.qid} no longer has verified public-domain metadata for ${record.fallbackFile}`,
       );
     }
+    if (
+      index >= LOCAL_FALLBACK_RECORDS &&
+      (!SUPPORTED_RASTER_MIMES.has(commons.mime) ||
+        !Number.isSafeInteger(commons.width) ||
+        !Number.isSafeInteger(commons.height) ||
+        Math.min(commons.width, commons.height) < MIN_ADDED_SHORT_EDGE ||
+        commons.width * commons.height < MIN_ADDED_PIXELS)
+    ) {
+      throw new CatalogError(
+        `Preserved addition ${record.qid} no longer passes the strict 4K-source policy`,
+      );
+    }
+    const previousProvenance = currentInventory.records[index];
+    const wikidataSitelinks = previousProvenance?.qid === record.qid
+      ? previousProvenance.wikidataSitelinks
+      : candidateSitelinksByQid.get(record.qid) ?? null;
+    if (
+      index >= LOCAL_FALLBACK_RECORDS &&
+      !Number.isSafeInteger(wikidataSitelinks)
+    ) {
+      throw new CatalogError(
+        `Could not recover Wikidata sitelink provenance for preserved addition ${record.qid}`,
+      );
+    }
     return inventoryRecord(
-      { ...record, licenseUrl: commons.licenseUrl },
-      "preserved",
+      record,
+      index < LOCAL_FALLBACK_RECORDS ? "preserved" : "selected-4k-source",
       commons,
+      wikidataSitelinks,
     );
   });
-  const preservedWithLicenses = preserved.map((record, index) => ({
-    ...record,
-    licenseUrl: preservedInventory[index].commons.licenseUrl,
-    localFallback: true,
-  }));
 
-  const preservedQids = new Set(preserved.map(({ qid }) => qid));
+  const preservedQids = new Set(stablePrefix.map(({ qid }) => qid));
   const preservedArticles = new Set(
-    preserved.map(({ articleTitle }) => normaliseKey(articleTitle)),
+    stablePrefix.map(({ articleTitle }) => normaliseKey(articleTitle)),
   );
   const preservedFiles = new Set(
-    preserved.map(({ fallbackFile }) => normaliseFileTitle(fallbackFile)),
+    stablePrefix.map(({ fallbackFile }) => normaliseFileTitle(fallbackFile)),
   );
   const eligibleByQid = new Map();
   for (const candidate of candidates) {
@@ -888,44 +1116,54 @@ async function main() {
       ...candidate,
       title: titleFor(entity, candidate.articleTitle, candidate.qid),
       artist,
-      artistKeys: creatorLabels.length
-        ? [...new Set(creatorLabels.map(normaliseKey))]
-        : [normaliseKey("Unknown artist")],
       year: yearFor(entity),
       licenseUrl: candidate.commons.licenseUrl,
     }, overrides);
   });
 
-  const artistCounts = new Map();
-  for (const record of preservedWithLicenses) {
-    const key = normaliseKey(record.artist);
-    artistCounts.set(key, (artistCounts.get(key) ?? 0) + 1);
-  }
   const articleKeys = new Set(preservedArticles);
   const fileKeys = new Set(preservedFiles);
-  const selected = [];
+  const candidatesByEra = new Map(ERA_KEYS.map((era) => [era, []]));
   for (const candidate of enrichedCandidates) {
-    if (selected.length >= target - PRESERVED_RECORDS) break;
-    if (
-      articleKeys.has(normaliseKey(candidate.articleTitle)) ||
-      fileKeys.has(normaliseFileTitle(candidate.fallbackFile)) ||
-      candidate.year === "Date unknown" ||
-      candidate.artistKeys.some(
-        (key) => (artistCounts.get(key) ?? 0) >= MAX_WORKS_PER_ARTIST,
-      )
-    ) {
-      continue;
-    }
-    selected.push(candidate);
-    articleKeys.add(normaliseKey(candidate.articleTitle));
-    fileKeys.add(normaliseFileTitle(candidate.fallbackFile));
-    for (const key of candidate.artistKeys) {
-      artistCounts.set(key, (artistCounts.get(key) ?? 0) + 1);
-    }
+    const era = eraForYear(candidate.year);
+    if (era) candidatesByEra.get(era).push(candidate);
   }
-  if (selected.length !== target - PRESERVED_RECORDS) {
+  console.log(
+    `Eligible candidates by era: ${JSON.stringify(Object.fromEntries(ERA_KEYS.map((era) => [era, candidatesByEra.get(era).length])))}`,
+  );
+  const nextCandidateByEra = new Map(ERA_KEYS.map((era) => [era, 0]));
+  const rejected = { duplicateArticleOrFile: 0 };
+  const selected = [];
+  while (selected.length < additionsNeeded) {
+    let selectedThisRound = 0;
+    for (const era of ERA_KEYS) {
+      const bucket = candidatesByEra.get(era);
+      let nextIndex = nextCandidateByEra.get(era);
+      while (nextIndex < bucket.length) {
+        const candidate = bucket[nextIndex];
+        nextIndex += 1;
+        nextCandidateByEra.set(era, nextIndex);
+        if (
+          articleKeys.has(normaliseKey(candidate.articleTitle)) ||
+          fileKeys.has(normaliseFileTitle(candidate.fallbackFile))
+        ) {
+          rejected.duplicateArticleOrFile += 1;
+          continue;
+        }
+        selected.push(candidate);
+        selectedThisRound += 1;
+        articleKeys.add(normaliseKey(candidate.articleTitle));
+        fileKeys.add(normaliseFileTitle(candidate.fallbackFile));
+        break;
+      }
+      if (selected.length >= additionsNeeded) break;
+    }
+    if (selectedThisRound === 0) break;
+  }
+  console.log(`Selection rejections: ${JSON.stringify(rejected)}`);
+  if (selected.length !== additionsNeeded) {
     throw new CatalogError(
-      `Only ${selected.length} additions survived the ${MAX_WORKS_PER_ARTIST}-works-per-artist diversity cap; need ${target - PRESERVED_RECORDS}`,
+      `Only ${selected.length} unique dated additions survived the strict source policy; need ${additionsNeeded}`,
     );
   }
 
@@ -941,8 +1179,14 @@ async function main() {
     licenseUrl: candidate.licenseUrl,
     localFallback: false,
   }));
-  const records = [...preservedWithLicenses, ...selectedRecords];
+  const records = [...stablePrefix, ...selectedRecords];
   assertCatalog(records, target);
+  const additionsByEra = countByEra(records.slice(appendOnlyBaseCount));
+  const selectedThisRunByEra = countByEra(selectedRecords);
+  const catalogByEra = countByEra(records);
+  console.log(`Selected this run by era: ${JSON.stringify(selectedThisRunByEra)}`);
+  console.log(`Append-only additions by era: ${JSON.stringify(additionsByEra)}`);
+  console.log(`Published catalog by era: ${JSON.stringify(catalogByEra)}`);
   const generatedDate = new Date().toISOString().slice(0, 10);
   const inventory = {
     version: 1,
@@ -954,18 +1198,32 @@ async function main() {
       commonsApi: "https://commons.wikimedia.org/w/api.php",
       candidateLimit,
       query,
+      pagination,
     },
     policy: {
-      preservedRecordCount: PRESERVED_RECORDS,
+      preservedRecordCount: appendOnlyBaseCount,
+      appendOnlyBaseCount,
+      localFallbackRecordCount: LOCAL_FALLBACK_RECORDS,
       minimumAddedShortEdge: MIN_ADDED_SHORT_EDGE,
       minimumAddedPixels: MIN_ADDED_PIXELS,
-      maximumWorksPerArtist: MAX_WORKS_PER_ARTIST,
+      maximumWorksPerArtist: null,
+      artistDiversityRule:
+        "Repeated creators are allowed; era round-robin selection provides temporal balance without an artist cap",
       supportedAddedRasterMimes: [...SUPPORTED_RASTER_MIMES],
+      discoveryRule:
+        "English-Wikipedia items typed as painting or a transitive painting subclass, with a Commons image and at least one sitelink",
       publicDomainRule:
         "Commons Copyrighted=False and LicenseShortName/LicenseUrl matches Public domain or CC0",
       requiredMetadata: ["English title", "creator attribution", "creation date"],
       unique: ["qid", "English Wikipedia article", "Commons file"],
       curatorOverrides: "scripts/data/painting-overrides.json",
+      eraSelection: {
+        order: ERA_KEYS,
+        rule:
+          "First explicit 3/4-digit year, otherwise Nth century mapped to (N-1)*100; BCE values are negative; additions selected round-robin with deterministic fallback when a bucket exhausts",
+        additionsByEra,
+        catalogByEra,
+      },
     },
     records: [
       ...preservedInventory,
@@ -980,8 +1238,25 @@ async function main() {
     ],
   };
 
-  await atomicWrite(DATA_FILE, renderGeneratedModule(records, generatedDate));
-  await atomicWrite(INVENTORY_FILE, `${JSON.stringify(inventory, null, 2)}\n`);
+  const generatedDataSource = renderGeneratedModule(records, generatedDate);
+  const generatedInventorySource = `${JSON.stringify(inventory, null, 2)}\n`;
+  await atomicWrite(INVENTORY_FILE, generatedInventorySource);
+  try {
+    await atomicWrite(DATA_FILE, generatedDataSource);
+  } catch (error) {
+    try {
+      await atomicWrite(INVENTORY_FILE, currentInventorySource);
+    } catch (rollbackError) {
+      throw new CatalogError(
+        `Could not publish ${basename(DATA_FILE)} or roll back ${basename(INVENTORY_FILE)}: ${rollbackError.message}`,
+        { cause: error },
+      );
+    }
+    throw new CatalogError(
+      `Could not publish ${basename(DATA_FILE)}; restored ${basename(INVENTORY_FILE)}: ${error.message}`,
+      { cause: error },
+    );
+  }
   console.log(
     `Published ${records.length} validated paintings (${selected.length} new 4K-source additions) and ${basename(INVENTORY_FILE)}.`,
   );

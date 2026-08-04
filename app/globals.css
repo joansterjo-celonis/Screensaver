@@ -1062,13 +1062,17 @@ a:focus-visible {
 
 .gallery-settings-trigger {
   min-height: 32px;
+  max-width: min(240px, 58vw);
   padding: 6px 4px;
+  overflow: hidden;
   color: rgba(240, 231, 217, 0.72);
   background: transparent;
   border-bottom: 1px solid rgba(240, 231, 217, 0.38);
   cursor: pointer;
   letter-spacing: inherit;
+  text-overflow: ellipsis;
   text-transform: inherit;
+  white-space: nowrap;
 }
 
 .gallery-settings-trigger:hover {
@@ -1187,7 +1191,8 @@ a:focus-visible {
 }
 
 .gallery-duration-option,
-.gallery-order-option {
+.gallery-order-option,
+.gallery-era-option {
   position: relative;
   cursor: pointer;
 }
@@ -1206,14 +1211,16 @@ a:focus-visible {
 }
 
 .gallery-duration-option.is-selected,
-.gallery-order-option.is-selected {
+.gallery-order-option.is-selected,
+.gallery-era-option.is-selected {
   color: #f0e7d9;
   background: rgba(227, 76, 130, 0.11);
   border-color: var(--frame-accent);
 }
 
 .gallery-duration-option input,
-.gallery-order-option input {
+.gallery-order-option input,
+.gallery-era-option input {
   flex: 0 0 auto;
   width: 14px;
   height: 14px;
@@ -1259,6 +1266,57 @@ a:focus-visible {
   font-family: var(--font-serif);
   font-size: 12px;
   line-height: 1.35;
+}
+
+.gallery-era-help {
+  margin: 9px 0 0;
+  color: rgba(240, 231, 217, 0.56);
+  font-family: var(--font-serif);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.gallery-era-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.gallery-era-option {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  color: rgba(240, 231, 217, 0.66);
+  background: rgba(240, 231, 217, 0.035);
+  border: 1px solid rgba(240, 231, 217, 0.18);
+  font-size: 9px;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gallery-era-option:has(input:disabled) {
+  cursor: default;
+}
+
+.gallery-era-select-all {
+  min-height: 40px;
+  margin-top: 7px;
+  padding: 8px 0;
+  color: rgba(240, 231, 217, 0.7);
+  background: transparent;
+  border-bottom: 1px solid currentColor;
+  cursor: pointer;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+
+.gallery-era-select-all:disabled {
+  color: rgba(240, 231, 217, 0.3);
+  cursor: default;
 }
 
 .gallery-settings-footer {
@@ -1447,6 +1505,19 @@ a:focus-visible {
 }
 
 @media (max-width: 420px) {
+
+  .gallery-meta {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .gallery-meta-controls {
+    justify-content: space-between;
+  }
+
+  .gallery-settings-trigger {
+    max-width: 64vw;
+  }
 
   .mode-card {
     grid-template-columns: minmax(116px, 40%) minmax(0, 1fr);

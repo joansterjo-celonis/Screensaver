@@ -65,14 +65,14 @@ const MODES: ModeDefinition[] = [
     id: "gallery",
     number: "02",
     name: "Swikipedia",
-    description: "2,048 verified public-domain works across six centuries.",
+    description: "3,560 verified public-domain works across seven selectable eras.",
     component: GalleryMode,
     poster: {
-      metric: "2,048",
+      metric: "3,560",
       label: "PAINTINGS",
-      kicker: "SIX CENTURIES / ONE SLOW GALLERY",
+      kicker: "SEVEN ERAS / ONE SLOW GALLERY",
       status: "PUBLIC DOMAIN",
-      tags: ["1400—2026", "30 SEC—30 MIN", "3 ORDERS"],
+      tags: ["7 ERAS", "30 SEC—30 MIN", "3 ORDERS"],
     },
   },
   {

@@ -23,7 +23,8 @@ import {
 import {
   advanceGalleryDeckPosition,
   buildGalleryCycleDeck,
-  changeGalleryDeckOrderMode,
+  changeGalleryDeckCollection,
+  changeGalleryDeckConfiguration,
   currentGalleryDeckQid,
   galleryDeckWindowQids,
   reorientGalleryDeckPosition,
@@ -32,6 +33,13 @@ import {
   type GalleryDeckPosition,
   type GalleryViewportOrientation,
 } from "./gallery-deck";
+import {
+  ALL_GALLERY_ERA_IDS,
+  GALLERY_ERA_OPTIONS,
+  galleryArtworkQidsForEras,
+  galleryEraSelectionLabel,
+  toggleGalleryEraId,
+} from "./gallery-eras";
 import { resolveGalleryArtPlacement } from "./gallery-layout";
 import {
   DEFAULT_GALLERY_PREFERENCES,
@@ -49,7 +57,6 @@ import {
 
 const CACHE_KEY = "always-on-frame.gallery.v4";
 const CACHE_TTL = 24 * 60 * 60 * 1000;
-const ARTWORK_QIDS = ARTWORK_SEEDS.map(({ qid }) => qid);
 const ARTWORK_SEEDS_BY_QID = new Map(ARTWORK_SEEDS.map((seed) => [seed.qid, seed]));
 
 type WikiPage = {
@@ -83,6 +90,7 @@ type VisibleCopyState = {
 type GalleryDeckState = GalleryDeckPosition & {
   viewportMeasured: boolean;
   timerRevision: number;
+  eraSelectionKey: string;
 };
 
 function resolveAlias(title: string, aliases: Map<string, string>) {
@@ -229,6 +237,14 @@ export function GalleryMode({
   const [preferences, setPreferences] = useState<GalleryPreferences>(
     readStoredGalleryPreferences,
   );
+  const eraSelectionKey = preferences.selectedEraIds.join("|");
+  const eligibleArtworkQids = useMemo(
+    () => galleryArtworkQidsForEras(
+      ARTWORK_SEEDS,
+      preferences.selectedEraIds,
+    ),
+    [preferences.selectedEraIds],
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [artworks, setArtworks] = useState<GalleryArtwork[]>(fallbackCollection);
   const [deckState, setDeckState] = useState<GalleryDeckState>({
@@ -240,6 +256,7 @@ export function GalleryMode({
     orderMode: preferences.orderMode,
     viewportMeasured: false,
     timerRevision: 0,
+    eraSelectionKey,
   });
   const [nextAt, setNextAt] = useState(
     () => Date.now() + preferences.durationMs,
@@ -257,6 +274,17 @@ export function GalleryMode({
   const displayPaused = paused || settingsOpen;
   const selectedDuration = galleryDurationOption(preferences.durationMs);
   const selectedOrder = galleryOrderOption(preferences.orderMode);
+  const selectedEraLabel = galleryEraSelectionLabel(
+    preferences.selectedEraIds,
+  );
+  const selectedEraShortLabel = preferences.selectedEraIds.length ===
+    ALL_GALLERY_ERA_IDS.length
+    ? "ALL ERAS"
+    : preferences.selectedEraIds.length === 1
+      ? GALLERY_ERA_OPTIONS.find(
+        ({ value }) => value === preferences.selectedEraIds[0],
+      )?.shortLabel ?? "ALL ERAS"
+      : `${preferences.selectedEraIds.length} ERAS`;
 
   useEffect(() => {
     let cacheHydration = 0;
@@ -269,15 +297,16 @@ export function GalleryMode({
     return () => window.clearTimeout(cacheHydration);
   }, []);
 
-  const buildArtworkDeck = useCallback(
+  const createArtworkDeck = useCallback(
     (
+      qids: readonly string[],
       cycle: number,
       viewportOrientation: GalleryViewportOrientation,
       orderMode: GalleryOrderMode,
       previousQid?: string,
     ) =>
       buildGalleryCycleDeck({
-        qids: ARTWORK_QIDS,
+        qids,
         artworks: ARTWORK_SEEDS,
         seed: `${shuffleSeed}:gallery`,
         cycle,
@@ -286,6 +315,22 @@ export function GalleryMode({
         previousQid,
       }),
     [shuffleSeed],
+  );
+
+  const buildArtworkDeck = useCallback(
+    (
+      cycle: number,
+      viewportOrientation: GalleryViewportOrientation,
+      orderMode: GalleryOrderMode,
+      previousQid?: string,
+    ) => createArtworkDeck(
+      eligibleArtworkQids,
+      cycle,
+      viewportOrientation,
+      orderMode,
+      previousQid,
+    ),
+    [createArtworkDeck, eligibleArtworkQids],
   );
 
   useLayoutEffect(() => {
@@ -342,6 +387,30 @@ export function GalleryMode({
       window.removeEventListener("orientationchange", updateViewportOrientation);
     };
   }, [buildArtworkDeck]);
+
+  useLayoutEffect(() => {
+    const synchronizeEraSelection = () => {
+      setDeckState((state) => {
+        if (
+          !state.viewportMeasured ||
+          state.eraSelectionKey === eraSelectionKey
+        ) {
+          return state;
+        }
+        const nextPosition = changeGalleryDeckCollection(
+          state,
+          buildArtworkDeck,
+        );
+        return {
+          ...state,
+          ...nextPosition,
+          eraSelectionKey,
+          timerRevision: state.timerRevision + 1,
+        };
+      });
+    };
+    synchronizeEraSelection();
+  }, [buildArtworkDeck, eraSelectionKey]);
 
   const artworkDeck = deckState.deck;
   const artworksByQid = useMemo(() => {
@@ -552,37 +621,53 @@ export function GalleryMode({
   const updatePreferences = useCallback(
     (
       update: Partial<
-        Pick<GalleryPreferences, "durationMs" | "orderMode">
+        Pick<
+          GalleryPreferences,
+          "durationMs" | "orderMode" | "selectedEraIds"
+        >
       >,
     ) => {
-      const nextOrderMode = update.orderMode;
-      if (nextOrderMode) {
+      const next = resolveGalleryPreferences({ ...preferences, ...update });
+      const nextEraSelectionKey = next.selectedEraIds.join("|");
+      const deckConfigurationChanged =
+        next.orderMode !== preferences.orderMode ||
+        nextEraSelectionKey !== eraSelectionKey;
+
+      if (deckConfigurationChanged) {
+        const nextEligibleQids = galleryArtworkQidsForEras(
+          ARTWORK_SEEDS,
+          next.selectedEraIds,
+        );
+        const createNextDeck = (
+          cycle: number,
+          viewportOrientation: GalleryViewportOrientation,
+          orderMode: GalleryOrderMode,
+          previousQid?: string,
+        ) => createArtworkDeck(
+          nextEligibleQids,
+          cycle,
+          viewportOrientation,
+          orderMode,
+          previousQid,
+        );
         setDeckState((state) => {
-          if (state.orderMode === nextOrderMode) return state;
-          const previousQid = currentGalleryDeckQid(state);
-          const nextPosition = changeGalleryDeckOrderMode(
+          const nextPosition = changeGalleryDeckConfiguration(
             state,
-            nextOrderMode,
-            buildArtworkDeck,
+            next.orderMode,
+            createNextDeck,
           );
-          const artworkChanged =
-            currentGalleryDeckQid(nextPosition) !== previousQid;
           return {
             ...state,
             ...nextPosition,
-            timerRevision: artworkChanged
-              ? state.timerRevision + 1
-              : state.timerRevision,
+            eraSelectionKey: nextEraSelectionKey,
+            timerRevision: state.timerRevision + 1,
           };
         });
       }
-      setPreferences((current) => {
-        const next = resolveGalleryPreferences({ ...current, ...update });
-        writeStoredGalleryPreferences(next);
-        return next;
-      });
+      writeStoredGalleryPreferences(next);
+      setPreferences(next);
     },
-    [buildArtworkDeck],
+    [createArtworkDeck, eraSelectionKey, preferences],
   );
 
   const closeSettings = useCallback((restoreFocus = true) => {
@@ -760,7 +845,8 @@ export function GalleryMode({
               className="gallery-settings-description"
             >
               Choose how long each painting stays and how the collection is
-              ordered. Changes are saved on this display.
+              ordered, including which eras are shown. Changes are saved on
+              this display.
             </p>
 
             <fieldset className="gallery-setting-group">
@@ -820,9 +906,69 @@ export function GalleryMode({
               </div>
             </fieldset>
 
+            <fieldset
+              className="gallery-setting-group"
+              aria-describedby="gallery-era-help"
+            >
+              <legend>ERAS</legend>
+              <p id="gallery-era-help" className="gallery-era-help">
+                Select one or more date ranges. At least one era stays active.
+              </p>
+              <div className="gallery-era-options">
+                {GALLERY_ERA_OPTIONS.map((option) => {
+                  const checked = preferences.selectedEraIds.includes(
+                    option.value,
+                  );
+                  const isOnlySelection =
+                    checked && preferences.selectedEraIds.length === 1;
+                  return (
+                    <label
+                      className={
+                        checked
+                          ? "gallery-era-option is-selected"
+                          : "gallery-era-option"
+                      }
+                      key={option.value}
+                    >
+                      <input
+                        type="checkbox"
+                        name="gallery-era"
+                        value={option.value}
+                        checked={checked}
+                        disabled={isOnlySelection}
+                        onChange={(event) =>
+                          updatePreferences({
+                            selectedEraIds: toggleGalleryEraId(
+                              preferences.selectedEraIds,
+                              option.value,
+                              event.currentTarget.checked,
+                            ),
+                          })
+                        }
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <button
+                className="gallery-era-select-all"
+                type="button"
+                disabled={
+                  preferences.selectedEraIds.length ===
+                  ALL_GALLERY_ERA_IDS.length
+                }
+                onClick={() =>
+                  updatePreferences({ selectedEraIds: ALL_GALLERY_ERA_IDS })
+                }
+              >
+                SELECT ALL ERAS
+              </button>
+            </fieldset>
+
             <footer className="gallery-settings-footer">
               <span aria-live="polite">
-                {selectedDuration.label} / {selectedOrder.label}
+                {selectedDuration.label} / {selectedOrder.label} / {selectedEraLabel}
               </span>
               <button
                 type="button"
@@ -930,10 +1076,10 @@ export function GalleryMode({
                 aria-expanded={settingsOpen}
                 aria-controls="gallery-settings-panel"
                 aria-keyshortcuts="S"
-                aria-label={`Display settings: ${selectedDuration.label}, ${selectedOrder.label}`}
+                aria-label={`Display settings: ${selectedDuration.label}, ${selectedOrder.label}, ${selectedEraLabel}`}
                 onClick={openSettings}
               >
-                {selectedDuration.shortLabel} / {selectedOrder.shortLabel}
+                {selectedDuration.shortLabel} / {selectedOrder.shortLabel} / {selectedEraShortLabel}
               </button>
             </div>
           </div>

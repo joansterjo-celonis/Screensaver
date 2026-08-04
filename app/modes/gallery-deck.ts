@@ -240,6 +240,14 @@ export function changeGalleryDeckOrderMode(
   createDeck: GalleryDeckFactory,
 ): GalleryDeckPosition {
   if (orderMode === position.orderMode) return position;
+  return changeGalleryDeckConfiguration(position, orderMode, createDeck);
+}
+
+export function changeGalleryDeckConfiguration(
+  position: GalleryDeckPosition,
+  orderMode: GalleryOrderMode,
+  createDeck: GalleryDeckFactory,
+): GalleryDeckPosition {
   const deck = [...createDeck(0, position.orientation, orderMode)];
   const currentQid = currentGalleryDeckQid(position);
   const currentIndex = currentQid ? deck.indexOf(currentQid) : -1;
@@ -255,6 +263,22 @@ export function changeGalleryDeckOrderMode(
     history: [],
     orderMode,
   };
+}
+
+/**
+ * Start a fresh cycle after the eligible catalog changes. The current work is
+ * anchored only when it still exists in the new deck; history from the prior
+ * filter is deliberately discarded so backwards navigation cannot escape it.
+ */
+export function changeGalleryDeckCollection(
+  position: GalleryDeckPosition,
+  createDeck: GalleryDeckFactory,
+): GalleryDeckPosition {
+  return changeGalleryDeckConfiguration(
+    position,
+    position.orderMode,
+    createDeck,
+  );
 }
 
 export function advanceGalleryDeckPosition(

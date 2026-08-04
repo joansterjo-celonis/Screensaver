@@ -1,12 +1,19 @@
+import {
+  ALL_GALLERY_ERA_IDS,
+  resolveGalleryEraIds,
+  type GalleryEraId,
+} from "./gallery-eras.ts";
+
 export type GalleryOrderMode =
   | "random"
   | "aspect-priority"
   | "compatible-only";
 
 export type GalleryPreferences = Readonly<{
-  version: 1;
+  version: 2;
   durationMs: number;
   orderMode: GalleryOrderMode;
+  selectedEraIds: readonly GalleryEraId[];
 }>;
 
 export type GalleryDurationOption = Readonly<{
@@ -61,9 +68,10 @@ export const GALLERY_ORDER_OPTIONS: readonly GalleryOrderOption[] =
   ]);
 
 export const DEFAULT_GALLERY_PREFERENCES: GalleryPreferences = Object.freeze({
-  version: 1,
+  version: 2,
   durationMs: 5 * 60_000,
   orderMode: "aspect-priority",
+  selectedEraIds: ALL_GALLERY_ERA_IDS,
 });
 
 const VALID_DURATIONS = new Set(
@@ -78,7 +86,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function resolveGalleryPreferences(value: unknown): GalleryPreferences {
-  if (!isRecord(value) || value.version !== 1) {
+  if (!isRecord(value) || (value.version !== 1 && value.version !== 2)) {
     return DEFAULT_GALLERY_PREFERENCES;
   }
 
@@ -93,15 +101,24 @@ export function resolveGalleryPreferences(value: unknown): GalleryPreferences {
     VALID_ORDER_MODES.has(value.orderMode as GalleryOrderMode)
       ? (value.orderMode as GalleryOrderMode)
       : DEFAULT_GALLERY_PREFERENCES.orderMode;
+  const selectedEraIds = value.version === 2
+    ? resolveGalleryEraIds(value.selectedEraIds)
+    : ALL_GALLERY_ERA_IDS;
 
   if (
     durationMs === DEFAULT_GALLERY_PREFERENCES.durationMs &&
-    orderMode === DEFAULT_GALLERY_PREFERENCES.orderMode
+    orderMode === DEFAULT_GALLERY_PREFERENCES.orderMode &&
+    selectedEraIds === ALL_GALLERY_ERA_IDS
   ) {
     return DEFAULT_GALLERY_PREFERENCES;
   }
 
-  return Object.freeze({ version: 1, durationMs, orderMode });
+  return Object.freeze({
+    version: 2,
+    durationMs,
+    orderMode,
+    selectedEraIds,
+  });
 }
 
 export function parseGalleryPreferences(
